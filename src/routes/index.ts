@@ -1,9 +1,7 @@
-import PlantPage from './PlantPage.svelte';
-import PlayerPage from './playerPage.svelte';
+import PlayerPage from './PlayerPage.svelte';
 import LogPage from './LogPage.svelte';
 
 export {
-  PlantPage,
   PlayerPage,
   LogPage
 }

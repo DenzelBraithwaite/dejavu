@@ -1,6 +1,6 @@
 <script lang="ts">
   // Hooks
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
 
   // Transitions
   import { blur } from 'svelte/transition';
@@ -9,44 +9,53 @@
   import Typed from 'typed.js';
 
   // stores
-  import { terminalMessages, terminalMessagesLog } from '../stores/terminalMessages';
+  import { getNextDialogue, updateDialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
 
   // Components
   import { Button } from '.';
 
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
-  export let title = '';
 
-  const createEvent = createEventDispatcher();
-  let showLogs = false;
   let typed: Typed;
-  $: currentDisplayedMessage = showLogs ? [...$terminalMessagesLog] : [...$terminalMessages];
+  let currentDisplayedMessage = getNextDialogue($chapter, $chapterPart);
+  let dialogueOptions = updateDialogueOptions($chapter, $chapterPart);
 
   onMount(() => {
     typed = new Typed('#terminal-text', {
-      strings: [...currentDisplayedMessage],
-      typeSpeed: 10,
+      strings: currentDisplayedMessage,
+      typeSpeed: 20,
     });
   });
 
-  function displayDialogue(): void {
-    typed.destroy(); // cleansup last terminal instance, otherwise they stack.
+  function updateTerminal(optionSelected: number, destroyLog = false): void {
+    dialogueOptions = updateDialogueOptions($chapter, $chapterPart, optionSelected);
+
+    // cleans last terminal instance, otherwise they stack.
+    typed.destroy();
     typed = new Typed('#terminal-text', {
-      strings: [...$terminalMessages],
-      typeSpeed: 10,
+      strings: getNextDialogue($chapter, $chapterPart, optionSelected),
+      typeSpeed: 20,
     });
   }
 </script>
 
 <div transition:blur={{duration: 1000}} class="terminal terminal__{terminalColor}">
   <div class="terminal-screen">
-    <h1>{title}</h1>
     <p id="terminal-text"></p>
   </div>
-  <div class="terminal-btn-flex-group">
-    <Button btnType="terminal-btn" on:click={() => createEvent('close')}>Close</Button>
-    <Button btnType="terminal-btn" on:click={displayDialogue}>Next</Button>
+  <div class="terminal-option-flex-group">
+    {#if dialogueOptions.option1Visible}
+      <Button btnType="terminal-option" on:click={() => updateTerminal(1)}>{dialogueOptions.option1}</Button>
+    {/if}
+
+    {#if dialogueOptions.option2Visible}
+      <Button btnType="terminal-option" on:click={() => updateTerminal(2)}>{dialogueOptions.option2}</Button>
+    {/if}
+
+    {#if dialogueOptions.option3Visible}
+      <Button btnType="terminal-option" on:click={() => updateTerminal(3)}>{dialogueOptions.option3}</Button>
+    {/if}
   </div>
 </div>
 
@@ -54,7 +63,7 @@
   .terminal {
     position: relative;
     background-color: #121212;
-    height: 60%;
+    height: 100%;
     width: 100%;
     border: 2px solid var(--white);
     border-top-width: 24px;
@@ -81,11 +90,6 @@
     text-wrap: wrap;
     font-size: 1.25rem;
     width: 100%;
-  }
-
-  .terminal-btn-flex-group {
-    text-align: center;
-    padding: 8px 0;
   }
 
   // v--Terminal colors--v

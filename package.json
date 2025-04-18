@@ -1,11 +1,11 @@
 {
-  "name": "aseedz",
+  "name": "dejavu",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && shx cp -r dist/* public/",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json"
   },
@@ -19,9 +19,11 @@
     "vite": "^5.4.3"
   },
   "dependencies": {
+    "express": "^5.1.0",
     "lucide-svelte": "^0.438.0",
     "sass": "^1.77.8",
-    "svelte-boring-avatars": "^1.2.6",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "svelte-routing": "^2.13.0",
     "typed.js": "^2.1.0"
   }

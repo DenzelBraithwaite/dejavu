@@ -3,7 +3,7 @@
   import { blur } from 'svelte/transition';
 
   // Pages
-  import { PlantPage, PlayerPage, LogPage } from '../../routes/index';
+  import { LogPage, PlayerPage } from '../../routes/index';
 
   // Components
   import { Sidebar } from './index';
@@ -23,14 +23,10 @@
   <Sidebar {sidebarExpanded} on:select={changePage} on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}/>
 
   <div class="screen">
-    {#if currentPage === 'plant'}
-      <PlantPage />
+    {#if currentPage === 'log'}
+      <LogPage />
     {:else if currentPage === 'player'}
       <PlayerPage />
-    {:else if currentPage === 'log'}
-      <LogPage />
-      <!-- {:else} -->
-      <!-- TODO: default? is this needed? -->
     {/if}
 
   </div>

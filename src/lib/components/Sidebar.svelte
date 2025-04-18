@@ -18,26 +18,15 @@
     <path d="M19 15V9"/>
     <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
   </svg>
-
-  <Item on:click={() => createEvent('select', 'plant')} collapsed={!sidebarExpanded} color={'green'} iconType={'seed'}>
-    <span slot="title">Plant</span>
-    <span slot="description">Plant and harvest seeds</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'player')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
-    <span slot="title">Player</span>
-    <span slot="description">View player stats</span>
-  </Item>
-
+  
   <Item on:click={() => createEvent('select', 'log')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
     <span slot="title">Log</span>
     <span slot="description">View logged messages</span>
   </Item>
 
-  <!-- Template -->
-  <Item on:click={() => createEvent('select', '')} collapsed={!sidebarExpanded}>
-    <span slot="title">{'<TEMPLATE>'}</span>
-    <span slot="description">{'<template>'}</span>
+  <Item on:click={() => createEvent('select', 'player')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
+    <span slot="title">Player</span>
+    <span slot="description">View player stats</span>
   </Item>
 </div>
 

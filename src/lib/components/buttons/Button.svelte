@@ -1,7 +1,7 @@
 <script lang="ts">
 
   // Props TODO: make interface or something for the btn types, they gettin outta control fast.
-  export let btnType: 'terminal-btn' | 'page-menu-btn__green' | 'page-menu-btn__blue' = 'terminal-btn';
+  export let btnType: 'terminal-option' = 'terminal-option';
 </script>
 
 <button on:click class="btn {btnType}">
@@ -18,7 +18,8 @@
 
   }
 
-  .terminal-btn {
+  .terminal-option {
+    width: 100%;
     border: 2px solid var(--white);
     color: var(--white);
     background: none;
