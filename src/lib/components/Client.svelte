@@ -8,8 +8,8 @@
   // Components
   import { Sidebar } from './index';
 
-  let sidebarExpanded = true;
-  let currentPage = '';
+  let sidebarExpanded = false;
+  let currentPage = 'log';
 
   // SPA so changes focused component really, same page.
   function changePage(event: {detail: string}): void {

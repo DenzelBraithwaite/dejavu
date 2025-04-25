@@ -55,6 +55,8 @@ function assignUsernames() {
 }
 
 io.on('connection', socket => {
+  if (Object.keys(users).length === 2) return;
+
   const username = assignUsernames();
   users[username] = socket.id;
   console.log(`\n${username} connected.`);
@@ -69,8 +71,8 @@ io.on('connection', socket => {
     logUsers();
   });
 
-  // Start game
-  socket.on('start-game', data => socket.broadcast.emit('game-started', data));
+  // 2 players in lobby
+  if (Object.keys(users).length === 2) io.emit('p2-joined');
 
   // Count turns
   socket.on('new-turn', () => io.emit('add-turn-count'));

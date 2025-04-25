@@ -16,6 +16,7 @@
   import { io } from 'socket.io-client';
 
   let socket = io('http://192.168.2.10:6912'); // Thanos
+  let gameStarted = false;
 
   onMount(() => {
     // Handles connects
@@ -41,11 +42,9 @@
       }); 
     });
 
-    // Resets game and updates player hands
-    socket.on('game-started', data => {
-      // Update player hands
-      player1.set(data.player1);
-      player2.set(data.player2);
+    // Starts game
+    socket.on('p2-joined', data => {
+      gameStarted = true;
     });
 
     // Lets server know client is ready.
@@ -61,7 +60,7 @@
 </script>
 
 <div in:blur class="main-content">
-  <Terminal terminalColor="grey" />
+  <Terminal {gameStarted} terminalColor="grey" />
 </div>
 
 <style lang="scss">
