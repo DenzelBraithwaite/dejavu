@@ -37,8 +37,6 @@
           $player2.id = users['p2'];
           return $player2;
         });
-
-        // TODO: Handle guests.
       }); 
     });
 

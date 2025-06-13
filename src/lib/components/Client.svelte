@@ -3,7 +3,7 @@
   import { blur } from 'svelte/transition';
 
   // Pages
-  import { LogPage, PlayerPage } from '../../routes/index';
+  import { LogPage } from '../../routes/index';
 
   // Components
   import { Sidebar } from './index';
@@ -11,7 +11,6 @@
   let sidebarExpanded = false;
   let currentPage = 'log';
 
-  // SPA so changes focused component really, same page.
   function changePage(event: {detail: string}): void {
     currentPage = event.detail;
   }
@@ -23,12 +22,7 @@
   <Sidebar {sidebarExpanded} on:select={changePage} on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}/>
 
   <div class="screen">
-    {#if currentPage === 'log'}
-      <LogPage />
-    {:else if currentPage === 'player'}
-      <PlayerPage />
-    {/if}
-
+    <LogPage />
   </div>
 </div>
 

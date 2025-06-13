@@ -23,11 +23,6 @@
     <span slot="title">Log</span>
     <span slot="description">View logged messages</span>
   </Item>
-
-  <Item on:click={() => createEvent('select', 'player')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
-    <span slot="title">Player</span>
-    <span slot="description">View player stats</span>
-  </Item>
 </div>
 
 <style lang="scss">

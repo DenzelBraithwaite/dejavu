@@ -29,7 +29,7 @@ const dialogues = {
   },
   chapter1: {
     part1a: ['Looks like we found 2 trusty adventurers. Click Ready to begin!'],
-    part2a: ['This is part 2a but I would like this to be part 1a... hmmm after lobbby.']
+    part2a: ['So now let us differntiate player 1 and player 2.']
   }
 }
 

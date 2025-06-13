@@ -24,9 +24,7 @@
 
   $: if (gameStarted && $chapter === 'lobby' && $chapterPart === '1a') {
     chapter.set('1');
-    // currentDisplayedMessage = getNextDialogue($chapter, $chapterPart);
-    updateTerminal(0); // TODO: left off here, tryna have message also be reactive, seems button is (waiting -> ready)
-    // dialogueOptions = updateDialogueOptions($chapter, $chapterPart);
+    updateTerminal(0, false, true);
   }
 
   onMount(() => {
@@ -36,8 +34,9 @@
     });
   });
 
-  function updateTerminal(optionSelected: number, destroyLog = false): void {
+  function updateTerminal(optionSelected: number, destroyLog = false, newGame = false): void {
     dialogueOptions = updateDialogueOptions($chapter, $chapterPart, optionSelected);
+    if (newGame) chapterPart.set('1a'); // avoids jumping to part 2a after updateDialogOptions() in terminalMessages.ts
 
     // cleans last terminal instance, otherwise they stack.
     typed.destroy();
