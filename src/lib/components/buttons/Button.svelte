@@ -1,10 +1,10 @@
 <script lang="ts">
 
-  // Props TODO: make interface or something for the btn types, they gettin outta control fast.
   export let btnType: 'terminal-option' = 'terminal-option';
+  export let disabled = false;
 </script>
 
-<button on:click class="btn {btnType}">
+<button on:click class="btn {btnType}" {disabled}>
   <slot></slot>
 </button>
 

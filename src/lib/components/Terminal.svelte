@@ -9,22 +9,37 @@
   import Typed from 'typed.js';
 
   // stores
-  import { getNextDialogue, updateDialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
+  import { getNextDialogue, updateDialogueOptions, type DialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
+  import { player1, player2, type Player } from '../stores/players';
 
   // Components
   import { Button } from '.';
 
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
-  export let gameStarted = false;
+  export let bothPlayersJoined = false;
+  export let playingAs: 'male' | 'female' | '' = '';
 
   let typed: Typed;
-  let currentDisplayedMessage = getNextDialogue($chapter, $chapterPart);
-  let dialogueOptions = updateDialogueOptions($chapter, $chapterPart);
+  let userInput = '';
+  let currentDisplayedMessage = getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer()});
+  let dialogueOptions: DialogueOptions = {
+      option1Visible: true,
+      option1Disabled: true,
+      option1: 'Waiting...',
+      option2Visible: false,
+      option2Disabled: false,
+      option2: '',
+      option3Visible: false,
+      option3Disabled: false,
+      option3: '',
+      inputVisible: false
+    };
 
-  $: if (gameStarted && $chapter === 'lobby' && $chapterPart === '1a') {
-    chapter.set('1');
-    updateTerminal(0, false, true);
+  // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
+  $: if (bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1a') {
+    dialogueOptions.option1Disabled = false;
+    dialogueOptions.option1 = 'Ready';
   }
 
   onMount(() => {
@@ -34,16 +49,25 @@
     });
   });
 
-  function updateTerminal(optionSelected: number, destroyLog = false, newGame = false): void {
+  function updateTerminal(optionSelected: number, destroyLog = false): void {
     dialogueOptions = updateDialogueOptions($chapter, $chapterPart, optionSelected);
-    if (newGame) chapterPart.set('1a'); // avoids jumping to part 2a after updateDialogOptions() in terminalMessages.ts
 
     // cleans last terminal instance, otherwise they stack.
     typed.destroy();
     typed = new Typed('#terminal-text', {
-      strings: getNextDialogue($chapter, $chapterPart, optionSelected),
+      strings: getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer(), optionSelected}),
       typeSpeed: 20,
     });
+  }
+
+  function returnPlayer(): Player {
+    return playingAs === 'male' ? $player1 : $player2;
+  }
+  
+  function handleUserInput(): void {
+    if ($chapter === 'lobby' && $chapterPart === '3a') {
+     playingAs === 'male' ? player1.set({...$player1, name: userInput}) : player2.set({...$player2, name: userInput});
+    }
   }
 </script>
 
@@ -53,23 +77,29 @@
   </div>
   <div class="terminal-option-flex-group">
     {#if dialogueOptions.option1Visible}
-      <Button btnType="terminal-option" on:click={() => updateTerminal(1)}>{dialogueOptions.option1}</Button>
+      <Button btnType="terminal-option" disabled={dialogueOptions.option1Disabled} on:click={() => updateTerminal(1)}>{dialogueOptions.option1}</Button>
     {/if}
 
     {#if dialogueOptions.option2Visible}
-      <Button btnType="terminal-option" on:click={() => updateTerminal(2)}>{dialogueOptions.option2}</Button>
+      <Button btnType="terminal-option" disabled={dialogueOptions.option2Disabled} on:click={() => updateTerminal(2)}>{dialogueOptions.option2}</Button>
     {/if}
 
     {#if dialogueOptions.option3Visible}
-      <Button btnType="terminal-option" on:click={() => updateTerminal(3)}>{dialogueOptions.option3}</Button>
+      <Button btnType="terminal-option" disabled={dialogueOptions.option3Disabled} on:click={() => updateTerminal(3)}>{dialogueOptions.option3}</Button>
+    {/if}
+
+    {#if dialogueOptions.inputVisible}
+      <input bind:value={userInput} on:input={handleUserInput} type="text" maxlength="20" class="terminal-input">
     {/if}
   </div>
 </div>
 
 <style lang="scss">
+  $terminalBg: #121212;
+
   .terminal {
     position: relative;
-    background-color: #121212;
+    background-color: $terminalBg;
     height: 100%;
     width: 100%;
     border: 2px solid var(--white);
@@ -97,6 +127,26 @@
     text-wrap: wrap;
     font-size: 1.25rem;
     width: 100%;
+  }
+
+  .terminal-input {
+    width: 100%;
+    padding: 0.5rem 1rem;
+    border: 2px solid var(--white);
+    color: var(--white);
+    text-align: center;
+    border-radius: var(--border-radius-small);
+    background-color: $terminalBg;
+    transition: all 0.3s ease-out;
+    font-weight: bold;
+
+    &:hover {
+      border: 2px solid var(--slate-900);
+      color: var(--slate-900);
+      background-color: var(--white);
+      border-style: double;
+      border-width: 4px;
+    }
   }
 
   // v--Terminal colors--v

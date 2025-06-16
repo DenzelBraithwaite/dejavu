@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { player1, player2, type Player } from './players';
 
 // empty string so typedjs doesnt crash.
 export const terminalMessages = writable<string[]>(['Click \'Next\' to begin.']);
@@ -10,31 +11,7 @@ export const terminalMessagesLog = writable<string[]>([]);
 export const chapter = writable('lobby');
 export const chapterPart = writable('1a');
 
-export function getNextDialogue(chapter: string, part: string, optionSelected = 0): string[] {
-  let dialogueArr = ['Something went wrong... This text should not display.'];
-
-  if (chapter === 'lobby' && part === '1a') dialogueArr = dialogues.lobby.part1a;
-  if (chapter === '1') {
-    if (part === '1a') dialogueArr = dialogues.chapter1.part1a;
-    if (part === '2a') dialogueArr = dialogues.chapter1.part2a;
-
-  }
-
-  return dialogueArr;
-}
-
-const dialogues = {
-  lobby: {
-    part1a: ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.'],
-  },
-  chapter1: {
-    part1a: ['Looks like we found 2 trusty adventurers. Click Ready to begin!'],
-    part2a: ['So now let us differntiate player 1 and player 2.']
-  }
-}
-
-
-type DialogueOptions = {
+export type DialogueOptions = {
   option1Visible?: boolean;
   option1Disabled?: boolean;
   option1?: string;
@@ -44,53 +21,86 @@ type DialogueOptions = {
   option3Visible?: boolean;
   option3Disabled?: boolean;
   option3?: string;
+  inputVisible?: boolean;
 }
+
 export function updateDialogueOptions(chapter: string, part: string, optionSelected = 0): DialogueOptions {
   let objToReturn: DialogueOptions = {};
-  if (chapter === 'lobby' && part === '1a') {
-    objToReturn = {
-      option1Visible: true,
-      option1Disabled: true,
-      option1: 'Waiting...',
-      option2Visible: false,
-      option2Disabled: false,
-      option2: '',
-      option3Visible: false,
-      option3Disabled: false,
-      option3: ''
-    };
-    chapterPart.set('1a');
-  } else if (chapter === '1') {
+  if (chapter === 'lobby') {
     switch (part) {
       case '1a':
+        chapterPart.set('2a');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
-          option1: 'Ready',
+          option1: 'Next',
           option2Visible: false,
-          option2Disabled: false,
+          option2Disabled: true,
           option2: '',
           option3Visible: false,
-          option3Disabled: false,
-          option3: ''
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+
         };
-        chapterPart.set('2a');
         break;
       case '2a':
+        chapterPart.set('3a');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
-          option1: '',
+          option1: 'Next',
           option2Visible: false,
-          option2Disabled: false,
+          option2Disabled: true,
           option2: '',
           option3Visible: false,
-          option3Disabled: false,
-          option3: ''
+          option3Disabled: true,
+          option3: '',
+          inputVisible: true
+        };
+        break;
+      case '3a':
+        chapterPart.set('4a');
+        objToReturn = {
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Next',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
         };
         break;
     }
   }
 
   return objToReturn;
+}
+
+// I declared player as a non optional argument because if I don't, every reference to player in the funciton code will raise a warning from TS.
+export function getNextDialogue(options: {chapter?: string, part?: string, player: Player, optionSelected?: number} = {player: {}}): string[] {
+  options.optionSelected = options.optionSelected ?? 0;
+  let dialogueArr = ['Something went wrong... This text should not display.'];
+
+  if (options.chapter === 'lobby') {
+    switch (options.part) {
+      case '1a':
+        dialogueArr = ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.']
+        break;
+      case '2a':
+        dialogueArr = ['Looks like we found 2 trusty adventurers. Click \'Next\' when you\'re ready!']
+        break;
+      case '3a':
+        dialogueArr = ['Excellent, now let us differentiate the two of you. Please enter your name below and click \'Next\' when you\'re ready.']
+        break;
+      case '4a':
+        dialogueArr = [`You're name is... ${options.player.name}?`]
+        break;
+    }
+  }
+
+  return dialogueArr;
 }

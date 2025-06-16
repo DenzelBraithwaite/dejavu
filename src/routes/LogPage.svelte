@@ -9,14 +9,13 @@
   import { Button, Terminal } from '../lib/components';
 
   // Stores
-  import { player1 } from '../lib/stores/player1';
-  import { player2 } from '../lib/stores/player2';
+  import { player1, player2 } from '../lib/stores/players';
 
   // Websocket
   import { io } from 'socket.io-client';
 
   let socket = io('http://192.168.2.10:6912'); // Thanos
-  let gameStarted = false;
+  let bothPlayersJoined = false;
 
   onMount(() => {
     // Handles connects
@@ -42,23 +41,22 @@
 
     // Starts game
     socket.on('p2-joined', data => {
-      gameStarted = true;
+      bothPlayersJoined = true;
     });
 
     // Lets server know client is ready.
     socket.emit('client-ready');
   });
 
-  // Determine's if the player is p1, p2 or guest
+  // Determine's if the player is male player of female player.
   function playingAs() {
-    if ($player1.id === socket.id) return 'p1';
-    if ($player2.id === socket.id) return 'p2';
-    return 'guest';
+    if ($player1.id === socket.id) return 'male';
+    if ($player2.id === socket.id) return 'female';
   }
 </script>
 
 <div in:blur class="main-content">
-  <Terminal {gameStarted} terminalColor="grey" />
+  <Terminal {bothPlayersJoined} playingAs={playingAs()} terminalColor="grey" />
 </div>
 
 <style lang="scss">
