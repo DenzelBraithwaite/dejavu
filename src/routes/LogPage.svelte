@@ -18,7 +18,8 @@
   let gameData = {
     playingAs: '', // male or female
     bothPlayersJoined: false,
-    chapter5aNumOfReadyPlayers: 0
+    chapter5aNumOfReadyPlayers: 0,
+    chapter11aNumOfReadyPlayers: 0
   }
   let dialogueOptions: DialogueOptions = {
     option1Visible: true,
@@ -53,6 +54,11 @@
     // Handles connection errors
     socket.on('connect_error', error => console.error('Connection error:', error));
 
+    // Starts game
+    socket.on('p2-joined', data => {
+      gameData.bothPlayersJoined = true;
+    });
+
     // Sets users (Beware that p1 might be titled player 2 and vice versa due to server.js)
     socket.on('set-users', users => {
       Object.entries(users).forEach(([username, userId]) => {
@@ -68,13 +74,8 @@
       }); 
     });
 
-    // Starts game
-    socket.on('p2-joined', data => {
-      gameData.bothPlayersJoined = true;
-    });
-
     // Go to chapter 6a if both players ready.
-    socket.on('chapter-5a-players-ready', () => {
+    socket.on('5a-player-ready', () => {
       gameData.chapter5aNumOfReadyPlayers += 1;
       if (gameData.chapter5aNumOfReadyPlayers === 2) {
         dialogueOptions = {
@@ -91,6 +92,29 @@
         };
       }
     })
+
+    // Go to chapter 12a if both players ready.
+    socket.on('11a-player-ready', () => {
+      gameData.chapter11aNumOfReadyPlayers += 1;
+      if (gameData.chapter11aNumOfReadyPlayers === 2) {
+        dialogueOptions = {
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Next',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+        };
+      }
+    })
+
+    // Set player names
+    socket.on('set-male-player-name', data => player1.set({...$player1, name: data ? data : 'Peasant Boy'}));
+    socket.on('set-female-player-name', data => player2.set({...$player2, name: data ? data : 'Peasant Girl'}));
 
     // Lets server know client is ready.
     socket.emit('client-ready');

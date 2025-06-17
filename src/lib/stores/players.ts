@@ -3,11 +3,11 @@ import { writable } from 'svelte/store';
 
 export type Player = {
   id?: string;
-  name?: string; // Player will choose this.
-  gender?: 'male' | 'female'; // This is mainly to know who is playing who since 1 char is a girl and the other is male.
+  name: string; // Player will choose this.
+  gender: 'male' | 'female'; // This is mainly to know who is playing who since 1 char is a girl and the other is male.
   isTurn?: boolean; // Turn to roll dice maybe, not sure, can be useful.
   // Most are base stats that add to dice rolls.
-  stats?: {
+  stats: {
     maxHealth: number;
     health: number; // Current health
     strength: number; // Can you lift it or can you knock them out in one punch.

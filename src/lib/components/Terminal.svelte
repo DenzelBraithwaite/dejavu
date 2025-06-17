@@ -9,6 +9,7 @@
   import Typed from 'typed.js';
 
   // stores
+  import { socket } from '../stores/socket';
   import { getNextDialogue, updateDialogueOptions, type DialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
   import { player1, player2, type Player } from '../stores/players';
 
@@ -38,6 +39,11 @@
     typed = new Typed('#terminal-text', {
       strings: currentDisplayedMessage,
       typeSpeed: 20,
+      // backSpeed: 20,
+      // startDelay: 1000,
+      // backDelay: 3000,
+      // loop: false,
+      // loopCount: Infinity
     });
   });
 
@@ -49,6 +55,11 @@
     typed = new Typed('#terminal-text', {
       strings: getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer(), optionSelected}),
       typeSpeed: 20,
+      backSpeed: 15,
+      // startDelay: 1000,
+      backDelay: 2500,
+      // loop: false,
+      // loopCount: Infinity
     });
   }
 
@@ -58,7 +69,7 @@
   
   function handleUserInput(): void {
     if ($chapter === 'lobby' && $chapterPart === '3a' || $chapterPart === '3a-again') {
-     gameData.playingAs === 'male' ? player1.set({...$player1, name: userInput}) : player2.set({...$player2, name: userInput});
+     gameData.playingAs === 'male' ? socket.emit('set-male-player-name', userInput.trim()) : socket.emit('set-female-player-name', userInput.trim());
     }
   }
 </script>
