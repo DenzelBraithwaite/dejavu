@@ -9,17 +9,46 @@
   import { Button, Terminal } from '../lib/components';
 
   // Stores
+  import { socket } from '../lib/stores/socket';
   import { player1, player2 } from '../lib/stores/players';
+  
+  // Types
+  import type { DialogueOptions } from '../lib/stores/terminalMessages';
 
-  // Websocket
-  import { io } from 'socket.io-client';
-
-  let socket = io('http://192.168.2.10:6912'); // Thanos
-  let bothPlayersJoined = false;
+  let gameData = {
+    playingAs: '', // male or female
+    bothPlayersJoined: false,
+    chapter5aNumOfReadyPlayers: 0
+  }
+  let dialogueOptions: DialogueOptions = {
+    option1Visible: true,
+    option1Disabled: true,
+    option1: 'Waiting...',
+    option2Visible: false,
+    option2Disabled: false,
+    option2: '',
+    option3Visible: false,
+    option3Disabled: false,
+    option3: '',
+    inputVisible: false
+    };
 
   onMount(() => {
     // Handles connects
-    socket.on('connect', () => console.log(`User ID: ${socket.id} connected!`));
+    socket.on('connect', () => {
+      socket.emit('frontend-mounted');
+      console.log(`User ID: ${socket.id} connected!`);
+    });
+
+    // TODO: FIXME: Works but only if first person joins and then second player joins. If 2 players join then one leaves and rejoins, both will be female since this is never re-evaluated. Need a better solution.
+    // Sets user's player
+    socket.on('playing-as', data => {
+      if (socket.id === data.socketID && data.playerCount === 1) gameData.playingAs = 'male';
+      if (socket.id === data.socketID && data.playerCount === 2) gameData.playingAs = 'female';
+      console.log('Playing as ' + gameData.playingAs);
+      console.log('Socket.id = ' + socket.id);
+      console.log('data.socketID = ' + data.socketID);
+    });
 
     // Handles connection errors
     socket.on('connect_error', error => console.error('Connection error:', error));
@@ -41,22 +70,35 @@
 
     // Starts game
     socket.on('p2-joined', data => {
-      bothPlayersJoined = true;
+      gameData.bothPlayersJoined = true;
     });
+
+    // Go to chapter 6a if both players ready.
+    socket.on('chapter-5a-players-ready', () => {
+      gameData.chapter5aNumOfReadyPlayers += 1;
+      if (gameData.chapter5aNumOfReadyPlayers === 2) {
+        dialogueOptions = {
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Next',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+        };
+      }
+    })
 
     // Lets server know client is ready.
     socket.emit('client-ready');
   });
-
-  // Determine's if the player is male player of female player.
-  function playingAs() {
-    if ($player1.id === socket.id) return 'male';
-    if ($player2.id === socket.id) return 'female';
-  }
 </script>
 
 <div in:blur class="main-content">
-  <Terminal {bothPlayersJoined} playingAs={playingAs()} terminalColor="grey" />
+  <Terminal {gameData} {dialogueOptions} terminalColor="grey" />
 </div>
 
 <style lang="scss">

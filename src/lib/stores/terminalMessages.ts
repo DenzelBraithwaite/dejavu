@@ -1,5 +1,9 @@
+// Svelte
 import { writable } from 'svelte/store';
+
+// Stores
 import { player1, player2, type Player } from './players';
+import { socket } from './socket';
 
 // empty string so typedjs doesnt crash.
 export const terminalMessages = writable<string[]>(['Click \'Next\' to begin.']);
@@ -41,7 +45,6 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-
         };
         break;
       case '2a':
@@ -60,7 +63,58 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         };
         break;
       case '3a':
+      case '3a-again':
         chapterPart.set('4a');
+        objToReturn = {
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Yes',
+          option2Visible: true,
+          option2Disabled: false,
+          option2: 'No',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+        };
+        break;
+      case '4a':
+        if (optionSelected === 1) {
+          chapterPart.set('5a');
+          
+          // Lets server know client is ready.
+          socket.emit('5a-player-ready');
+          
+          objToReturn = {
+            option1Visible: true,
+            option1Disabled: true,
+            option1: 'Waiting',
+            option2Visible: false,
+            option2Disabled: true,
+            option2: '',
+            option3Visible: false,
+            option3Disabled: true,
+            option3: '',
+            inputVisible: false
+          };
+        } else if (optionSelected === 2) {
+          chapterPart.set('3a-again');
+          objToReturn = {
+            option1Visible: true,
+            option1Disabled: false,
+            option1: 'Next But For Real This Time',
+            option2Visible: false,
+            option2Disabled: true,
+            option2: '',
+            option3Visible: false,
+            option3Disabled: true,
+            option3: '',
+            inputVisible: true
+          };
+        }
+        break;
+      case '5a':
+        chapterPart.set('6a');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -96,8 +150,17 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
       case '3a':
         dialogueArr = ['Excellent, now let us differentiate the two of you. Please enter your name below and click \'Next\' when you\'re ready.']
         break;
+      case '3a-again':
+        dialogueArr = ['Oh good, I was hoping I didn\'t hear that correctly. What did you say your name actually was?']
+        break;
       case '4a':
         dialogueArr = [`You're name is... ${options.player.name}?`]
+        break;
+      case '5a':
+        dialogueArr = ['Great! Not the name of course, the fact that you\'re ready. When both of you are ready the button below will say \'Next\', that means you\'re both ready to move forward.']
+        break;
+      case '6a':
+        dialogueArr = ['Good, now let me quickly explain how the game will be played and then you\'ll both be on your way!', 'test...']
         break;
     }
   }

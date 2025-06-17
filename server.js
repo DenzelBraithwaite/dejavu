@@ -4,6 +4,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
+// Server specific
 const users = {};
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,6 +62,9 @@ io.on('connection', socket => {
   users[username] = socket.id;
   console.log(`\n${username} connected.`);
   
+  // Lets frontend know who user is playing as.
+  socket.on('frontend-mounted', () => io.emit('playing-as', {playerCount: Object.keys(users).length, socketID: socket.id}));
+
   // emit that client is ready to all clients
   socket.on('client-ready', () => io.emit('set-users', users));
 
@@ -80,8 +84,14 @@ io.on('connection', socket => {
   // Game ended
   socket.on('end-game', data => io.emit('game-ended', data));
 
+  // Lobby part 5a, if both users ready then game progresses
+  socket.on('5a-player-ready', () => {
+    io.emit('chapter-5a-players-ready');
+  });
+
   // Start updating xeno points, like 3 way handshake part 1
   socket.on('start-end-game-sync', data => socket.broadcast.emit('end-game-sync-started', data));
+  
   // Finish updating xeno points
   socket.on('finish-end-game-sync', data => socket.broadcast.emit('end-game-sync-finished', data)); 
 

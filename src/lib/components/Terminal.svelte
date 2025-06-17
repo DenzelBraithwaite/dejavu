@@ -17,29 +17,21 @@
 
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
-  export let bothPlayersJoined = false;
-  export let playingAs: 'male' | 'female' | '' = '';
+  export let gameData: any; // update later
+  export let dialogueOptions: DialogueOptions;
 
   let typed: Typed;
   let userInput = '';
   let currentDisplayedMessage = getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer()});
-  let dialogueOptions: DialogueOptions = {
-      option1Visible: true,
-      option1Disabled: true,
-      option1: 'Waiting...',
-      option2Visible: false,
-      option2Disabled: false,
-      option2: '',
-      option3Visible: false,
-      option3Disabled: false,
-      option3: '',
-      inputVisible: false
-    };
 
   // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
-  $: if (bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1a') {
+  $: if (gameData.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1a') {
     dialogueOptions.option1Disabled = false;
     dialogueOptions.option1 = 'Ready';
+  }
+
+  $: if (gameData.goToChapter6a && $chapter === 'lobby' && $chapterPart === '5a') {
+    updateTerminal(0);
   }
 
   onMount(() => {
@@ -61,12 +53,12 @@
   }
 
   function returnPlayer(): Player {
-    return playingAs === 'male' ? $player1 : $player2;
+    return gameData.playingAs === 'male' ? $player1 : $player2;
   }
   
   function handleUserInput(): void {
-    if ($chapter === 'lobby' && $chapterPart === '3a') {
-     playingAs === 'male' ? player1.set({...$player1, name: userInput}) : player2.set({...$player2, name: userInput});
+    if ($chapter === 'lobby' && $chapterPart === '3a' || $chapterPart === '3a-again') {
+     gameData.playingAs === 'male' ? player1.set({...$player1, name: userInput}) : player2.set({...$player2, name: userInput});
     }
   }
 </script>
