@@ -13,7 +13,7 @@ export const terminalMessagesLog = writable<string[]>([]);
 
 // For the current part in the chapter the players are at
 export const chapter = writable('lobby');
-export const chapterPart = writable('1a');
+export const chapterPart = writable('1');
 
 export type DialogueOptions = {
   option1Visible?: boolean;
@@ -32,8 +32,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
   let objToReturn: DialogueOptions = {};
   if (chapter === 'lobby') {
     switch (part) {
-      case '1a':
-        chapterPart.set('2a');
+      case '1':
+        chapterPart.set('2');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -47,8 +47,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '2a':
-        chapterPart.set('3a');
+      case '2':
+        chapterPart.set('3');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -62,9 +62,9 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: true
         };
         break;
-      case '3a':
-      case '3a-again':
-        chapterPart.set('4a');
+      case '3':
+      case '3-again':
+        chapterPart.set('4');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -78,12 +78,12 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '4a':
+      case '4':
         if (optionSelected === 1) {
-          chapterPart.set('5a');
+          chapterPart.set('5');
           
           // Lets server know client is ready.
-          socket.emit('5a-player-ready');
+          socket.emit('5-player-ready');
           
           objToReturn = {
             option1Visible: true,
@@ -98,7 +98,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
             inputVisible: false
           };
         } else if (optionSelected === 2) {
-          chapterPart.set('3a-again');
+          chapterPart.set('3-again');
           objToReturn = {
             option1Visible: true,
             option1Disabled: false,
@@ -113,8 +113,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           };
         }
         break;
-      case '5a':
-        chapterPart.set('6a');
+      case '5':
+        chapterPart.set('6');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -128,8 +128,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '6a':
-        chapterPart.set('7a');
+      case '6':
+        chapterPart.set('7');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -143,8 +143,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '7a':
-        chapterPart.set('8a');
+      case '7':
+        chapterPart.set('8');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -158,8 +158,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '8a':
-        chapterPart.set('9a');
+      case '8':
+        chapterPart.set('9');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -173,8 +173,8 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '9a':
-        chapterPart.set('10a');
+      case '9':
+        chapterPart.set('10');
         objToReturn = {
           option1Visible: true,
           option1Disabled: false,
@@ -188,16 +188,32 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         };
         break;
-      case '10a':
-        chapterPart.set('11a');
+      case '10':
+        chapterPart.set('11');
 
         // Lets server know client is ready.
-        socket.emit('11a-player-ready');
+        socket.emit('11-player-ready');
 
         objToReturn = {
           option1Visible: true,
           option1Disabled: true,
           option1: 'Waiting for your dead weight teammate',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+        };
+        break;
+      case '11':
+        chapterPart.set('12');
+
+        objToReturn = {
+          option1Visible: true,
+          option1Disabled: true,
+          option1: 'Disabled During Demo',
           option2Visible: false,
           option2Disabled: true,
           option2: '',
@@ -220,31 +236,31 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
 
   if (options.chapter === 'lobby') {
     switch (options.part) {
-      case '1a':
+      case '1':
         dialogueArr = ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.']
         break;
-      case '2a':
+      case '2':
         dialogueArr = ['Looks like we found 2 trusty adventurers. Click \'Next\' when you\'re ready!']
         break;
-      case '3a':
+      case '3':
         dialogueArr = ['Excellent, now let us differentiate the two of you. Please enter your name below and click \'Next\' when you\'re ready.']
         break;
-      case '3a-again':
+      case '3-again':
         dialogueArr = ['Oh good, I was hoping I didn\'t hear that correctly. What did you say your name actually was?']
         break;
-      case '4a':
+      case '4':
         dialogueArr = [`You're name is... ${options.player.name}?`]
         break;
-      case '5a':
+      case '5':
         dialogueArr = ['Great! Not the name of course, the fact that you\'re ready. When both of you are ready the button below will say \'Next\', that means you\'re both ready to move forward.']
         break;
-      case '6a':
+      case '6':
         dialogueArr = [`Good, now let me introduce the two of you to each other. First we have ${get(player1).name}${get(player1).id === options.player.id ? '(you)' : ''} playing as the male character. Next, we have ${get(player2).name}${get(player2).id === options.player.id ? '(you)' : ''} playing as the female role.`]
         break;
-      case '7a':
+      case '7':
         dialogueArr = ['Next, I\'ll explain the mechanics of the game. This game is more like an interactive multiplayer story with some DND elements. The only actions you\'ll be performing are selecting answers below (like \'Next\') and rolling dice to decide outcomes. Select \'Next\' to learn how dice rolling works.']
         break;
-      case '8a':
+      case '8':
         dialogueArr = [
           'Each player controls a unique character, these characters have different stats.',
           `For instance these are your character stats:
@@ -259,14 +275,17 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           `
         ]
         break;
-      case '9a':
+      case '9':
         dialogueArr = ['These stats play a crucial role when it comes to events. Events are things that happen that require dice rolls or decisions to be made. For example, someone blocks your path and you need to roll for charisma. You need to push a heavy box so you roll for strength. Something falls on you so you roll for defense.']
         break;
-      case '10a':
+      case '10':
         dialogueArr = ['When you roll, your base stat is added to the dice roll and that final number determines the outcome of the situation. If you\'re charisma is too low, you won\'t convince the person. Strength too low means you can\'t push that box. If your defense is too low you your health stat will suffer when something hurts you.']
         break;
-      case '11a':
+      case '11':
         dialogueArr = ['When you\'re both ready, we\'ll move on and practice some dice rolls so you grasp the core mechanics of the game.']
+        break;
+      case '12':
+        dialogueArr = ['']
         break;
     }
   }

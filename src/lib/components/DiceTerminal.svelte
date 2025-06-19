@@ -14,7 +14,7 @@
   import { player1, player2, type Player } from '../stores/players';
 
   // Components
-  import { Button, DiceTerminal } from '.';
+  import { Button } from '.';
 
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
@@ -77,7 +77,9 @@
 <div transition:blur={{duration: 1000}} class="terminal terminal__{terminalColor}">
   <div class="terminal-screen">
     <p id="terminal-text"></p>
-    <DiceTerminal />
+    <div class="dice-screen">
+
+    </div>
   </div>
   <div class="terminal-option-flex-group">
     {#if dialogueOptions.option1Visible}

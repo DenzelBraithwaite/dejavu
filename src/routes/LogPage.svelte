@@ -6,7 +6,7 @@
   import { blur } from 'svelte/transition';
 
   // Modules / Components
-  import { Button, Terminal } from '../lib/components';
+  import { Terminal } from '../lib/components';
 
   // Stores
   import { socket } from '../lib/stores/socket';
@@ -18,8 +18,8 @@
   let gameData = {
     playingAs: '', // male or female
     bothPlayersJoined: false,
-    chapter5aNumOfReadyPlayers: 0,
-    chapter11aNumOfReadyPlayers: 0
+    chapter5NumOfReadyPlayers: 0,
+    chapter11NumOfReadyPlayers: 0
   }
   let dialogueOptions: DialogueOptions = {
     option1Visible: true,
@@ -55,9 +55,7 @@
     socket.on('connect_error', error => console.error('Connection error:', error));
 
     // Starts game
-    socket.on('p2-joined', data => {
-      gameData.bothPlayersJoined = true;
-    });
+    socket.on('p2-joined', () => gameData.bothPlayersJoined = true);
 
     // Sets users (Beware that p1 might be titled player 2 and vice versa due to server.js)
     socket.on('set-users', users => {
@@ -74,10 +72,10 @@
       }); 
     });
 
-    // Go to chapter 6a if both players ready.
-    socket.on('5a-player-ready', () => {
-      gameData.chapter5aNumOfReadyPlayers += 1;
-      if (gameData.chapter5aNumOfReadyPlayers === 2) {
+    // Go to chapter 6 if both players ready.
+    socket.on('5-player-ready', () => {
+      gameData.chapter5NumOfReadyPlayers += 1;
+      if (gameData.chapter5NumOfReadyPlayers === 2) {
         dialogueOptions = {
           option1Visible: true,
           option1Disabled: false,
@@ -94,9 +92,9 @@
     })
 
     // Go to chapter 12a if both players ready.
-    socket.on('11a-player-ready', () => {
-      gameData.chapter11aNumOfReadyPlayers += 1;
-      if (gameData.chapter11aNumOfReadyPlayers === 2) {
+    socket.on('11-player-ready', () => {
+      gameData.chapter11NumOfReadyPlayers += 1;
+      if (gameData.chapter11NumOfReadyPlayers === 2) {
         dialogueOptions = {
           option1Visible: true,
           option1Disabled: false,

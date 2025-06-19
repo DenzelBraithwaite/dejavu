@@ -85,18 +85,12 @@ io.on('connection', socket => {
   socket.on('end-game', data => io.emit('game-ended', data));
 
   // These let all players know the client is ready
-  socket.on('5a-player-ready', () => io.emit('5a-player-ready'));
-  socket.on('11a-player-ready', () => io.emit('11a-player-ready'));
+  socket.on('5-player-ready', () => io.emit('5-player-ready'));
+  socket.on('11-player-ready', () => io.emit('11-player-ready'));
 
   // Set player names
   socket.on('set-male-player-name', data => io.emit('set-male-player-name', data));
   socket.on('set-female-player-name', data => io.emit('set-female-player-name', data));
-
-  // Start updating xeno points, like 3 way handshake part 1
-  socket.on('start-end-game-sync', data => socket.broadcast.emit('end-game-sync-started', data));
-  
-  // Finish updating xeno points
-  socket.on('finish-end-game-sync', data => socket.broadcast.emit('end-game-sync-finished', data)); 
 
   // Log connected users in the server console.
   logUsers();
