@@ -63,6 +63,36 @@ a {
   text-decoration: none;
 }
 
+.stat-roll-result {
+  font-weight: bold;
+  border-bottom: 2px double #fff;
+  padding: 0 4px;
+}
+
+.color-green {
+  color: lightgreen;
+}
+
+.color-blue {
+  color: lightblue;
+}
+
+.color-red {
+  color: lightcoral;
+}
+
+.color-pink {
+  color: pink;
+}
+
+.color-purple {
+  color: purple;
+}
+
+.color-orange {
+  color: orange;
+}
+
 /* When content overflows, scrollbar visible */
 // .<CLASS_NAME>::-webkit-scrollbar {
 //   width: 10px;

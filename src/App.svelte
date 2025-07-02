@@ -1,25 +1,7 @@
 <script lang="ts">
-  // Hooks
-  import { onMount } from 'svelte';
-
-  // Transition
-  import { blur } from 'svelte/transition';
-
-  // Modules/Helpers
-  import { World } from './lib/helpers/index';
-
   // Components
   import { Client } from './lib/components/index';
 
-  const currentWorld = new World({});
-
-  onMount(() => {
-    startGame();
-  });
-
-  function startGame(): void {
-    currentWorld.startGame();
-  }
 </script>
 
 <main class="main-content">

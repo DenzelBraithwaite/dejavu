@@ -1,44 +1,20 @@
-// @ts-ignore
-import { writable } from 'svelte/store';
-
-type Dice = {
-  name: 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20'; 
-  numOfSides: 4 | 6 | 8 | 10 | 12 | 20;
+export class PolyhedralDice {
+  numOfSides: number;
   imgUrl: string;
+
+  constructor(numOfSides: number, imgUrl:  string) {
+    this.numOfSides = numOfSides;
+    this.imgUrl = imgUrl;
+  }
+
+  roll() {
+    return Math.ceil(Math.random() * this.numOfSides);
+  }
 }
 
-export const d4Dice = writable<Dice>({
-  name: 'D4',
-  numOfSides: 4,
-  imgUrl: '/d4.png'
-});
-
-export const d6Dice = writable<Dice>({
-  name: 'D6',
-  numOfSides: 6,
-  imgUrl: ''
-});
-
-export const d8Dice = writable<Dice>({
-  name: 'D8',
-  numOfSides: 8,
-  imgUrl: ''
-});
-
-export const d10Dice = writable<Dice>({
-  name: 'D10',
-  numOfSides: 10,
-  imgUrl: ''
-});
-
-export const d12Dice = writable<Dice>({
-  name: 'D12',
-  numOfSides: 12,
-  imgUrl: ''
-});
-
-export const d20Dice = writable<Dice>({
-  name: 'D20',
-  numOfSides: 20,
-  imgUrl: ''
-});
+export let d4Dice = new PolyhedralDice(4, 'd4-dice.png');
+export let d6Dice = new PolyhedralDice(6, 'd6-dice.png');
+export let d8Dice = new PolyhedralDice(8, 'd8-dice.png');
+export let d10Dice = new PolyhedralDice(10, 'd10-dice.png');
+export let d12Dice = new PolyhedralDice(12, 'd12-dice.png');
+export let d20Dice = new PolyhedralDice(20, 'd20-dice.png');

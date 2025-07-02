@@ -1,9 +1,15 @@
+// Styles
+import '../../app.scss';
+
 // Svelte
 import { get, writable } from 'svelte/store';
 
 // Stores
 import { player1, player2, type Player } from './players';
 import { socket } from './socket';
+
+// Types
+import type { PolyhedralDice } from './dice';
 
 // empty string so typedjs doesnt crash.
 export const terminalMessages = writable<string[]>(['Click \'Next\' to begin.']);
@@ -27,6 +33,7 @@ export type DialogueOptions = {
   option3?: string;
   inputVisible?: boolean;
 }
+type StatForDiceRoll = 'maxHealth' | 'health' | 'strength' | 'defense' | 'speed' | 'intellect' | 'charisma';
 
 export function updateDialogueOptions(chapter: string, part: string, optionSelected = 0): DialogueOptions {
   let objToReturn: DialogueOptions = {};
@@ -289,6 +296,18 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
         break;
     }
   }
+
+  return dialogueArr;
+}
+
+// Rolls a dice, checks players relevant stat and does the math then returns the string.
+export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDice, stat: StatForDiceRoll} = {player: {}}): string[] {
+  const baseStat = options.player.stats[options.stat];
+  const diceRoll: number = options.dice.roll();
+  const totalRoll: number = baseStat + diceRoll;
+
+  // TODO: probably need to update player here.
+  let dialogueArr = [`You rolled a <span class="color-green">${diceRoll}</span>, your base stat is <span class="color-green">${baseStat}</span> for a total of <span class="color-green stat-roll-result">${totalRoll}</span>.`];
 
   return dialogueArr;
 }

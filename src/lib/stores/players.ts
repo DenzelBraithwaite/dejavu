@@ -19,6 +19,7 @@ export type Player = {
   statusEffects?: ('dead' | 'asleep' | 'sick')[],
   inventory?: any[];
 }
+export type PlayerStats = keyof Player['stats'];
 
 export const player1 = writable<Player>({
   id: 'p1',

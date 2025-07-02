@@ -12,6 +12,7 @@
   import { socket } from '../stores/socket';
   import { getNextDialogue, updateDialogueOptions, type DialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
   import { player1, player2, type Player } from '../stores/players';
+  import { PolyhedralDice, d4Dice, d6Dice, d8Dice, d10Dice, d12Dice, d20Dice } from '../stores/dice';
 
   // Components
   import { Button, DiceTerminal } from '.';
@@ -24,6 +25,7 @@
   let typed: Typed;
   let userInput = '';
   let currentDisplayedMessage = getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer()});
+  let dice: PolyhedralDice = d8Dice;
 
   // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
   $: if (gameData.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1') {
@@ -77,7 +79,7 @@
 <div transition:blur={{duration: 1000}} class="terminal terminal__{terminalColor}">
   <div class="terminal-screen">
     <p id="terminal-text"></p>
-    <DiceTerminal />
+    <DiceTerminal {gameData} {dice}/>
   </div>
   <div class="terminal-option-flex-group">
     {#if dialogueOptions.option1Visible}
