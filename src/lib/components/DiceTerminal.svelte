@@ -1,6 +1,7 @@
 <script lang="ts">
   // Hooks
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
 
   // Modules/Helpers
   import Typed from 'typed.js';
@@ -13,14 +14,16 @@
   import type { PolyhedralDice } from '../stores/dice';
 
   // Components
-  import { Dice } from '../components';
+  import { Button, Dice } from '../components';
 
   // Props
   export let dice: PolyhedralDice;
-  export let gameData: any; // update later
+  export let currentGameState: any; // update later
+  export let playerStat: keyof Player['stats'];
+  export let statThreshold: number;
 
   let typed: Typed;
-  let currentDisplayedMessage = getNextDiceDialogue({player: returnPlayer(), dice, stat: 'health'});
+  let currentDisplayedMessage = getNextDiceDialogue({player: returnPlayer(), dice, stat: playerStat, threshold: statThreshold});
 
     onMount(() => {
     typed = new Typed('#dice-terminal-text', {
@@ -35,21 +38,33 @@
   });
 
   function returnPlayer(): Player {
-    return gameData.playingAs === 'male' ? $player1 : $player2;
+    return $currentGameState.playingAs === 'male' ? $player1 : $player2;
+  }
+
+  function closeDiceTerminal(): void {
+    console.log('clicked');
+    currentGameState.set({...$currentGameState, showDiceTerminal: false});
   }
 </script>
 
-<div class="dice-screen">
+<div transition:fade class="dice-terminal">
   <div class="dice-wrapper">
     <Dice {dice}/>
   </div>
-  <p id="dice-terminal-text">{@html currentDisplayedMessage}</p>
+
+  <div class="terminal-text">
+    <p id="dice-terminal-text">{@html currentDisplayedMessage}</p>
+  </div>
+
+  <div class="terminal-btn">
+    <Button btnType="terminal-option" on:click={closeDiceTerminal}>Okay</Button>
+  </div>
 </div>
 
 <style lang="scss">
   $terminalBg: #121212;
 
- .dice-screen {
+ .dice-terminal {
     font-size: 1.125rem;
     background-color: lighten($terminalBg, 10%);
     height: 80%;
@@ -57,7 +72,7 @@
     border: 2px solid var(--white);
     border-top-width: 24px;
     border-radius: var(--border-radius-small);
-    padding: 25% 12px 12px 12px;
+    padding: 12px;
     overflow-wrap: break-word;
     transition: all 0.5s ease-out;
     
@@ -71,20 +86,37 @@
       position: absolute;
       top: 0;
       left: 0;
-      height: 100%;
+      height: 85%;
       width: 100%;
       background-image: url('/dice.png');
       background-repeat: repeat;
       background-position: center;
       background-size: auto;
       opacity: 0.035;
+      z-index: -1; // May block interactive UI elements
     }
  }
 
+ .terminal-text {
+  height: 50%;
+  background-color: #00000038;
+  border-radius: 4px;
+  box-shadow: inset 0 0px 10px #00000094;
+  padding: 8px;
+ }
+
  .dice-wrapper {
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
+  align-content: center;
+ }
+
+ .terminal-btn {
   position: absolute;
-  top: 5%;
+  bottom: 10px;
   right: 50%;
   transform: translateX(50%);
+  width: 50%;
  }
 </style>

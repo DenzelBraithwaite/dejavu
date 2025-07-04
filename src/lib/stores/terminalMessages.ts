@@ -7,6 +7,7 @@ import { get, writable } from 'svelte/store';
 // Stores
 import { player1, player2, type Player } from './players';
 import { socket } from './socket';
+import { type GameState, currentGameState } from './gameState';
 
 // Types
 import type { PolyhedralDice } from './dice';
@@ -216,11 +217,29 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         break;
       case '11':
         chapterPart.set('12');
+        currentGameState.set({...get(currentGameState), showDiceTerminal: true});
+
+        // FIXME: the syntax below isn't reactive so won't reevaluate. Need to maybe just move to next chapter/part on temrinal close.
+        objToReturn = {
+          option1Visible: true,
+          option1Disabled: get(currentGameState).showDiceTerminal ? true : false,
+          option1: get(currentGameState).showDiceTerminal ? 'Disabled During Demo' : 'Next',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+        };
+        break;
+      case '12':
+        chapterPart.set('13');
 
         objToReturn = {
           option1Visible: true,
-          option1Disabled: true,
-          option1: 'Disabled During Demo',
+          option1Disabled: false,
+          option1: 'Next',
           option2Visible: false,
           option2Disabled: true,
           option2: '',
@@ -244,28 +263,28 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
   if (options.chapter === 'lobby') {
     switch (options.part) {
       case '1':
-        dialogueArr = ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.']
+        dialogueArr = ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.'];
         break;
       case '2':
-        dialogueArr = ['Looks like we found 2 trusty adventurers. Click \'Next\' when you\'re ready!']
+        dialogueArr = ['Looks like we found 2 trusty adventurers. Click \'Next\' when you\'re ready!'];
         break;
       case '3':
-        dialogueArr = ['Excellent, now let us differentiate the two of you. Please enter your name below and click \'Next\' when you\'re ready.']
+        dialogueArr = ['Excellent, now let us differentiate the two of you. Please enter your name below and click \'Next\' when you\'re ready.'];
         break;
       case '3-again':
-        dialogueArr = ['Oh good, I was hoping I didn\'t hear that correctly. What did you say your name actually was?']
+        dialogueArr = ['Oh good, I was hoping I didn\'t hear that correctly. What did you say your name actually was?'];
         break;
       case '4':
-        dialogueArr = [`You're name is... ${options.player.name}?`]
+        dialogueArr = [`You're name is... ${options.player.name}?`];
         break;
       case '5':
-        dialogueArr = ['Great! Not the name of course, the fact that you\'re ready. When both of you are ready the button below will say \'Next\', that means you\'re both ready to move forward.']
+        dialogueArr = ['Great! Not the name of course, the fact that you\'re ready. When both of you are ready the button below will say \'Next\', that means you\'re both ready to move forward.'];
         break;
       case '6':
-        dialogueArr = [`Good, now let me introduce the two of you to each other. First we have ${get(player1).name}${get(player1).id === options.player.id ? '(you)' : ''} playing as the male character. Next, we have ${get(player2).name}${get(player2).id === options.player.id ? '(you)' : ''} playing as the female role.`]
+        dialogueArr = [`Good, now let me introduce the two of you to each other. First we have ${get(player1).name}${get(player1).id === options.player.id ? '(you)' : ''} playing as the male character. Next, we have ${get(player2).name}${get(player2).id === options.player.id ? '(you)' : ''} playing as the female role.`];
         break;
       case '7':
-        dialogueArr = ['Next, I\'ll explain the mechanics of the game. This game is more like an interactive multiplayer story with some DND elements. The only actions you\'ll be performing are selecting answers below (like \'Next\') and rolling dice to decide outcomes. Select \'Next\' to learn how dice rolling works.']
+        dialogueArr = ['Next, I\'ll explain the mechanics of the game. This game is more like an interactive multiplayer story with some DND elements. The only actions you\'ll be performing are selecting answers below (like \'Next\') and rolling dice to decide outcomes. Select \'Next\' to learn how dice rolling works.'];
         break;
       case '8':
         dialogueArr = [
@@ -280,19 +299,22 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br> Intellect: ${options.player.stats.intellect}
           <br> Charisma: ${options.player.stats.charisma}
           `
-        ]
+        ];
         break;
       case '9':
-        dialogueArr = ['These stats play a crucial role when it comes to events. Events are things that happen that require dice rolls or decisions to be made. For example, someone blocks your path and you need to roll for charisma. You need to push a heavy box so you roll for strength. Something falls on you so you roll for defense.']
+        dialogueArr = ['These stats play a crucial role when it comes to events. Events are things that happen that require dice rolls or decisions to be made. For example, someone blocks your path and you need to roll for charisma. You need to push a heavy box so you roll for strength. Something falls on you so you roll for defense.'];
         break;
       case '10':
-        dialogueArr = ['When you roll, your base stat is added to the dice roll and that final number determines the outcome of the situation. If you\'re charisma is too low, you won\'t convince the person. Strength too low means you can\'t push that box. If your defense is too low you your health stat will suffer when something hurts you.']
+        dialogueArr = ['When you roll, your base stat is added to the dice roll and that final number determines the outcome of the situation. If you\'re charisma is too low, you won\'t convince the person. Strength too low means you can\'t push that box. If your defense is too low you your health stat will suffer when something hurts you.'];
         break;
       case '11':
-        dialogueArr = ['When you\'re both ready, we\'ll move on and practice some dice rolls so you grasp the core mechanics of the game.']
+        dialogueArr = ['When you\'re both ready, we\'ll move on and practice some dice rolls so you grasp the core mechanics of the game.'];
         break;
       case '12':
-        dialogueArr = ['']
+        dialogueArr = ['Waiting for dice window to close.'];
+        break;
+      case '13':
+        dialogueArr = ['That was a quick example of a dice role...'];
         break;
     }
   }
@@ -301,13 +323,16 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
 }
 
 // Rolls a dice, checks players relevant stat and does the math then returns the string.
-export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDice, stat: StatForDiceRoll} = {player: {}}): string[] {
+export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDice, stat: StatForDiceRoll, threshold: number} = {player: {}}): string[] {
   const baseStat = options.player.stats[options.stat];
   const diceRoll: number = options.dice.roll();
   const totalRoll: number = baseStat + diceRoll;
+  const successfulRoll = Boolean(totalRoll - options.threshold >= 0);
+  const resultMessage = successfulRoll ? 'You were successful' : 'You were unsuccessful';
 
+  // FIXME: Seems to use the same player for both users...
   // TODO: probably need to update player here.
-  let dialogueArr = [`You rolled a <span class="color-green">${diceRoll}</span>, your base stat is <span class="color-green">${baseStat}</span> for a total of <span class="color-green stat-roll-result">${totalRoll}</span>.`];
+  let dialogueArr = [`You are rolling a <span class="color-blue">d-${options.dice.numOfSides}</span> dice for your <span class="color-blue">${options.stat}</span> stat. You need at least a <span class="color-blue">${options.threshold}</span>. You roll the dice and get a <span class="color-blue">${diceRoll}</span>, your base stat is <span class="color-pink">${baseStat}</span> for a total of <span class="color-blue stat-roll-result">${totalRoll}</span>. <span class="color-${successfulRoll ? 'green' : 'red'}">${resultMessage}</span>`];
 
   return dialogueArr;
 }

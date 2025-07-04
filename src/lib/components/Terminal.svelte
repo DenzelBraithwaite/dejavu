@@ -19,7 +19,7 @@
 
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
-  export let gameData: any; // update later
+  export let currentGameState: any; // update later
   export let dialogueOptions: DialogueOptions;
 
   let typed: Typed;
@@ -27,14 +27,27 @@
   let currentDisplayedMessage = getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer()});
   let dice: PolyhedralDice = d8Dice;
 
+  // TODO: move to gameState store TODO:
+  let playerStat: keyof Player['stats'];
+  let statThreshold = 0;
+
   // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
-  $: if (gameData.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1') {
+  $: if ($currentGameState.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1') {
     dialogueOptions.option1Disabled = false;
     dialogueOptions.option1 = 'Ready';
   }
 
-  $: if (gameData.goToChapter6 && $chapter === 'lobby' && $chapterPart === '5') {
+  $: if ($currentGameState.goToChapter6 && $chapter === 'lobby' && $chapterPart === '5') {
     updateTerminal(0);
+  }
+
+  $: if ($currentGameState.goToChapter6 && $chapter === 'lobby' && $chapterPart === '5') {
+    updateTerminal(0);
+  }
+
+  $: if ($chapterPart === '12') {
+    playerStat = 'defense';
+    statThreshold = 7;
   }
 
   onMount(() => {
@@ -66,12 +79,12 @@
   }
 
   function returnPlayer(): Player {
-    return gameData.playingAs === 'male' ? $player1 : $player2;
+    return $currentGameState.playingAs === 'male' ? $player1 : $player2;
   }
   
   function handleUserInput(): void {
     if ($chapter === 'lobby' && $chapterPart === '3' || $chapterPart === '3-again') {
-     gameData.playingAs === 'male' ? socket.emit('set-male-player-name', userInput.trim()) : socket.emit('set-female-player-name', userInput.trim());
+     $currentGameState.playingAs === 'male' ? socket.emit('set-male-player-name', userInput.trim()) : socket.emit('set-female-player-name', userInput.trim());
     }
   }
 </script>
@@ -79,7 +92,9 @@
 <div transition:blur={{duration: 1000}} class="terminal terminal__{terminalColor}">
   <div class="terminal-screen">
     <p id="terminal-text"></p>
-    <DiceTerminal {gameData} {dice}/>
+    {#if $currentGameState.showDiceTerminal}
+      <DiceTerminal {currentGameState} {dice} {playerStat} {statThreshold}/>
+    {/if}
   </div>
   <div class="terminal-option-flex-group">
     {#if dialogueOptions.option1Visible}

@@ -11,16 +11,11 @@
   // Stores
   import { socket } from '../lib/stores/socket';
   import { player1, player2 } from '../lib/stores/players';
+  import { type GameState, currentGameState } from '../lib/stores/gameState';
   
   // Types
   import type { DialogueOptions } from '../lib/stores/terminalMessages';
 
-  let gameData = {
-    playingAs: '', // male or female
-    bothPlayersJoined: false,
-    chapter5NumOfReadyPlayers: 0,
-    chapter11NumOfReadyPlayers: 0
-  }
   let dialogueOptions: DialogueOptions = {
     option1Visible: true,
     option1Disabled: true,
@@ -44,9 +39,9 @@
     // TODO: FIXME: Works but only if first person joins and then second player joins. If 2 players join then one leaves and rejoins, both will be female since this is never re-evaluated. Need a better solution.
     // Sets user's player
     socket.on('playing-as', data => {
-      if (socket.id === data.socketID && data.playerCount === 1) gameData.playingAs = 'male';
-      if (socket.id === data.socketID && data.playerCount === 2) gameData.playingAs = 'female';
-      console.log('Playing as ' + gameData.playingAs);
+      if (socket.id === data.socketID && data.playerCount === 1) currentGameState.set({...$currentGameState, playingAs: 'male'});
+      if (socket.id === data.socketID && data.playerCount === 2) currentGameState.set({...$currentGameState, playingAs: 'female'});
+      console.log('Playing as ' + $currentGameState.playingAs);
       console.log('Socket.id = ' + socket.id);
       console.log('data.socketID = ' + data.socketID);
     });
@@ -55,7 +50,7 @@
     socket.on('connect_error', error => console.error('Connection error:', error));
 
     // Starts game
-    socket.on('p2-joined', () => gameData.bothPlayersJoined = true);
+    socket.on('p2-joined', () => currentGameState.set({...$currentGameState, bothPlayersJoined: true}));
 
     // Sets users (Beware that p1 might be titled player 2 and vice versa due to server.js)
     socket.on('set-users', users => {
@@ -74,8 +69,8 @@
 
     // Go to chapter 6 if both players ready.
     socket.on('5-player-ready', () => {
-      gameData.chapter5NumOfReadyPlayers += 1;
-      if (gameData.chapter5NumOfReadyPlayers === 2) {
+      currentGameState.set({...$currentGameState, chapter5NumOfReadyPlayers: $currentGameState.chapter5NumOfReadyPlayers += 1});
+      if ($currentGameState.chapter5NumOfReadyPlayers === 2) {
         dialogueOptions = {
           option1Visible: true,
           option1Disabled: false,
@@ -93,8 +88,8 @@
 
     // Go to chapter 12a if both players ready.
     socket.on('11-player-ready', () => {
-      gameData.chapter11NumOfReadyPlayers += 1;
-      if (gameData.chapter11NumOfReadyPlayers === 2) {
+      currentGameState.set({...$currentGameState, chapter11NumOfReadyPlayers: $currentGameState.chapter11NumOfReadyPlayers += 1});
+      if ($currentGameState.chapter11NumOfReadyPlayers === 2) {
         dialogueOptions = {
           option1Visible: true,
           option1Disabled: false,
@@ -120,7 +115,7 @@
 </script>
 
 <div in:blur class="main-content">
-  <Terminal {gameData} {dialogueOptions} terminalColor="grey" />
+  <Terminal {currentGameState} {dialogueOptions} terminalColor="grey" />
 </div>
 
 <style lang="scss">
