@@ -9,6 +9,7 @@
   import Typed from 'typed.js';
 
   // stores
+  import { type Writable } from 'svelte/store';
   import { socket } from '../stores/socket';
   import { getNextDialogue, updateDialogueOptions, type DialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
   import { player1, player2, type Player } from '../stores/players';
@@ -20,7 +21,7 @@
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
   export let currentGameState: any; // update later
-  export let dialogueOptions: DialogueOptions;
+  export let dialogueOptions: Writable<DialogueOptions>;
 
   let typed: Typed;
   let userInput = '';
@@ -33,8 +34,10 @@
 
   // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
   $: if ($currentGameState.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1') {
-    dialogueOptions.option1Disabled = false;
-    dialogueOptions.option1 = 'Ready';
+    dialogueOptions.set({...$dialogueOptions, 
+      option1Disabled: false,
+      option1: 'Ready'
+    })
   }
 
   $: if ($currentGameState.goToChapter6 && $chapter === 'lobby' && $chapterPart === '5') {
@@ -45,7 +48,7 @@
     updateTerminal(0);
   }
 
-  $: if ($chapterPart === '12') {
+  $: if ($chapter === 'lobby' && $chapterPart === '12') {
     playerStat = 'defense';
     statThreshold = 7;
   }
@@ -63,8 +66,7 @@
   });
 
   function updateTerminal(optionSelected: number, destroyLog = false): void {
-    dialogueOptions = updateDialogueOptions($chapter, $chapterPart, optionSelected);
-
+    updateDialogueOptions($chapter, $chapterPart, optionSelected);
     // cleans last terminal instance, otherwise they stack.
     typed.destroy();
     typed = new Typed('#terminal-text', {
@@ -97,19 +99,19 @@
     {/if}
   </div>
   <div class="terminal-option-flex-group">
-    {#if dialogueOptions.option1Visible}
-      <Button btnType="terminal-option" disabled={dialogueOptions.option1Disabled} on:click={() => updateTerminal(1)}>{dialogueOptions.option1}</Button>
+    {#if $dialogueOptions.option1Visible}
+      <Button btnType="terminal-option" disabled={$dialogueOptions.option1Disabled} on:click={() => updateTerminal(1)}>{$dialogueOptions.option1}</Button>
     {/if}
 
-    {#if dialogueOptions.option2Visible}
-      <Button btnType="terminal-option" disabled={dialogueOptions.option2Disabled} on:click={() => updateTerminal(2)}>{dialogueOptions.option2}</Button>
+    {#if $dialogueOptions.option2Visible}
+      <Button btnType="terminal-option" disabled={$dialogueOptions.option2Disabled} on:click={() => updateTerminal(2)}>{$dialogueOptions.option2}</Button>
     {/if}
 
-    {#if dialogueOptions.option3Visible}
-      <Button btnType="terminal-option" disabled={dialogueOptions.option3Disabled} on:click={() => updateTerminal(3)}>{dialogueOptions.option3}</Button>
+    {#if $dialogueOptions.option3Visible}
+      <Button btnType="terminal-option" disabled={$dialogueOptions.option3Disabled} on:click={() => updateTerminal(3)}>{$dialogueOptions.option3}</Button>
     {/if}
 
-    {#if dialogueOptions.inputVisible}
+    {#if $dialogueOptions.inputVisible}
       <input bind:value={userInput} on:input={handleUserInput} type="text" maxlength="20" class="terminal-input">
     {/if}
   </div>

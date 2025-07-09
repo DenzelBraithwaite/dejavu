@@ -12,22 +12,7 @@
   import { socket } from '../lib/stores/socket';
   import { player1, player2 } from '../lib/stores/players';
   import { type GameState, currentGameState } from '../lib/stores/gameState';
-  
-  // Types
-  import type { DialogueOptions } from '../lib/stores/terminalMessages';
-
-  let dialogueOptions: DialogueOptions = {
-    option1Visible: true,
-    option1Disabled: true,
-    option1: 'Waiting...',
-    option2Visible: false,
-    option2Disabled: false,
-    option2: '',
-    option3Visible: false,
-    option3Disabled: false,
-    option3: '',
-    inputVisible: false
-    };
+  import { dialogueOptions, type DialogueOptions } from '../lib/stores/terminalMessages'
 
   onMount(() => {
     // Handles connects
@@ -71,7 +56,7 @@
     socket.on('5-player-ready', () => {
       currentGameState.set({...$currentGameState, chapter5NumOfReadyPlayers: $currentGameState.chapter5NumOfReadyPlayers += 1});
       if ($currentGameState.chapter5NumOfReadyPlayers === 2) {
-        dialogueOptions = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -82,7 +67,7 @@
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
       }
     })
 
@@ -90,7 +75,7 @@
     socket.on('11-player-ready', () => {
       currentGameState.set({...$currentGameState, chapter11NumOfReadyPlayers: $currentGameState.chapter11NumOfReadyPlayers += 1});
       if ($currentGameState.chapter11NumOfReadyPlayers === 2) {
-        dialogueOptions = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -101,7 +86,7 @@
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
       }
     })
 

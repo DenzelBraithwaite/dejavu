@@ -21,6 +21,18 @@ export const terminalMessagesLog = writable<string[]>([]);
 // For the current part in the chapter the players are at
 export const chapter = writable('lobby');
 export const chapterPart = writable('1');
+export const dialogueOptions = writable<DialogueOptions>({
+    option1Visible: true,
+    option1Disabled: true,
+    option1: 'Waiting...',
+    option2Visible: false,
+    option2Disabled: false,
+    option2: '',
+    option3Visible: false,
+    option3Disabled: false,
+    option3: '',
+    inputVisible: false
+    });
 
 export type DialogueOptions = {
   option1Visible?: boolean;
@@ -36,13 +48,12 @@ export type DialogueOptions = {
 }
 type StatForDiceRoll = 'maxHealth' | 'health' | 'strength' | 'defense' | 'speed' | 'intellect' | 'charisma';
 
-export function updateDialogueOptions(chapter: string, part: string, optionSelected = 0): DialogueOptions {
-  let objToReturn: DialogueOptions = {};
+export function updateDialogueOptions(chapter: string, part: string, optionSelected = 0): void {
   if (chapter === 'lobby') {
     switch (part) {
       case '1':
         chapterPart.set('2');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -53,11 +64,11 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '2':
         chapterPart.set('3');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -68,12 +79,12 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: true
-        };
+        });
         break;
       case '3':
       case '3-again':
         chapterPart.set('4');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Yes',
@@ -84,7 +95,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '4':
         if (optionSelected === 1) {
@@ -93,7 +104,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           // Lets server know client is ready.
           socket.emit('5-player-ready');
           
-          objToReturn = {
+          dialogueOptions.set({
             option1Visible: true,
             option1Disabled: true,
             option1: 'Waiting',
@@ -104,10 +115,10 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
             option3Disabled: true,
             option3: '',
             inputVisible: false
-          };
+          });
         } else if (optionSelected === 2) {
           chapterPart.set('3-again');
-          objToReturn = {
+          dialogueOptions.set({
             option1Visible: true,
             option1Disabled: false,
             option1: 'Next But For Real This Time',
@@ -118,12 +129,12 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
             option3Disabled: true,
             option3: '',
             inputVisible: true
-          };
+          });
         }
         break;
       case '5':
         chapterPart.set('6');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -134,11 +145,11 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '6':
         chapterPart.set('7');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -149,11 +160,11 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '7':
         chapterPart.set('8');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -164,11 +175,11 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '8':
         chapterPart.set('9');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -179,11 +190,11 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '9':
         chapterPart.set('10');
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -194,7 +205,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '10':
         chapterPart.set('11');
@@ -202,7 +213,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         // Lets server know client is ready.
         socket.emit('11-player-ready');
 
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: true,
           option1: 'Waiting for your dead weight teammate',
@@ -213,17 +224,16 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '11':
         chapterPart.set('12');
         currentGameState.set({...get(currentGameState), showDiceTerminal: true});
 
-        // FIXME: the syntax below isn't reactive so won't reevaluate. Need to maybe just move to next chapter/part on temrinal close.
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
-          option1Disabled: get(currentGameState).showDiceTerminal ? true : false,
-          option1: get(currentGameState).showDiceTerminal ? 'Disabled During Demo' : 'Next',
+          option1Disabled: true,
+          option1: 'Disabled During Demo',
           option2Visible: false,
           option2Disabled: true,
           option2: '',
@@ -231,12 +241,12 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
       case '12':
         chapterPart.set('13');
 
-        objToReturn = {
+        dialogueOptions.set({
           option1Visible: true,
           option1Disabled: false,
           option1: 'Next',
@@ -247,12 +257,10 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           option3Disabled: true,
           option3: '',
           inputVisible: false
-        };
+        });
         break;
     }
   }
-
-  return objToReturn;
 }
 
 // I declared player as a non optional argument because if I don't, every reference to player in the funciton code will raise a warning from TS.
@@ -330,8 +338,6 @@ export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDi
   const successfulRoll = Boolean(totalRoll - options.threshold >= 0);
   const resultMessage = successfulRoll ? 'You were successful' : 'You were unsuccessful';
 
-  // FIXME: Seems to use the same player for both users...
-  // TODO: probably need to update player here.
   let dialogueArr = [`You are rolling a <span class="color-blue">d-${options.dice.numOfSides}</span> dice for your <span class="color-blue">${options.stat}</span> stat. You need at least a <span class="color-blue">${options.threshold}</span>. You roll the dice and get a <span class="color-blue">${diceRoll}</span>, your base stat is <span class="color-pink">${baseStat}</span> for a total of <span class="color-blue stat-roll-result">${totalRoll}</span>. <span class="color-${successfulRoll ? 'green' : 'red'}">${resultMessage}</span>`];
 
   return dialogueArr;

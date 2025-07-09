@@ -8,7 +8,7 @@
 
   // Stores
   import { player1, player2, type Player } from '../stores/players';
-  import { getNextDiceDialogue } from '../stores/terminalMessages';
+  import { dialogueOptions, getNextDiceDialogue } from '../stores/terminalMessages';
 
   // Types
   import type { PolyhedralDice } from '../stores/dice';
@@ -42,8 +42,19 @@
   }
 
   function closeDiceTerminal(): void {
-    console.log('clicked');
     currentGameState.set({...$currentGameState, showDiceTerminal: false});
+      dialogueOptions.set({
+      option1Visible: true,
+      option1Disabled: false,
+      option1: 'Next',
+      option2Visible: false,
+      option2Disabled: true,
+      option2: '',
+      option3Visible: false,
+      option3Disabled: true,
+      option3: '',
+      inputVisible: false
+    });
   }
 </script>
 
