@@ -8,7 +8,7 @@ export type Player = {
   isTurn?: boolean; // Turn to roll dice maybe, not sure, can be useful.
   // Most are base stats that add to dice rolls.
   stats: {
-    maxHealth: number; // Health value when full.
+    maxHealth: number; // Health value when full. TODO: I might remove health entirely from the game.
     health: number; // Current health value.
     strength: number; // Determines ability to move heavy objects and fight.
     defense: number; // Determines how resistant they are to damage of any kind.

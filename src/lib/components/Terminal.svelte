@@ -53,6 +53,12 @@
     statThreshold = 7;
   }
 
+    $: if ($chapter === 'lobby' && $chapterPart === '14') {
+    playerStat = 'strength';
+    statThreshold = 40;
+    dice = d20Dice;
+  }
+
   onMount(() => {
     typed = new Typed('#terminal-text', {
       strings: currentDisplayedMessage,
@@ -93,6 +99,7 @@
 
 <div transition:blur={{duration: 1000}} class="terminal terminal__{terminalColor}">
   <div class="terminal-screen">
+    <p>Chapter {$chapter}: part {$chapterPart}</p>
     <p id="terminal-text"></p>
     {#if $currentGameState.showDiceTerminal}
       <DiceTerminal {currentGameState} {dice} {playerStat} {statThreshold}/>
@@ -124,6 +131,7 @@
     position: relative;
     background-color: $terminalBg;
     height: 100%;
+    max-height: 95vh;
     width: 100%;
     border: 2px solid var(--white);
     border-top-width: 24px;
