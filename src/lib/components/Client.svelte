@@ -5,11 +5,18 @@
   // Pages
   import { LogPage } from '../../routes/index';
 
+  // Stores
+  import { chapter, chapterPart } from '../stores/terminalMessages';
+
   // Components
   import { Sidebar } from './index';
 
   let sidebarExpanded = false;
   let currentPage = 'log';
+  let background = '';
+
+  // The delay because the female player initially has a bag over her head and the male is trying to focus his vision.
+  $: if ($chapter === '1') setTimeout(() => background = 'audience-chamber', 10_000);
 
   function changePage(event: {detail: string}): void {
     currentPage = event.detail;
@@ -18,7 +25,7 @@
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 
-<div in:blur={{duration: 2000}} class:client-collapsed={!sidebarExpanded} class="client">
+<div in:blur={{duration: 2000}} class:client-collapsed={!sidebarExpanded} class="client bg-{background}">
   <Sidebar {sidebarExpanded} on:select={changePage} on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}/>
 
   <div class="screen">
@@ -29,10 +36,9 @@
 <style lang="scss">
   .client {
     position: relative;
-    $background: var(--slate-950);
     height: 100vh;
     width: 100vw;
-    background-color: $background;
+    background-color: var(--slate-950);
     transition: all 0.5s ease-out; // Match this to sidebar transition speed (or don't 😅)
 
     display: grid;
@@ -52,5 +58,13 @@
   
   .client-collapsed {
     grid-template-columns: 70px 1fr;
+  }
+
+  .bg-audience-chamber {
+    transition: all 1s ease-in-out;
+    background: url('/audience-chamber.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
   }
 </style>

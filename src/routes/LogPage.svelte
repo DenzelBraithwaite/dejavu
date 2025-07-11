@@ -13,6 +13,9 @@
   import { player1, player2 } from '../lib/stores/players';
   import { type GameState, currentGameState } from '../lib/stores/gameState';
   import { dialogueOptions, type DialogueOptions } from '../lib/stores/terminalMessages'
+  import { chapter, chapterPart, getNextDialogue } from '../lib/stores/terminalMessages';
+
+  let updateTerminalReqFromParent = false;
 
   onMount(() => {
     // Handles connects
@@ -90,6 +93,48 @@
       }
     })
 
+    // Only male should receive this
+    socket.on('set-chapter-1-part-3', userInput => {
+      chapter.set('1');
+      chapterPart.set('3');
+      currentGameState.set({...$currentGameState, userDialogue: userInput});
+        dialogueOptions.set({
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Send Dialogue',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: true
+        });
+
+        updateTerminalReqFromParent = true;
+    });
+
+    // Only female should receive this
+    socket.on('set-chapter-1-part-4', userInput => {
+      chapter.set('1');
+      chapterPart.set('4');
+      currentGameState.set({...$currentGameState, userDialogue: userInput});
+        dialogueOptions.set({
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Send Dialogue',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: true
+        });
+        
+        updateTerminalReqFromParent = true;
+    });
+
     // Set player names
     socket.on('set-male-player-name', data => player1.set({...$player1, name: data ? data : 'Peasant Boy'}));
     socket.on('set-female-player-name', data => player2.set({...$player2, name: data ? data : 'Peasant Girl'}));
@@ -100,7 +145,7 @@
 </script>
 
 <div in:blur class="main-content">
-  <Terminal {currentGameState} {dialogueOptions} terminalColor="grey" />
+  <Terminal {currentGameState} {dialogueOptions} {updateTerminalReqFromParent} terminalColor="grey" />
 </div>
 
 <style lang="scss">

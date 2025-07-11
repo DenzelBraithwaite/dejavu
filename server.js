@@ -88,6 +88,10 @@ io.on('connection', socket => {
   socket.on('5-player-ready', () => io.emit('5-player-ready'));
   socket.on('11-player-ready', () => io.emit('11-player-ready'));
 
+  // For player to player dialogue, let's the other player terminal know to continue.
+  socket.on('set-chapter-1-part-3', userInput => socket.broadcast.emit('set-chapter-1-part-3', userInput))
+  socket.on('set-chapter-1-part-4', userInput => socket.broadcast.emit('set-chapter-1-part-4', userInput))
+
   // Set player names
   socket.on('set-male-player-name', data => io.emit('set-male-player-name', data));
   socket.on('set-female-player-name', data => io.emit('set-female-player-name', data));

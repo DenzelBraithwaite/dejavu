@@ -22,15 +22,15 @@
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
   export let currentGameState: any; // update later
   export let dialogueOptions: Writable<DialogueOptions>;
+  export let updateTerminalReqFromParent = false;
 
   let typed: Typed;
   let userInput = '';
   let currentDisplayedMessage = getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer()});
   let dice: PolyhedralDice = d8Dice;
-
-  // TODO: move to gameState store TODO:
   let playerStat: keyof Player['stats'];
   let statThreshold = 0;
+  $: userInputMaxLength = $chapter === 'lobby' ? 20 : 200;
 
   // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
   $: if ($currentGameState.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1') {
@@ -44,19 +44,20 @@
     updateTerminal(0);
   }
 
-  $: if ($currentGameState.goToChapter6 && $chapter === 'lobby' && $chapterPart === '5') {
-    updateTerminal(0);
-  }
-
   $: if ($chapter === 'lobby' && $chapterPart === '12') {
     playerStat = 'defense';
     statThreshold = 7;
   }
 
-    $: if ($chapter === 'lobby' && $chapterPart === '14') {
+  $: if ($chapter === 'lobby' && $chapterPart === '14') {
     playerStat = 'strength';
     statThreshold = 40;
     dice = d20Dice;
+  }
+
+  $: if (updateTerminalReqFromParent && $chapter === '1' && ['3', '4'].includes($chapterPart)) {
+    updateTerminal(1);
+    updateTerminalReqFromParent = false;
   }
 
   onMount(() => {
@@ -72,7 +73,7 @@
   });
 
   function updateTerminal(optionSelected: number, destroyLog = false): void {
-    updateDialogueOptions($chapter, $chapterPart, optionSelected);
+    updateDialogueOptions({player: returnPlayer(), chapter: $chapter, part: $chapterPart, optionSelected});
     // cleans last terminal instance, otherwise they stack.
     typed.destroy();
     typed = new Typed('#terminal-text', {
@@ -94,6 +95,8 @@
     if ($chapter === 'lobby' && $chapterPart === '3' || $chapterPart === '3-again') {
      $currentGameState.playingAs === 'male' ? socket.emit('set-male-player-name', userInput.trim()) : socket.emit('set-female-player-name', userInput.trim());
     }
+
+    currentGameState.set({...$currentGameState, userDialogue: userInput.trim()});
   }
 </script>
 
@@ -119,7 +122,7 @@
     {/if}
 
     {#if $dialogueOptions.inputVisible}
-      <input bind:value={userInput} on:input={handleUserInput} type="text" maxlength="20" class="terminal-input">
+      <input bind:value={userInput} on:input={handleUserInput} type="text" maxlength={userInputMaxLength} class="terminal-input">
     {/if}
   </div>
 </div>

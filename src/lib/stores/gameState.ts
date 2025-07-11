@@ -6,6 +6,7 @@ export type GameState = {
   chapter5NumOfReadyPlayers: number;
   chapter11NumOfReadyPlayers: number;
   showDiceTerminal: boolean;
+  userDialogue: string;
 };
 
 export const currentGameState = writable<GameState>({
@@ -13,5 +14,6 @@ export const currentGameState = writable<GameState>({
   bothPlayersJoined: false,
   chapter5NumOfReadyPlayers: 0,
   chapter11NumOfReadyPlayers: 0,
-  showDiceTerminal: false
+  showDiceTerminal: false,
+  userDialogue: ''
 });

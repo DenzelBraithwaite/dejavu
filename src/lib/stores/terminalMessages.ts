@@ -48,9 +48,9 @@ export type DialogueOptions = {
 }
 type StatForDiceRoll = 'maxHealth' | 'health' | 'strength' | 'defense' | 'speed' | 'stealth' | 'intellect' | 'perception' | 'charisma';
 
-export function updateDialogueOptions(chapter: string, part: string, optionSelected = 0): void {
-  if (chapter === 'lobby') {
-    switch (part) {
+export function updateDialogueOptions(options: {player: Player, chapter: string; part: string; optionSelected: number} = {player: {}, chapter: '', part: '', optionSelected: 0}): void {
+  if (options.chapter === 'lobby') {
+    switch (options.part) {
       case '1':
         chapterPart.set('2');
         dialogueOptions.set({
@@ -68,18 +68,6 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         break;
       case '2':
         chapterPart.set('3');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: true
-        });
         break;
       case '3':
       case '3-again':
@@ -98,7 +86,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         });
         break;
       case '4':
-        if (optionSelected === 1) {
+        if (options.optionSelected === 1) {
           chapterPart.set('5');
           
           // Lets server know client is ready.
@@ -116,7 +104,7 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
             option3: '',
             inputVisible: false
           });
-        } else if (optionSelected === 2) {
+        } else if (options.optionSelected === 2) {
           chapterPart.set('3-again');
           dialogueOptions.set({
             option1Visible: true,
@@ -149,63 +137,15 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         break;
       case '6':
         chapterPart.set('7');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
         break;
       case '7':
         chapterPart.set('8');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
         break;
       case '8':
         chapterPart.set('9');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
         break;
       case '9':
         chapterPart.set('10');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
         break;
       case '10':
         chapterPart.set('11');
@@ -294,43 +234,60 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
         break;
       case '15':
         chapterPart.set('16');
-
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
         break;
       case '16':
         chapterPart.set('17');
-
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
         break;
       case '17':
         chapterPart.set('18');
+        break;
+      case '18':
+        chapter.set('1');
+        chapterPart.set('1');
+        break;
+    }
+  } else if (options.chapter === '1') {
+    switch (options.part) {
+      case '1':
+        chapterPart.set('2');
+        if (options.player.gender === 'male') {
+          dialogueOptions.set({
+            option1Visible: true,
+            option1Disabled: true,
+            option1: 'Waiting for Response',
+            option2Visible: false,
+            option2Disabled: true,
+            option2: '',
+            option3Visible: false,
+            option3Disabled: true,
+            option3: '',
+            inputVisible: false
+          });
+        } else if (options.player.gender === 'female') {
+          dialogueOptions.set({
+            option1Visible: true,
+            option1Disabled: false,
+            option1: 'Send Dialogue',
+            option2Visible: false,
+            option2Disabled: true,
+            option2: '',
+            option3Visible: false,
+            option3Disabled: true,
+            option3: '',
+            inputVisible: true
+          });
+        }
+        break;
 
+      // This means the female player is sending a message to the male player, only female player uses this case
+      case '2':
+        // Let's other player know they need to continue
+        socket.emit('set-chapter-1-part-3');
+        chapterPart.set('3');
         dialogueOptions.set({
           option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
+          option1Disabled: true,
+          option1: 'Waiting for Response',
           option2Visible: false,
           option2Disabled: true,
           option2: '',
@@ -340,13 +297,16 @@ export function updateDialogueOptions(chapter: string, part: string, optionSelec
           inputVisible: false
         });
         break;
-      case '18':
-        chapterPart.set('19');
 
+      // This means the male player is sending a message to the female player, only male player uses this case
+      case '3':
+        // Let's other player know they need to continue
+        socket.emit('set-chapter-1-part-4');
+        chapterPart.set('4');
         dialogueOptions.set({
           option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
+          option1Disabled: true,
+          option1: 'Waiting for Response',
           option2Visible: false,
           option2Disabled: true,
           option2: '',
@@ -365,8 +325,8 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
   options.optionSelected = options.optionSelected ?? 0;
   let dialogueArr = ['Something went wrong... This text should not display.'];
 
-  if (options.chapter === 'lobby') {
-    switch (options.part) {
+  if (get(chapter) === 'lobby') {
+    switch (get(chapterPart)) {
       case '1':
         dialogueArr = ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.'];
         break;
@@ -456,14 +416,17 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br>
           <br>
           Oh, you're curious to know who I am? I'm the terminal narrator, I'll be the one typing the messages and creating the game for you as we go, but that doesn't mean I'll help you! You 2 will need to manage on your own but I will be there to witness the triumph 🥳.
-          <br> Good luck in there.
+          <br> Good luck out there.
           <br>
           <br>
           <br>
           I hope you know what you're getting yourself into...
           `];
         break;
-      case '19':
+    }
+  } else if (get(chapter) === '1') {
+    switch(get(chapterPart)) {
+      case '1':
         if (options.player.gender === 'male') {
           dialogueArr = [`
             Fear has you paralyzed as sounds of yelling and griping could be heard from all directions. You gathered that by now you must be in the throne room, in the audience of the baron. In a swift motion you felt the bag removed from your head and your eyes adjusted to the light. Standing in front of you was the throne and sitting on it was the lord of the land, <MALE_PLAYER_NAME>.
@@ -483,7 +446,7 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
             <br><br> You wondered if you should speak, perhaps that would make matters worse and it would be better to simply respond if spoken to. You survived by not asking questions and speaking when you were told. Bouncing from home to home until you finally found one willing to welcome you into theirs, you had learnt many lessons from many people but were never sure which to adhere to.
             <br><br> The crawling seconds felt like minutes as he continued to stare at you, but you couldn\'t help but to stare back. You were aware that this could be seen as a sign of aggression, but you found difficulty in looking away. "He\'s here", that\'s what the voice said right? Could it have meant him?
             <br><br> Suddenly, the baron began to speak and asked what your name is. But once again, you struggled to find your voice. This time however, it was due to more than just emotions. You had a name, but it was only given to you recently. You weren\'t sure if you should explain that or just tell him the name and wait for the next question.
-            <br><br> You could see his impatience building and although you were already handed the death sentence, you feared making matters worse. You felt frozen in fear until suddenly the voice returned once again, but louder this time. "SPEAK"
+            <br><br> You could see his impatience building and although you were already handed a death sentence, you feared making matters worse. You felt frozen in fear until suddenly the voice returned once again, but louder this time. "SPEAK"
             <br><br> You decide to obey the voice and answer the baron
           `];
         } else if (options.player.gender === 'female') {
@@ -509,6 +472,23 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
             <br><br> MALE_PLAYER_NAME: My name is MALE_PLAYER_NAME, I am the baron of this land as you most certainly are aware. Now that I have introduced myself I wish to know your name.',
           `];
         }
+        break;
+        // FIXME: for some reason 2 is blank and then it jumps to 4 for both players and hte dialogue is null for both... FIXME:
+      case '2':
+        let playerSpecificDialogue = 'Yes you made it to chapter 2 but u should see more';
+        if (returnPlayer().gender === 'male') playerSpecificDialogue = 'Since you are waiting for a response, it is up to the other player to speak first.';
+        if (returnPlayer().gender === 'female') playerSpecificDialogue = 'Since the other player is waiting for a response, it is up to you to speak first.';
+        dialogueArr = [`
+          <span class="color-orange>*An open dialogue is beginning, when this happens you are free to talk with the other player via the terminal input at the bottom. You must take turns talking and replying. This is a good opportunity to get in character.</span>
+          <br> ${playerSpecificDialogue}
+          `];
+        break;
+      case '3':
+        dialogueArr = [`${get(player2).name}: ${get(currentGameState).userDialogue}`];
+        break;
+      case '4':
+        dialogueArr = [`${get(player1).name}: ${get(currentGameState).userDialogue}`];
+        break;
     }
   }
 
@@ -535,6 +515,8 @@ export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDi
   return dialogueArr;
 }
 
+// PRIVATE FUNCTIONS (basically)
+
 // Each dice has their own color, I like to differentiate the text color for them too.
 function findDiceColor(numOfSides: number): 'green' | 'blue' | 'red' | 'pink' | 'purple' | 'orange' | void {
   if (numOfSides === 4) return 'green';
@@ -543,4 +525,8 @@ function findDiceColor(numOfSides: number): 'green' | 'blue' | 'red' | 'pink' | 
   if (numOfSides === 10) return 'pink';
   if (numOfSides === 12) return 'purple';
   if (numOfSides === 20) return 'orange';
+}
+
+function returnPlayer(): Player {
+  return get(currentGameState).playingAs === 'male' ? get(player1) : get(player2);
 }

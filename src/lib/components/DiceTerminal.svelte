@@ -23,12 +23,14 @@
   export let statThreshold: number;
 
   let typed: Typed;
-  let currentDisplayedMessage = getNextDiceDialogue({player: returnPlayer(), dice, stat: playerStat, threshold: statThreshold});
+  // I need to declare it as empty because otherwise the terminal will start populated with text, then delete, then it will retype.
+  let currentDisplayedMessage = [''];
 
     onMount(() => {
-    typed = new Typed('#dice-terminal-text', {
+      currentDisplayedMessage = getNextDiceDialogue({player: returnPlayer(), dice, stat: playerStat, threshold: statThreshold})
+      typed = new Typed('#dice-terminal-text', {
       strings: currentDisplayedMessage,
-      typeSpeed: 20,
+      typeSpeed: 30,
       backSpeed: 10,
       // startDelay: 1000,
       backDelay: 2000,
