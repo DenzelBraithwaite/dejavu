@@ -9,13 +9,11 @@
   import { Terminal } from '../lib/components';
 
   // Stores
-  import { socket } from '../lib/stores/socket';
+  import { socket } from '../lib/socket';
   import { player1, player2 } from '../lib/stores/players';
   import { type GameState, currentGameState } from '../lib/stores/gameState';
   import { dialogueOptions, type DialogueOptions } from '../lib/stores/terminalMessages'
   import { chapter, chapterPart, getNextDialogue } from '../lib/stores/terminalMessages';
-
-  let updateTerminalReqFromParent = false;
 
   onMount(() => {
     // Handles connects
@@ -55,84 +53,53 @@
       }); 
     });
 
-    // Go to chapter 6 if both players ready.
-    socket.on('5-player-ready', () => {
-      currentGameState.set({...$currentGameState, chapter5NumOfReadyPlayers: $currentGameState.chapter5NumOfReadyPlayers += 1});
-      if ($currentGameState.chapter5NumOfReadyPlayers === 2) {
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
-      }
-    })
+    // Receives dialogue when other player/client types in terminal input field.
+    socket.on('share-user-dialogue', userInput => currentGameState.set({...$currentGameState, userDialogue: userInput.trim()}));
 
-    // Go to chapter 12a if both players ready.
-    socket.on('11-player-ready', () => {
-      currentGameState.set({...$currentGameState, chapter11NumOfReadyPlayers: $currentGameState.chapter11NumOfReadyPlayers += 1});
-      if ($currentGameState.chapter11NumOfReadyPlayers === 2) {
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
-      }
-    })
+    // If both players are ready, go to next chapter.
+    socket.on('lobby-part5-player-ready', checkIfBothPlayersReady);
+    socket.on('lobby-part11-player-ready', checkIfBothPlayersReady);
+    socket.on('lobby-part18-player-ready', checkIfBothPlayersReady);
 
-    // Only male should receive this
-    socket.on('set-chapter-1-part-3', userInput => {
+    // Dialogue - Only male should receive this
+    socket.on('set-chapter-1-part-3', () => {
       chapter.set('1');
-      chapterPart.set('3');
-      currentGameState.set({...$currentGameState, userDialogue: userInput});
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Send Dialogue',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: true
-        });
-
-        updateTerminalReqFromParent = true;
+      chapterPart.set('2'); // because it calls functions in Terminal.svelte that will up the chapter part +1
+      currentGameState.update(store => ({...store,
+        updateTerminal: {...store.updateTerminal, prompt1: true}
+      }));
     });
 
-    // Only female should receive this
-    socket.on('set-chapter-1-part-4', userInput => {
-      chapter.set('1');
-      chapterPart.set('4');
-      currentGameState.set({...$currentGameState, userDialogue: userInput});
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Send Dialogue',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: true
-        });
-        
-        updateTerminalReqFromParent = true;
+    // Dialogue - Only female should receive this
+    socket.on('set-chapter-1-part-4', () => {
+      chapterPart.set('3'); // because it calls functions in Terminal.svelte that will up the chapter part +1
+      currentGameState.update(store => ({...store,
+        updateTerminal: {...store.updateTerminal, prompt1: true}
+      }));
+    });
+
+    // Dialogue - Only male should receive this
+      socket.on('set-chapter-1-part-5', () => {
+      chapterPart.set('4'); // because it calls functions in Terminal.svelte that will up the chapter part +1
+      currentGameState.update(store => ({...store,
+        updateTerminal: {...store.updateTerminal, prompt1: true}
+      }));
+    });
+
+    // Dialogue - Only female should receive this
+    socket.on('set-chapter-1-part-6', () => {
+      chapterPart.set('5'); // because it calls functions in Terminal.svelte that will up the chapter part +1
+      currentGameState.update(store => ({...store,
+        updateTerminal: {...store.updateTerminal, prompt1: true}
+      }));
+    });
+
+    // Dialogue - Only male should receive this
+    socket.on('set-chapter-1-part-7', () => {
+      chapterPart.set('6'); // because it calls functions in Terminal.svelte that will up the chapter part +1
+      currentGameState.update(store => ({...store,
+        updateTerminal: {...store.updateTerminal, prompt1: true}
+      }));
     });
 
     // Set player names
@@ -142,10 +109,30 @@
     // Lets server know client is ready.
     socket.emit('client-ready');
   });
+
+  // When a player arrives at a dialogue checkpoint this fn is called to check if they need to wait for the other player or if both are ready and can continue.
+  function checkIfBothPlayersReady(): void {
+    currentGameState.set({...$currentGameState, numOfReadyPlayers: $currentGameState.numOfReadyPlayers += 1});
+      if ($currentGameState.numOfReadyPlayers === 2) {
+        currentGameState.set({...$currentGameState, numOfReadyPlayers: 0});
+        dialogueOptions.set({
+          option1Visible: true,
+          option1Disabled: false,
+          option1: 'Next',
+          option2Visible: false,
+          option2Disabled: true,
+          option2: '',
+          option3Visible: false,
+          option3Disabled: true,
+          option3: '',
+          inputVisible: false
+        });
+      }
+  }
 </script>
 
 <div in:blur class="main-content">
-  <Terminal {currentGameState} {dialogueOptions} {updateTerminalReqFromParent} terminalColor="grey" />
+  <Terminal {dialogueOptions} terminalColor="grey" />
 </div>
 
 <style lang="scss">

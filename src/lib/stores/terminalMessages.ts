@@ -6,11 +6,13 @@ import { get, writable } from 'svelte/store';
 
 // Stores
 import { player1, player2, type Player } from './players';
-import { socket } from './socket';
 import { type GameState, currentGameState } from './gameState';
 
 // Types
 import type { PolyhedralDice } from './dice';
+
+// Hook/Service
+import { socket } from '../socket';
 
 // empty string so typedjs doesnt crash.
 export const terminalMessages = writable<string[]>(['Click \'Next\' to begin.']);
@@ -53,21 +55,11 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
     switch (options.part) {
       case '1':
         chapterPart.set('2');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('next')});
         break;
       case '2':
         chapterPart.set('3');
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('send-dialogue')});
         break;
       case '3':
       case '3-again':
@@ -90,20 +82,8 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
           chapterPart.set('5');
           
           // Lets server know client is ready.
-          socket.emit('5-player-ready');
-          
-          dialogueOptions.set({
-            option1Visible: true,
-            option1Disabled: true,
-            option1: 'Waiting',
-            option2Visible: false,
-            option2Disabled: true,
-            option2: '',
-            option3Visible: false,
-            option3Disabled: true,
-            option3: '',
-            inputVisible: false
-          });
+          socket.emit('lobby-part5-player-ready');
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('waiting')});
         } else if (options.optionSelected === 2) {
           chapterPart.set('3-again');
           dialogueOptions.set({
@@ -122,18 +102,7 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
         break;
       case '5':
         chapterPart.set('6');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('next')});
         break;
       case '6':
         chapterPart.set('7');
@@ -151,7 +120,7 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
         chapterPart.set('11');
 
         // Lets server know client is ready.
-        socket.emit('11-player-ready');
+        socket.emit('lobby-part11-player-ready');
 
         dialogueOptions.set({
           option1Visible: true,
@@ -169,68 +138,20 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
       case '11':
         chapterPart.set('12');
         currentGameState.set({...get(currentGameState), showDiceTerminal: true});
-
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: true,
-          option1: 'Disabled During Demo',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('disabled-demo')});
         break;
       case '12':
         chapterPart.set('13');
-
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('next')});
         break;
       case '13':
         chapterPart.set('14');
         currentGameState.set({...get(currentGameState), showDiceTerminal: true});
-
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: true,
-          option1: 'Disabled During Demo',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('disabled-demo')});
         break;
       case '14':
         chapterPart.set('15');
-
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: false,
-          option1: 'Next',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('next')});
         break;
       case '15':
         chapterPart.set('16');
@@ -239,7 +160,9 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
         chapterPart.set('17');
         break;
       case '17':
+        socket.emit('lobby-part18-player-ready')
         chapterPart.set('18');
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('waiting')});
         break;
       case '18':
         chapter.set('1');
@@ -251,70 +174,57 @@ export function updateDialogueOptions(options: {player: Player, chapter: string;
       case '1':
         chapterPart.set('2');
         if (options.player.gender === 'male') {
-          dialogueOptions.set({
-            option1Visible: true,
-            option1Disabled: true,
-            option1: 'Waiting for Response',
-            option2Visible: false,
-            option2Disabled: true,
-            option2: '',
-            option3Visible: false,
-            option3Disabled: true,
-            option3: '',
-            inputVisible: false
-          });
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('waiting-response')});
         } else if (options.player.gender === 'female') {
-          dialogueOptions.set({
-            option1Visible: true,
-            option1Disabled: false,
-            option1: 'Send Dialogue',
-            option2Visible: false,
-            option2Disabled: true,
-            option2: '',
-            option3Visible: false,
-            option3Disabled: true,
-            option3: '',
-            inputVisible: true
-          });
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('send-dialogue')});
         }
         break;
 
-      // This means the female player is sending a message to the male player, only female player uses this case
       case '2':
-        // Let's other player know they need to continue
-        socket.emit('set-chapter-1-part-3');
         chapterPart.set('3');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: true,
-          option1: 'Waiting for Response',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        if (returnPlayer().gender === 'female') {
+          // Let's other player/client know to call this function since dialogue has been sent from female -> male.
+          socket.emit('set-chapter-1-part-3');
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('waiting-response')});
+        } else {
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('send-dialogue')});
+        }
         break;
 
-      // This means the male player is sending a message to the female player, only male player uses this case
       case '3':
-        // Let's other player know they need to continue
-        socket.emit('set-chapter-1-part-4');
         chapterPart.set('4');
-        dialogueOptions.set({
-          option1Visible: true,
-          option1Disabled: true,
-          option1: 'Waiting for Response',
-          option2Visible: false,
-          option2Disabled: true,
-          option2: '',
-          option3Visible: false,
-          option3Disabled: true,
-          option3: '',
-          inputVisible: false
-        });
+        if (returnPlayer().gender === 'male') {
+          // Let's other player/client know to call this function since dialogue has been sent from female -> male.
+          socket.emit('set-chapter-1-part-4');
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('waiting-response')});
+        } else {
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('send-dialogue')});
+        }
+        break;
+
+      case '4':
+        chapterPart.set('5');
+        if (returnPlayer().gender === 'female') {
+          // Let's other player/client know to call this function since dialogue has been sent from female -> male.
+          socket.emit('set-chapter-1-part-5');
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('waiting-response')});
+        } else {
+          dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('send-dialogue')});
+        }
+        break;
+
+      case '5':
+        chapterPart.set('6');
+        // Let's other player/client know to call this function since dialogue has been sent from female -> male.
+        if (returnPlayer().gender === 'male') socket.emit('set-chapter-1-part-6');
+        dialogueOptions.set({...createSinglePromptDialogueOptionsTemplate('next')});
+        break;
+      case '6':
+        if (returnPlayer().gender === 'female') socket.emit('set-chapter-1-part-7');
+        chapterPart.set('7');
+        break;
+      case '7':
+        chapterPart.set('8');
         break;
     }
   }
@@ -362,7 +272,9 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br> <span class="color-blue">Strength:</span> ${options.player.stats.strength}
           <br> <span class="color-blue">Defense:</span> ${options.player.stats.defense}
           <br> <span class="color-blue">Speed:</span> ${options.player.stats.speed}
+          <br> <span class="color-blue">Stealth:</span> ${options.player.stats.stealth}
           <br> <span class="color-blue">Intellect:</span> ${options.player.stats.intellect}
+          <br> <span class="color-blue">Perception:</span> ${options.player.stats.perception}
           <br> <span class="color-blue">Charisma:</span> ${options.player.stats.charisma}
           `
         ];
@@ -371,7 +283,7 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
         dialogueArr = ['These stats play a crucial role when it comes to events. Events are things that happen that require dice rolls or decisions to be made. For example, someone blocks your path and you need to roll for charisma. You need to push a heavy box so you roll for strength. Something falls on you so you roll for defense.'];
         break;
       case '10':
-        dialogueArr = ['When you roll, your base stat is added to the dice roll and that final number determines the outcome of the situation. If you\'re charisma is too low, you won\'t convince the person. Strength too low means you can\'t push that box. If your defense is too low you your health stat will suffer when something hurts you.'];
+        dialogueArr = ['When you roll, your base stat is added to the dice roll and that final number determines the outcome of the situation. If you\'re charisma is too low, you won\'t convince the person. Strength too low means you can\'t push that box. Perception too low means you might miss that light switch in the dark room.'];
         break;
       case '11':
         dialogueArr = ['When you\'re both ready, we\'ll move on and practice some dice rolls so you grasp the core mechanics of the game.'];
@@ -415,19 +327,15 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           `Alright then, I wish you the best of luck and enjoy the adventure you\'re about to set off on.
           <br>
           <br>
-          Oh, you're curious to know who I am? I'm the terminal narrator, I'll be the one typing the messages and creating the game for you as we go, but that doesn't mean I'll help you! You 2 will need to manage on your own but I will be there to witness the triumph 🥳.
+          Oh, you're curious to know who I am? I'm the terminal narrator, I'll be the one typing the messages and creating the game for you as we go, but that doesn't mean I'll help you! You two will need to manage on your own but I will be there to witness the triumph 🥳.
           <br> Good luck out there.
-          <br>
-          <br>
-          <br>
-          I hope you know what you're getting yourself into...
           `];
         break;
     }
   } else if (get(chapter) === '1') {
     switch(get(chapterPart)) {
       case '1':
-        if (options.player.gender === 'male') {
+        if (returnPlayer().gender === 'female') {
           dialogueArr = [`
             Fear has you paralyzed as sounds of yelling and griping could be heard from all directions. You gathered that by now you must be in the throne room, in the audience of the baron. In a swift motion you felt the bag removed from your head and your eyes adjusted to the light. Standing in front of you was the throne and sitting on it was the lord of the land, <MALE_PLAYER_NAME>.
             <br><br> You can\'t seem to find a voice as all those around you seem to have no issues using theirs. As you scan the room you notice people of all ages from small infants no older than 4 elders well into their 40s or even some potentially exceeding 50.
@@ -449,7 +357,7 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
             <br><br> You could see his impatience building and although you were already handed a death sentence, you feared making matters worse. You felt frozen in fear until suddenly the voice returned once again, but louder this time. "SPEAK"
             <br><br> You decide to obey the voice and answer the baron
           `];
-        } else if (options.player.gender === 'female') {
+        } else if (returnPlayer().gender === 'male') {
           dialogueArr = [`
             Sounds of yelling and griping could be heard from all around the audience chamber. Your eyes blur as fatigue settles in from a long day of hearing the pleas of others. The citizens may change but the requests are always the same.
             <br><br> Petitions for justice, for clemency or pardon, requests for tax relief or for better protection. Of course, there\'s always the complaints about corruption and poverty. They are like lobsters in a barrel, too much concern about themselves and the other lobsters but not enough about the barrel.
@@ -457,37 +365,53 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
             <br><br> If you were to pardon them all, you would surely and swiftly be removed from your throne. You are a puppet of the royal family, but nobody dare say it out loud. But, in what little power you do hold, you\'ve managed to find complacency in it.
             <br><br> Still, you are aware that your present day struggles are certainly less than those on the other side of the audience chamber. Unfortunately, the king has delegated the ruling of the northern territories to the Duke and the Duke has given you explicit orders when it comes to delivering the verdicts on those who present themselves in the throne room with a request.
             <br><br> "You may only pardon 1 person a day, accept 1 request a day and must execute all thiefs that are brought for justice." The cruelty is less in the fact that you can only pardon one person a day, although this was not clear at first. The cruelty is deciding who deserves that pardon and most often not pardoning anyone because you weren\'t able to decide who truly deserved it.
-            <br><br> There were times in the beginning wher eyou pardoned someone only to have a more tragic plea follow. Moreover, the king must be present for all hangings and various death sentences and must never look away as to set an example to the commoners.
+            <br><br> There were times in the beginning where you pardoned someone only to have a more tragic plea follow. Moreover, the baron must be present for all hangings and various death sentences and must never look away as to set an example to the commoners.
             <br><br> This was deliberate torture and you knew it, but others would kill to sit where you sit and that too you were aware of. To show kindness is a weakness, you were told that often but never believed it. Unfortunately, the human mind and heart can only take so many killings, so many cruel verdicts, so many days as a callous lord.
-            <br><br> Present days find you rather detached from it all. You look at the villagers and prisoners who plea but you do not see their face. Just another decision to be made, that\'s all they are to you. You feel as if you\'ve had all the life slowly drained fomr you but are forced to go on living.
+            <br><br> Present days find you rather detached from it all. You look at the villagers and prisoners who plea but you do not see their face. Just another decision to be made, that\'s all they are to you. You feel as if you\'ve had all the life slowly drained from you but are forced to go on living.
             <br><br> But one day a peasant villager entered the audience chamber and something about her caught your attention. It was hard to say what it was, she was not much to look at. Her clothes were ragged, skin coarse and her eyes defeated. She was the very embodiment of this town and yet, something about her stuck with you.
             <br><br> You delivered your sentence as usual, she was a thief so you sentenced her to execution, but even after she left it seems she remained in your mind. After all the villagers had been seen and it was time to retreat to your chambers, you decided to visit the dungeons in search for answers for your curiosity.
-            <br><br> You wandered down the stairs as several knights pay their respects to you as you pass. "Slaves" you think to yourself, all puppets just like me, their saluts flies over my head, straight through all vassals and directly to the king for it is his crown that we all truly salute, not each other.
-            <br><br> You reach the dungeon to find only 1 guard for all of the prisonners. There\'s never been a case of an escape and there are very few knights in the town so this wasn\'t unusual, yet still the thought that there is only one guard stays in your mind. You continue to walk passed all the sorry faces that glare back at you and those who dare not look your way.
+            <br><br> You wandered down the stairs as several knights pay their respects to you as you pass. "Slaves" you think to yourself, all puppets just like me, their salutes flies over my head, straight through all vassals and directly to the king for it is his crown that we all truly salute, not each other.
+            <br><br> You reach the dungeon to find only 1 guard for all of the prisoners. There\'s never been a case of an escape and there are very few knights in the town so this wasn\'t unusual, yet still the thought that there is only one guard stays in your mind. You continue to walk passed all the sorry faces that glare back at you and those who dare not look your way.
             <br><br> Among them were also those not destined for death who would show you the utmost respect as you pass, as if that would in some way change their fate. As you walk you decide to unsheath the dagger from your belt and run it along the prison bars. This was meant to rattle the prisoners and make those awaiting trial or their public execution riddled with worry.
             <br><br> That was of course one of the many fear tactics you had picked up over the years. You weren\'t sure how effective it was, but you couldn\'t help but admit it was a bit of fun. Mostly, harmless fun, mostly. Finally, you arrive at the cell you were looking for. It\'s belonged to many although today it belongs to the one who caught your eyes.
             <br><br> You stared at her for some bit, she seemed to be looking back at you before you even found her, as if she was waiting for you or even expecting you. But she didn\'t speak a word, she just stared at you. Upon closer look you realized that she is actually much younger than you had first perceived.
             <br><br> She seemed to be about 20 perhaps, although she looked as if she was in her late 30\'s. You yourself are only 26, she might not be much younger. Still, the odds she would live past 30 were extremely low, even for a lord like yourself, living past 40 was extremely rare. You\'ve hung plenty of children half her age so you weren\'t sure why her age felt important to you.
             <br><br> Finally, curiosity got the better of you and you decided to ask her name.',
-            <br><br> MALE_PLAYER_NAME: My name is MALE_PLAYER_NAME, I am the baron of this land as you most certainly are aware. Now that I have introduced myself I wish to know your name.',
+            <br><br> You begin by introducing yourself as the baron ${get(player1).name}, the lord of this land as she most certainly is aware. Now that you've introduced yourself you wait for a reply.',
           `];
         }
         break;
-        // FIXME: for some reason 2 is blank and then it jumps to 4 for both players and hte dialogue is null for both... FIXME:
       case '2':
-        let playerSpecificDialogue = 'Yes you made it to chapter 2 but u should see more';
-        if (returnPlayer().gender === 'male') playerSpecificDialogue = 'Since you are waiting for a response, it is up to the other player to speak first.';
+        let playerSpecificDialogue = 'Error';
+        if (returnPlayer().gender === 'male') playerSpecificDialogue = 'Since you asked a question you are now waiting for a response, you will be able to reply once the other player has spoken.';
         if (returnPlayer().gender === 'female') playerSpecificDialogue = 'Since the other player is waiting for a response, it is up to you to speak first.';
         dialogueArr = [`
-          <span class="color-orange>*An open dialogue is beginning, when this happens you are free to talk with the other player via the terminal input at the bottom. You must take turns talking and replying. This is a good opportunity to get in character.</span>
-          <br> ${playerSpecificDialogue}
+          <span class="color-orange">
+            ***
+            <br>
+            An open dialogue is beginning, when this happens you are free to talk with the other player via the terminal input at the bottom. You must take turns talking and replying. This is a good opportunity to get in character.
+            <br>
+            ***
+          </span>
+          <br>
+          <br>
+          ${playerSpecificDialogue}
           `];
         break;
       case '3':
+      case '5':
         dialogueArr = [`${get(player2).name}: ${get(currentGameState).userDialogue}`];
         break;
       case '4':
-        dialogueArr = [`${get(player1).name}: ${get(currentGameState).userDialogue}`];
+      case '6':
+        dialogueArr = [`${get(player1).name}: ${get(currentGameState).userDialogue}`, 'Suddendly, you hear footsteps approaching from near the entrance of the prison area of the dungeon.'];
+        break;
+      case '7':
+        if (returnPlayer().gender === 'male') dialogueArr = ['You look at her again briefly but sincerely and vow to return for her.'];
+        if (returnPlayer().gender === 'female') dialogueArr = ['He looks at you again briefly but sincerely before vowing to return for you.'];
+        break;
+      case '8':
+        dialogueArr = ['To be continued...'];
         break;
     }
   }
@@ -529,4 +453,73 @@ function findDiceColor(numOfSides: number): 'green' | 'blue' | 'red' | 'pink' | 
 
 function returnPlayer(): Player {
   return get(currentGameState).playingAs === 'male' ? get(player1) : get(player2);
+}
+
+// For repetitive dialogue options when only 1 button is enabled.
+function createSinglePromptDialogueOptionsTemplate(returnType: 'next' | 'waiting' | 'waiting-response' | 'send-dialogue' | 'disabled-demo'): DialogueOptions {
+  let template = {
+    option1Visible: false,
+    option1Disabled: false,
+    option1: 'Critical Error in createTemplateDialogueOptions()',
+    option2Visible: false,
+    option2Disabled: false,
+    option2: '',
+    option3Visible: false,
+    option3Disabled: false,
+    option3: '',
+    inputVisible: false
+  };
+
+  switch (returnType) {
+    case 'next':
+      template = {
+        option1Visible: true,
+        option1Disabled: false,
+        option1: 'Next',
+        option2Visible: false,
+        option2Disabled: false,
+        option2: '',
+        option3Visible: false,
+        option3Disabled: false,
+        option3: '',
+        inputVisible: false
+      };
+      break;
+    case 'waiting':
+    case 'waiting-response':
+    case 'disabled-demo':
+      let dialogue = 'error in createSinglePromptDialogueOptionsTemplate() case waiting/waiting-response/disabled-demo';
+      if (returnType === 'waiting') dialogue = 'Waiting';
+      if (returnType === 'waiting-response') dialogue = 'Waiting for Response';
+      if (returnType === 'disabled-demo') dialogue = 'Disabled during Demo';
+      template = {
+        option1Visible: true,
+        option1Disabled: true,
+        option1: dialogue,
+        option2Visible: false,
+        option2Disabled: false,
+        option2: '',
+        option3Visible: false,
+        option3Disabled: false,
+        option3: '',
+        inputVisible: false
+      };
+      break;
+    case 'send-dialogue':
+      template = {
+        option1Visible: true,
+        option1Disabled: false,
+        option1: 'Next',
+        option2Visible: false,
+        option2Disabled: false,
+        option2: '',
+        option3Visible: false,
+        option3Disabled: false,
+        option3: '',
+        inputVisible: true
+      };
+      break;
+  }
+
+  return template;
 }

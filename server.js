@@ -78,19 +78,21 @@ io.on('connection', socket => {
   // 2 players in lobby
   if (Object.keys(users).length === 2) io.emit('p2-joined');
 
-  // Count turns
-  socket.on('new-turn', () => io.emit('add-turn-count'));
-
-  // Game ended
-  socket.on('end-game', data => io.emit('game-ended', data));
+  // When one player types, it sends the input value to the other client/player.
+  socket.on('share-user-dialogue', userInput => io.emit('share-user-dialogue', userInput));
 
   // These let all players know the client is ready
-  socket.on('5-player-ready', () => io.emit('5-player-ready'));
-  socket.on('11-player-ready', () => io.emit('11-player-ready'));
+  socket.on('lobby-part5-player-ready', () => io.emit('lobby-part5-player-ready'));
+  socket.on('lobby-part11-player-ready', () => io.emit('lobby-part11-player-ready'));
+  socket.on('lobby-part18-player-ready', () => io.emit('lobby-part18-player-ready'));
+  
 
   // For player to player dialogue, let's the other player terminal know to continue.
   socket.on('set-chapter-1-part-3', userInput => socket.broadcast.emit('set-chapter-1-part-3', userInput))
   socket.on('set-chapter-1-part-4', userInput => socket.broadcast.emit('set-chapter-1-part-4', userInput))
+  socket.on('set-chapter-1-part-5', userInput => socket.broadcast.emit('set-chapter-1-part-5', userInput))
+  socket.on('set-chapter-1-part-6', userInput => socket.broadcast.emit('set-chapter-1-part-6', userInput))
+  socket.on('set-chapter-1-part-7', userInput => socket.broadcast.emit('set-chapter-1-part-7', userInput))
 
   // Set player names
   socket.on('set-male-player-name', data => io.emit('set-male-player-name', data));

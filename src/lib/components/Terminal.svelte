@@ -10,19 +10,18 @@
 
   // stores
   import { type Writable } from 'svelte/store';
-  import { socket } from '../stores/socket';
+  import { socket } from '../socket';
   import { getNextDialogue, updateDialogueOptions, type DialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
   import { player1, player2, type Player } from '../stores/players';
   import { PolyhedralDice, d4Dice, d6Dice, d8Dice, d10Dice, d12Dice, d20Dice } from '../stores/dice';
+  import { type GameState, currentGameState } from '../../lib/stores/gameState';
 
   // Components
   import { Button, DiceTerminal } from '.';
 
   // Props
   export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
-  export let currentGameState: any; // update later
   export let dialogueOptions: Writable<DialogueOptions>;
-  export let updateTerminalReqFromParent = false;
 
   let typed: Typed;
   let userInput = '';
@@ -40,10 +39,6 @@
     })
   }
 
-  $: if ($currentGameState.goToChapter6 && $chapter === 'lobby' && $chapterPart === '5') {
-    updateTerminal(0);
-  }
-
   $: if ($chapter === 'lobby' && $chapterPart === '12') {
     playerStat = 'defense';
     statThreshold = 7;
@@ -55,9 +50,9 @@
     dice = d20Dice;
   }
 
-  $: if (updateTerminalReqFromParent && $chapter === '1' && ['3', '4'].includes($chapterPart)) {
+  $: if ($currentGameState.updateTerminal.prompt1 && $chapter === '1' && ['2', '3', '4', '5', '6'].includes($chapterPart)) {
+    currentGameState.update(store => ({...store, updateTerminal: {...store.updateTerminal, prompt1: false}}))
     updateTerminal(1);
-    updateTerminalReqFromParent = false;
   }
 
   onMount(() => {
@@ -96,7 +91,9 @@
      $currentGameState.playingAs === 'male' ? socket.emit('set-male-player-name', userInput.trim()) : socket.emit('set-female-player-name', userInput.trim());
     }
 
+    // Share dialogue with other player/client
     currentGameState.set({...$currentGameState, userDialogue: userInput.trim()});
+    socket.emit('share-user-dialogue', $currentGameState.userDialogue);
   }
 </script>
 
