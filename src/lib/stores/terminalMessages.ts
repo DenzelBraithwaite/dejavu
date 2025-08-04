@@ -48,7 +48,7 @@ export type DialogueOptions = {
   option3?: string;
   inputVisible?: boolean;
 }
-type StatForDiceRoll = 'maxHealth' | 'health' | 'strength' | 'defense' | 'speed' | 'stealth' | 'intellect' | 'perception' | 'charisma';
+type StatForDiceRoll = 'strength' | 'defense' | 'speed' | 'stealth' | 'intellect' | 'perception' | 'charisma' |'luck';
 
 export function updateDialogueOptions(options: {player: Player, chapter: string; part: string; optionSelected: number} = {player: {}, chapter: '', part: '', optionSelected: 0}): void {
   if (options.chapter === 'lobby') {
@@ -238,28 +238,68 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
   if (get(chapter) === 'lobby') {
     switch (get(chapterPart)) {
       case '1':
-        dialogueArr = ['Welcome adventurer, this terminal is where the entire game takes place! As you may have gathered, this is the room in which we wait. We like to call it the waiting room, patent pending. Waiting for what you ask? Why, another adventurer! This tale needs 2 heroes of course.'];
+        dialogueArr = [
+          `Welcome adventurer, you are about to embark on a journey to conquer the evil king known as the tyrant, <span class="color-red"><strong>Bigobado</strong></span>! This adventure will unfold before your very eyes through text-based storytelling. In this world we abstract all visuals and let your mind create the story and your words shape the future. But this is not a tale reserverd for only 1 traveler, no, in fact we need two willing adventurers before we can begin. When both parties have arrived, you will be able to continue by clicking the button below.
+          <br>
+          <br>
+          Oh, and by the way the king's name really is <span class="color-red"><strong>Bigobado</strong></span>, that's not like... a nickname or anything. Big-o Bad-o is how it's pronounced, kind of fitting. But don't make the mistake of insulting the king by mentioning this!
+          <br>
+          <br>
+          Just laugh about it in secret I suppose...`
+        ];
         break;
       case '2':
-        dialogueArr = ['Looks like we found 2 trusty adventurers. Click \'Next\' when you\'re ready!'];
+        dialogueArr = ['Marvelous, it would seem our eager adventurers have arrived. You may have noticed there are times where the button below will say <span class="color-blue"><strong>Waiting...</strong></span> and other times where it will say <span class="color-blue"><strong>Ready</strong></span> or <span class="color-blue"><strong>Next</strong></span>. Sorry about that 😅, that\'s my doing! It\'s my job to control the flow of the story and make sure both adventurers are on the same page, so the speak. Now then, when you\'re ready, I\'ll start to explain your roles in this story.'];
         break;
       case '3':
-        dialogueArr = ['Excellent, now let us differentiate the two of you. Please enter your name below and click \'Next\' when you\'re ready.'];
+        dialogueArr = ['Oh, before we dive in I should probably ask you both for your names. I should mention that if you truly want to get the most out of this adventure, you should immerse yourself in the world and in your character\'s role. So instead of choosing a name like <span class="color-blue"><strong>"Kyle"</strong></span> or <span class="color-blue"><strong>"Stacey"</strong></span> maybe try <span class="color-blue"><strong>Artorius</strong></span>, <span class="color-blue"><strong>Selius</strong></span> or even <span class="color-blue"><strong>Alexander</strong></span> could work I suppose. You get the point, be creative it\'s your story! Whatever you choose, I\'m sure it will be a magnificent and heroic moniker!'];
         break;
       case '3-again':
         dialogueArr = ['Oh good, I was hoping I didn\'t hear that correctly. What did you say your name actually was?'];
         break;
       case '4':
-        dialogueArr = [`You're name is... ${options.player.name}?`];
+        dialogueArr = [`You're name is... <span class="color-blue"><strong>"${options.player.name}"</strong></span>?`];
         break;
       case '5':
-        dialogueArr = ['Great! Not the name of course, the fact that you\'re ready. When both of you are ready the button below will say \'Next\', that means you\'re both ready to move forward.'];
+        dialogueArr = [
+          `Great! Not the name of course, the fact that you\'re ready. I mean you no insult, I just didn\'t consider that you would choose <span class="color-blue"><strong>"${options.player.name}"</strong></span> as your name...
+          <br>
+          <br>
+          But it's ok.
+          <br>
+          <br>
+          Mostly...
+          <br>
+          <br>
+          Apologies, it's a wondeful name! Just dandy👍🏼`
+        ];
         break;
       case '6':
-        dialogueArr = [`Good, now let me introduce the two of you to each other. First we have ${get(player1).name}${get(player1).id === options.player.id ? '(you)' : ''} playing as the male character. Next, we have ${get(player2).name}${get(player2).id === options.player.id ? '(you)' : ''} playing as the female role.`];
+        dialogueArr = [`Alright you soon-to-be vegabonds, let's get you both familiar with each other. First, let me introduce the valiant <span class="color-blue"><strong>"${get(player1).name}"</strong></span>${get(player1).id === options.player.id ? '(you)' : ''} playing as the male role. Next, we have <span class="color-blue"><strong>"${get(player2).name}"</strong></span>${get(player2).id === options.player.id ? '(you)' : ''} playing as the female role.`];
         break;
       case '7':
-        dialogueArr = ['Next, I\'ll explain the mechanics of the game. This game is more like an interactive multiplayer story with some DND elements. The only actions you\'ll be performing are selecting answers below (like \'Next\') and rolling dice to decide outcomes. Select \'Next\' to learn how dice rolling works.'];
+        dialogueArr = [
+          `Now that you've both been introduced it's time for me to explain your role in this story and how to navigate this text-based world. Also, don't even worry about that fact that <span class="color-orange">one of you has a ridiculous name</span>, that's not even important right now. Instead, let's focus on the main mechanics of this place and the way you will make decisions, interact with others and with each other.
+          <br>
+          <br>
+          Now then, during your time here you will have much dialogue to read and many chances to influence the course of the story. Typically, there are 3 main ways you will interact with the story.
+          <br>
+          <br>
+          1. <span class="color-blue"><strong>Dice roll: </strong></span>Sometimes an event will occur that will require you to roll a dice to decide the outcome. I'll give you some examples right after this.
+          <br>
+          <br>
+          2. <span class="color-blue"><strong>Decision: </strong></span>There will be times where there are multiple buttons below(instead of just 'next') and you will need to both decide on how to proceed. If you don't agree with each other, a dice will be rolled to determine the outcome.
+          <br>
+          <br>
+          3. <span class="color-blue"><strong>Open dialogue: </strong></span>These don't necessarily impact the story but provide rich immersion provided you both remain in character. These moments allow you to converse with your partner and perhaps discuss decisions you want to make, so you are both in agreement.
+          <br>
+          <br>
+          Of course there will be moments where you disagree with each other, so communication is key for a solid foundation of teamwork!
+          <br>
+          <br>
+          Next, I'll cover player stats and dice rolling.
+          `
+        ];
         break;
       case '8':
         dialogueArr = [
@@ -268,7 +308,6 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br>
           <br> <span class="color-blue">Name:</span> ${options.player.name}
           <br> <span class="color-blue">Gender:</span> ${options.player.gender}
-          <br> <span class="color-blue">Health:</span> ${options.player.stats.maxHealth}
           <br> <span class="color-blue">Strength:</span> ${options.player.stats.strength}
           <br> <span class="color-blue">Defense:</span> ${options.player.stats.defense}
           <br> <span class="color-blue">Speed:</span> ${options.player.stats.speed}
@@ -276,20 +315,58 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br> <span class="color-blue">Intellect:</span> ${options.player.stats.intellect}
           <br> <span class="color-blue">Perception:</span> ${options.player.stats.perception}
           <br> <span class="color-blue">Charisma:</span> ${options.player.stats.charisma}
+          <br> <span class="color-blue">Luck:</span> ${options.player.stats.luck}
           `
         ];
         break;
       case '9':
-        dialogueArr = ['These stats play a crucial role when it comes to events. Events are things that happen that require dice rolls or decisions to be made. For example, someone blocks your path and you need to roll for charisma. You need to push a heavy box so you roll for strength. Something falls on you so you roll for defense.'];
+        dialogueArr = [
+          `These stats play a crucial role where <span class="color-blue">events</span> are concerned. <span class="color-blue">Events </span>are things that happen that require dice rolls or decisions to be made.
+          <br>
+          <br>
+          Here are some brief examples:
+          <br>
+          <br>
+          <span class="color-blue"><strong> - </strong></span>Someone blocks your path and you need to roll for <span class="color-blue">charisma</span> to get passed them.
+          <br>
+          <span class="color-blue"><strong> - </strong></span>You need to push a heavy object so you roll for <span class="color-blue">strength</span> to move it.
+          <br>
+          <span class="color-blue"><strong> - </strong></span>Something falls on you so you roll for <span class="color-blue">defense</span> to see if you get injured.
+          <br>
+          <br>
+          Dice rolling is a crucial element for your success, so make sure <span class="color-red" style="text-decoration: underline;"><strong>NOT TO LOSE YOUR DICE</strong></span> or that's it, game over, you lose...
+          <br>
+          <br>
+          Just kidding, I would never trust you with my dice, these are precious you know☝🏽! I got this set for 6 silver coins🪙🪙🪙🪙🪙🪙 in a back alley market so I don't plan on losing them. When a dice needs to be rolled, I'll open a new window and roll it for you there.
+          `
+        ];
         break;
       case '10':
-        dialogueArr = ['When you roll, your base stat is added to the dice roll and that final number determines the outcome of the situation. If you\'re charisma is too low, you won\'t convince the person. Strength too low means you can\'t push that box. Perception too low means you might miss that light switch in the dark room.'];
+        dialogueArr = [
+          `When you roll a dice, your <span class="color-blue">base stat</span> and <span class="color-blue">luck stat</span> are added to the dice roll and that final number determines the outcome of the situation. 
+          For example:
+          <br>
+          <br>
+          <span class="color-blue">Charisma too low: </span> You'll fail to convince the person.
+          <br>
+          <span class="color-blue">Strength too low: </span> You'll fail to push that object.
+          <br>
+          <span class="color-blue">Perception too low: </span> You'll miss important details like a light switch in a room or a lie being told.
+          <br>
+          <br>
+          Both adventurers have their strengths and weaknesses but they compliment each other so teamwork is essential.`
+        ];
         break;
       case '11':
-        dialogueArr = ['When you\'re both ready, we\'ll move on and practice some dice rolls so you grasp the core mechanics of the game.'];
+        dialogueArr = [
+          `When you\'re both ready, we\'ll take a look at how dice rolling works. And when I say take a look, I mean <span class="color-orange"><strong>LOOK</strong></span>. I don\'t want either of you dirtying my dice by touching them with your grimey hands...
+          <br>
+          <br>
+          No thanks, I'll handle your dice rolls myself. Don't worry, it won't affect the outcome in any way. Whether you roll or I roll, it's the same thing... except my dice will stay clean and my purse won't suffer further loss of coins.`
+        ];
         break;
       case '12':
-        dialogueArr = ['"Next" available after dice terminal closes.'];
+        dialogueArr = ['After you close the dice window, we can continue.'];
         break;
       case '13':
         dialogueArr = [
@@ -422,17 +499,19 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
 // Rolls a dice, checks players relevant stat and does the math then returns the string.
 export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDice, stat: StatForDiceRoll, threshold: number} = {player: {}}): string[] {
   const baseStat = options.player.stats[options.stat];
+  const luckStat = options.player.stats.luck;
   const diceRoll: number = options.dice.roll();
-  const totalRoll: number = baseStat + diceRoll;
+  const totalRoll: number = baseStat + diceRoll + luckStat;
   const successfulRoll = Boolean(totalRoll - options.threshold >= 0);
   const resultMessage = successfulRoll ? 'You were successful' : 'You were unsuccessful';
 
   let dialogueArr = [`
     You are rolling a <span class="color-${findDiceColor(options.dice.numOfSides)}">D${options.dice.numOfSides}</span> dice for your <span class="color-blue">${options.stat}</span> stat.
     <br> Your <span class="color-blue">${options.stat}</span> base stat is <span class="color-blue">${baseStat}</span>.
+    <br> Your <span class="color-blue">luck</span> stat is <span class="color-blue">${luckStat}</span> and will be added to your total roll.
     <br> You need a total of at least <span class="color-blue">${options.threshold}</span>.
     <br> You roll the dice and get a <span class="color-blue">${diceRoll}</span>!
-    <br> <span class="color-blue">${diceRoll}(roll)</span> + <span class="color-blue">${baseStat}(${options.stat})</span> gives you a total of <span class="color-blue stat-roll-result">${totalRoll}</span>.
+    <br> <span class="color-blue">${diceRoll}(roll)</span> + <span class="color-blue">${baseStat}(${options.stat})</span> + <span class="color-blue">${luckStat}(luck)</span> gives you a total of <span class="color-blue stat-roll-result">${totalRoll}</span>.
     <br> <span class="color-${successfulRoll ? 'green' : 'red'}">${resultMessage}</span>
   `];
 
