@@ -19,9 +19,14 @@
     <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
   </svg>
   
-  <Item on:click={() => createEvent('select', 'log')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
-    <span slot="title">Log</span>
-    <span slot="description">View logged messages</span>
+  <Item on:click={() => createEvent('select', 'main')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
+    <span slot="title">Main</span>
+    <span slot="description">Main game terminal</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
+    <span slot="title">Character</span>
+    <span slot="description">Check your stats</span>
   </Item>
 </div>
 

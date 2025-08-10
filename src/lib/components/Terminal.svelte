@@ -40,12 +40,12 @@
   }
 
   $: if ($chapter === 'lobby' && $chapterPart === '12') {
-    playerStat = 'defense';
+    playerStat = 'toughness';
     statThreshold = 7;
   }
 
   $: if ($chapter === 'lobby' && $chapterPart === '14') {
-    playerStat = 'strength';
+    playerStat = 'muscles';
     statThreshold = 40;
     dice = d20Dice;
   }
@@ -133,6 +133,7 @@
     height: 100%;
     max-height: 95vh;
     width: 100%;
+    max-width: 1100px; // 
     border: 2px solid var(--white);
     border-top-width: 24px;
     border-radius: var(--border-radius-small);

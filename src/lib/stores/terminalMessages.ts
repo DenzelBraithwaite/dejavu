@@ -48,7 +48,7 @@ export type DialogueOptions = {
   option3?: string;
   inputVisible?: boolean;
 }
-type StatForDiceRoll = 'strength' | 'defense' | 'speed' | 'stealth' | 'intellect' | 'perception' | 'charisma' |'luck';
+type StatForDiceRoll = 'muscles' | 'toughness' | 'speed' | 'stealth' | 'smarts' | 'ocuware' | 'cred' |'luck';
 
 export function updateDialogueOptions(options: {player: Player, chapter: string; part: string; optionSelected: number} = {player: {}, chapter: '', part: '', optionSelected: 0}): void {
   if (options.chapter === 'lobby') {
@@ -239,134 +239,371 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
     switch (get(chapterPart)) {
       case '1':
         dialogueArr = [
-          `Welcome adventurer, you are about to embark on a journey to conquer the evil king known as the tyrant, <span class="color-red"><strong>Bigobado</strong></span>! This adventure will unfold before your very eyes through text-based storytelling. In this world we abstract all visuals and let your mind create the story and your words shape the future. But this is not a tale reserverd for only 1 traveler, no, in fact we need two willing adventurers before we can begin. When both parties have arrived, you will be able to continue by clicking the button below.
+          `<span class="color-cornflower-blue"><strong>G-Force:</strong></span> Yo, you flops good? Think that's enough for y'all, been hitting the disks hard lately. Keep uploading that gunk to your brain, downgrade yourself back to the information ages no joke.
           <br>
           <br>
-          Oh, and by the way the king's name really is <span class="color-red"><strong>Bigobado</strong></span>, that's not like... a nickname or anything. Big-o Bad-o is how it's pronounced, kind of fitting. But don't make the mistake of insulting the king by mentioning this!
+          <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> We'll be there soon, time to wake up, wake up. Sure you're good, got a lot riding on this flops, can't mess this up. Let you know when we're there, standby for now. Doors 'll unlock anyway, open when you're good.
           <br>
           <br>
-          Just laugh about it in secret I suppose...`
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br>
+          In the amazing year 2123, I find myself in the backseat of a cheap CyberCruise in the slums of the Keys. Beside me, my partner in crime and ride or die. Two of us made quite a name for ourselves in the underworld. Two gigs in front of us are solid too, done deals with 'em before, not blood but still family. Important meeting's comin' up between rival gangs to discuss a truce since fights been breakin' out more lately, that's where we're headed. 
+          <br>
+          <br>
+          <span class="color-orange"><strong>Terms I Always Hear:</strong></span>
+          <br>- Flop(Dude/Person)
+          <br>- Gig(Dude/Person, less formal)
+          <br>- Byte(boy)
+          <br>- Bit(girl)
+          <br>- Disks(software to get high)
+          <br>- DDOS(a method of hacking and disrupting a network)
+          <br>- MacroTech(large company dominating tech industry)
+          <br>- 8-bit(an idiot)
+          <br>- Tag(name)
+          <br>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          `
         ];
         break;
       case '2':
-        dialogueArr = ['Marvelous, it would seem our eager adventurers have arrived. You may have noticed there are times where the button below will say <span class="color-blue"><strong>Waiting...</strong></span> and other times where it will say <span class="color-blue"><strong>Ready</strong></span> or <span class="color-blue"><strong>Next</strong></span>. Sorry about that 😅, that\'s my doing! It\'s my job to control the flow of the story and make sure both adventurers are on the same page, so the speak. Now then, when you\'re ready, I\'ll start to explain your roles in this story.'];
+        dialogueArr = [
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br>
+          Car stops, still feelin' a little out of it but I'm waking up. In the passenger seat is G-force, not much when it comes to fighting but knows his way around computers. Not your typical field agent is what I always say. We go way back, know his mom since we were bytes.
+          <br>
+          <br>
+          Other is G-force's bro, year younger, got in the game not long after we did. G-force don't like when he rolls with us, likes it even less when he can't keep his eye on him though. Flop goes by the name of N-Vid, he's wicked with backstreet edits, the kind that have you feelin' good for a long time, all clean, no junky malware bullshit.
+          <br>
+          <br> The brothers hop out of the car and wait for us before entering the building. Good thing too, they'd fuck this up without us. 
+          <br>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          `
+        ];
         break;
       case '3':
-        dialogueArr = ['Oh, before we dive in I should probably ask you both for your names. I should mention that if you truly want to get the most out of this adventure, you should immerse yourself in the world and in your character\'s role. So instead of choosing a name like <span class="color-blue"><strong>"Kyle"</strong></span> or <span class="color-blue"><strong>"Stacey"</strong></span> maybe try <span class="color-blue"><strong>Artorius</strong></span>, <span class="color-blue"><strong>Selius</strong></span> or even <span class="color-blue"><strong>Alexander</strong></span> could work I suppose. You get the point, be creative it\'s your story! Whatever you choose, I\'m sure it will be a magnificent and heroic moniker!'];
+        dialogueArr = [
+          `<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Symbi-BioLink initiating...
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Loading...
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Performing P.O.S.T. Power On Self Test.
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> P.O.S.T. <span class="color-green"><strong>Successful!</strong></span>
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Establishing connection...
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Connected!</strong></span>
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Measuring signal strength... 
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>98%!</strong></span>
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Wrapping up...
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Symbi-BioLink now online!</strong></span>
+          <br>
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Please state your name.
+          <br>
+          <br>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br>
+          This is how flops will refer to you, make sure it's tough as nails.
+          <br>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          `
+        ];
         break;
       case '3-again':
-        dialogueArr = ['Oh good, I was hoping I didn\'t hear that correctly. What did you say your name actually was?'];
+        dialogueArr = ['<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Knew you had to be short circing, what\'s your actual name flop?'];
         break;
       case '4':
-        dialogueArr = [`You're name is... <span class="color-blue"><strong>"${options.player.name}"</strong></span>?`];
+        dialogueArr = [`<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> They call you <span class="color-blue"><strong>"${options.player.name}"</strong></span>?`];
         break;
       case '5':
         dialogueArr = [
-          `Great! Not the name of course, the fact that you\'re ready. I mean you no insult, I just didn\'t consider that you would choose <span class="color-blue"><strong>"${options.player.name}"</strong></span> as your name...
+          `<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Client registered!</strong></span>
           <br>
-          <br>
-          But it's ok.
-          <br>
-          <br>
-          Mostly...
-          <br>
-          <br>
-          Apologies, it's a wondeful name! Just dandy👍🏼`
+          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Synchronizing...
+          `
         ];
         break;
-      case '6':
-        dialogueArr = [`Alright you soon-to-be vegabonds, let's get you both familiar with each other. First, let me introduce the valiant <span class="color-blue"><strong>"${get(player1).name}"</strong></span>${get(player1).id === options.player.id ? '(you)' : ''} playing as the male role. Next, we have <span class="color-blue"><strong>"${get(player2).name}"</strong></span>${get(player2).id === options.player.id ? '(you)' : ''} playing as the female role.`];
+        case '6':
+          dialogueArr = [
+            `<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Synchronized!</strong></span>
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Both units online and connected.
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Livestream biodirectional data transmission operational.
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Hello, I am Genetic Lifeform and Disk Operating System (G.L.A.D.O.S.), your personal integrated dual A.I. system. I provide real-time data relay between us and our symbi-receiver.
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Your tag has been registered as  <span class="color-blue"><strong>${options.player.name}</strong></span>.
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Initiating recipient state test...
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Authorization pending...
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Approved!</strong></span>
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple"><strong>Unit #1:</strong></span> ${get(player1).name}
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-pink"><strong>Unit #2:</strong></span> ${get(player2).name}
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Sentry mode enabled, now monitoring both recipients and relaying real-time information. Should the two of you get seperated or need to communicate, my services are available to provide assistance.
+            <br>
+            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple"><strong>${get(player1).name}</strong></span>, <span class="color-pink"><strong>${get(player2).name}</strong></span>, ready to show these gigs who we are?
+            <br>
+            <br>
+            <span class="color-orange"><strong>Exit the vehicule
+          `
+        ];
         break;
       case '7':
         dialogueArr = [
-          `Now that you've both been introduced it's time for me to explain your role in this story and how to navigate this text-based world. Also, don't even worry about that fact that <span class="color-orange">one of you has a ridiculous name</span>, that's not even important right now. Instead, let's focus on the main mechanics of this place and the way you will make decisions, interact with others and with each other.
-          <br>
-          <br>
-          Now then, during your time here you will have much dialogue to read and many chances to influence the course of the story. Typically, there are 3 main ways you will interact with the story.
-          <br>
-          <br>
-          1. <span class="color-blue"><strong>Dice roll: </strong></span>Sometimes an event will occur that will require you to roll a dice to decide the outcome. I'll give you some examples right after this.
-          <br>
-          <br>
-          2. <span class="color-blue"><strong>Decision: </strong></span>There will be times where there are multiple buttons below(instead of just 'next') and you will need to both decide on how to proceed. If you don't agree with each other, a dice will be rolled to determine the outcome.
-          <br>
-          <br>
-          3. <span class="color-blue"><strong>Open dialogue: </strong></span>These don't necessarily impact the story but provide rich immersion provided you both remain in character. These moments allow you to converse with your partner and perhaps discuss decisions you want to make, so you are both in agreement.
-          <br>
-          <br>
-          Of course there will be moments where you disagree with each other, so communication is key for a solid foundation of teamwork!
-          <br>
-          <br>
-          Next, I'll cover player stats and dice rolling.
+          `<span class="color-orange"><strong>We both exit the vehicule.</strong></span>
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Seein' this shit? Fuckers are strapped with military grade cyberware. Got two guys by the door, probably dozen more inside.
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Cameras top notch too, haven't seen long range biometric scanning like that before. Shit's black market for sure, bet my rig on it.
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Just be cool, didn't come here to give 'em an excuse to test that fancy equipment.
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> ${get(player2).name}'s right, just keep your mouths shut and follow our lead. Be in and out before you flops know it.
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Sure hope so, don't exactly look like they're eager for company.
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Ain't exactly eager to be here either.
+            <br>
+            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red"><strong>*Alert*</strong></span>
+            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Target approaching.
+            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
+            <br> <span class="color-blue">Association:</span> <span class="color-red">Rammer</span>
+            <br> <span class="color-blue">Tag:</span> Up-Lo
+            <br> <span class="color-blue">Gender:</span> Male
+            <br> <span class="color-blue">Muscles:</span> Average
+            <br> <span class="color-blue">Toughness:</span> Average
+            <br> <span class="color-blue">Speed:</span> Below Average
+            <br> <span class="color-blue">Stealth:</span> Weak
+            <br> <span class="color-blue">Intellect:</span> Weak
+            <br> <span class="color-blue">Perception:</span> Weak
+            <br> <span class="color-blue">Charisma:</span> Weak
+            <br> <span class="color-blue">Luck:</span> Weak
+            <br> <span class="color-blue">Hacking:</span> None
+            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green">Threat level minimum</span>
+            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple">${get(player1).name}</span>, <span class="color-pink">${get(player2).name}</span>, danger levels assessed. Scans reveal that all targets outside are similar to this one, success levels remain positive.
+            <br> 
+            <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Got one headin' this way, 0 this gig if he tries anything.
+            <br>
+            <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Relax, just routine. Probably escort us in.
           `
         ];
         break;
       case '8':
         dialogueArr = [
-          `Each player controls a unique character, these characters have different stats.
-          For instance these are your character stats:
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> The man approaches, dressed like the other gigs. They wear baggy street clothes, jeans, joggers and caps, loose shirts and red sprinkled throughout the wardrobe as accessories or designs. Clearly a member of the notorious <span class="color-red">Rammers</span> gang, one of the 3 gangs meeting here tonight.
+          <br> Meeting is happenin on <span class="color-red">Rammer</span> turf, said they won't try no shady business but we'll see.
           <br>
-          <br> <span class="color-blue">Name:</span> ${options.player.name}
-          <br> <span class="color-blue">Gender:</span> ${options.player.gender}
-          <br> <span class="color-blue">Strength:</span> ${options.player.stats.strength}
-          <br> <span class="color-blue">Defense:</span> ${options.player.stats.defense}
-          <br> <span class="color-blue">Speed:</span> ${options.player.stats.speed}
-          <br> <span class="color-blue">Stealth:</span> ${options.player.stats.stealth}
-          <br> <span class="color-blue">Intellect:</span> ${options.player.stats.intellect}
-          <br> <span class="color-blue">Perception:</span> ${options.player.stats.perception}
-          <br> <span class="color-blue">Charisma:</span> ${options.player.stats.charisma}
-          <br> <span class="color-blue">Luck:</span> ${options.player.stats.luck}
+          <br> Other than the <span class="color-red">Rammers</span> there are the <span class="color-yellow"><strong>TeraRazors</strong></span>, they're the reasons we're even meeting at all. Full of young bytes eager to squeeze the tirgger and DDOS their grandparents for some quick crypto.
+          <br>
+          <br> Odds are if someone starts shit tonight, it'll be them. Last there's us, the <span class="color-cornflower-blue"><strong>SolidStates</strong></span>, we specialize in cybernetics and hacking, we think big picture like draining crypto from big wigs instead of robbin' flops on the street.
+          <br>
+          <br> This is the first time we're all meeting like this, <span class="color-red">Rammers</span> were the one to call it. Said the tension's been rising too much lately, needa squash this beef. Don't think the <span class="color-yellow">Razor</span> gonna give two shits though, time to find out.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br>
+          <br>
+          <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> You solid geeks got real-time info on everything right? That include the fuckin' traffic and weather? Wonderin' why a group of net geeks like you can't manage to show up on time. Everyone's inside waiting.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> The fuck this micro bitch just say to us?
+          <br>
+          <br>
+          <span class="color-orange"><strong>${get(player2).name} backhands the side of G-Force's head, making sure he keeps his loud mouth shut.</strong></span>
+          <br>
+          <br>
+          <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Don't got time for this, be a good little byte and lead us to your master why don't ya?
+          <br>
+          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> Tsk. Ye whatevs, follow me.
           `
         ];
         break;
       case '9':
         dialogueArr = [
-          `These stats play a crucial role where <span class="color-blue">events</span> are concerned. <span class="color-blue">Events </span>are things that happen that require dice rolls or decisions to be made.
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> Our group follows the <span class="color-red">Rammer</span> into the building. There are multiple security checks, scans, frisking, you name it. Shit's locked down tighter than a MacroTech convention. Ain't seen any <span class="color-yellow">Razors</span> yet, just a bunch of <span class="color-red">Rammers</span>.
           <br>
+          <br> We follow them to an elevator, we're on the ground floor but seems the elevator only goes down. The door opens and the <span class="color-red">Rammer</span> motions us in.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
-          Here are some brief examples:
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Nah fuck that, ain't nobody say nothin' about going underground.
           <br>
+          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Cool it Force, don't matter where we are, in their home now so needa play nice.
           <br>
-          <span class="color-blue"><strong> - </strong></span>Someone blocks your path and you need to roll for <span class="color-blue">charisma</span> to get passed them.
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Gigs leadin' us into our graves, you see that right? Haven't seen a single <span class="color-yellow">Razor</span> since we been here.
           <br>
-          <span class="color-blue"><strong> - </strong></span>You need to push a heavy object so you roll for <span class="color-blue">strength</span> to move it.
+          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> That's because you're late, others are already downstairs and waiting. Scared so much why bother showin' up at all?
           <br>
-          <span class="color-blue"><strong> - </strong></span>Something falls on you so you roll for <span class="color-blue">defense</span> to see if you get injured.
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Nobody said nothin' about being scared, don't survive this long without being cautious, that's all.
           <br>
+          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> Great, when you bits are done crying the others are still waiting.
           <br>
-          Dice rolling is a crucial element for your success, so make sure <span class="color-red" style="text-decoration: underline;"><strong>NOT TO LOSE YOUR DICE</strong></span> or that's it, game over, you lose...
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Don't like this guy's tone ${get(player2).name}, feelin' like nobody ever tought this flop some fuckin' manners. Feelin' generous tonight.
           <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Knew I shoulda hit you harder the first time, got no time for this, let's get goin'.
           <br>
-          Just kidding, I would never trust you with my dice, these are precious you know☝🏽! I got this set for 6 silver coins🪙🪙🪙🪙🪙🪙 in a back alley market so I don't plan on losing them. When a dice needs to be rolled, I'll open a new window and roll it for you there.
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Whatevs, we get deleted don't say I didn't warn you.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Thanks for the warning.
+          <br>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-orange"><strong>*Status Update*</strong></span>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning elevator...
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Nothing malicious detected.
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Vitals discovered below.
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
           `
         ];
         break;
       case '10':
         dialogueArr = [
-          `When you roll a dice, your <span class="color-blue">base stat</span> and <span class="color-blue">luck stat</span> are added to the dice roll and that final number determines the outcome of the situation. 
-          For example:
+          `<span class="color-red"><strong>Up-Lo(Rammer):</strong></span> The fuck's taking so long, gonna stand there all day?
           <br>
+          <br> <span class="color-orange"><strong>${get(player1).name} glares at the <span class="color-red">Rammer</span></strong></span>
           <br>
-          <span class="color-blue">Charisma too low: </span> You'll fail to convince the person.
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Cool it, ain't goin' nowhere till we're sure it's secure. Wouldn't expect some 8-bit to understand.
           <br>
-          <span class="color-blue">Strength too low: </span> You'll fail to push that object.
+          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> The fuck you callin' an 8-bit? Maybe I pay your mom a visit, see if she feels the same way.
           <br>
-          <span class="color-blue">Perception too low: </span> You'll miss important details like a light switch in a room or a lie being told.
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Nah now this gig's asking for it, don't bother holdin' me back, had this comin'.
           <br>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Confirmed 2 syndicates below.
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red">Rammers</span>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-yellow">TeraRazors</span>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Route Secure.
           <br>
-          Both adventurers have their strengths and weaknesses but they compliment each other so teamwork is essential.`
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Elevator's clear, let's get moving.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Yeah saved by the <strong>fucking</strong> bell, lucky ass 8-bit piece of shit.
+          <br>
+          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> I'm right fucking here byte!
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> <em>*eyeroll*</em> let's go Force.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Let's go bro.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Ye whatever.
+          <br>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> Our group enters the elevator and the descent begins.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          `
         ];
         break;
       case '11':
+          // TODO: change references to I if it's player.
         dialogueArr = [
-          `When you\'re both ready, we\'ll take a look at how dice rolling works. And when I say take a look, I mean <span class="color-orange"><strong>LOOK</strong></span>. I don\'t want either of you dirtying my dice by touching them with your grimey hands...
+          `<span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> The fuck you thinking back there anyways? You know that flop woulda shut you down real quick, have you rebootin' in the hospital.
           <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> What seriously, don't think I coulda taken that <span class="color-red">Rammer</span> punk?
           <br>
-          No thanks, I'll handle your dice rolls myself. Don't worry, it won't affect the outcome in any way. Whether you roll or I roll, it's the same thing... except my dice will stay clean and my purse won't suffer further loss of coins.`
+          <br> <span class="color-orange"><strong>...</strong></span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Nope.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Honestly, probably not.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Nah not a chance.
+          <br>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red">Negative</span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Ahh whatever, the fuck you guys know.
+          <br>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> We will be arriving shortly.
+          <br>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> A loud ruckus slowly makes itself heard. The sound of muffled screaming and yelling waft through the air feintly. With every second the sound of the crowd gets louder and louder. Our group look at each other, expeceting a full blown war when those doors open.
+          The sounds of screaming and violence are so loud after a while it's deafening. We approach the ground floor.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> The fuck....
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> What did I fucking say? Y'all hear that, sound like a fuckin' casual discussion to you? Nah, not dying here today, getting my little bro home.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Got a point, something seems wrong.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Cycle it back, GLADOS scanned the joint, said all looked good, no need to go overclocking just yet.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Never heard of blockers? Somethin' clearly interfering, don't need scans to know what's on the other side of that door.
+          <br>
+          <br> <span class="color-orange"><strong>G-Force slams the emergency stop button and the elevator comes to a halt between the B10 and B9. B10 being the lowest floor and source of the commotion.</strong></span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Knew this shit was sketchy, never shoulda come.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Calm down, just needa think.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> No time, getting us out of here. Snuck this in with us, impossible to detect, single use calibur hidden in my right hand middle finger.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Hate to break it to you, gonna be more than one of em.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Think I'm an 8-bit too now? Know that already, better than nothing.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Freeze frame for a sec, gonna scan again.
+          <br>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
+          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Room Secured, no danger detected.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Same as last time huh...
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Seems like it, say we open the doors and go in.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> No way Flop, got a death wish, grant it on your own.
+          <br>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> Suddenly we hear a large bang slamming the outside of the elevator doors. Hear someone yelling "get the fuck out here!". After a brief pause, ${get(player1).name} reaches to remove the emergency break from the elevator and get it working again.
+          <br> G-Force stands in his way to block him, swears he won't let him open that door.
+          <br>
+          <br> An event is happening, I need to roll a dice to determine the outcome. The dice I roll will depend on the situation, right now I needa roll for strength to push G-Force outta the way. If I fail my roll, I fail the event. These rolls are based on my personal stats, I can always check my stats by opening my ai interface, then clicking on the sidebar icon that looks like a person. I can also expand the sidebar, fuck my mind's wandering again, needa focus.
+          <br> For now, I gotta roll the dice to see if I can overpower him.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          `
         ];
         break;
       case '12':
-        dialogueArr = ['After you close the dice window, we can continue.'];
+        dialogueArr = [
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> The both of you push G-Force aside and release the emergency break. The elevator starts to lower again and after a few seconds, the door dings open. Standing there is a flop dressed in yellow bandanas with a spiky jean jacket vest and some massive jet black boots.
+          <br>
+          <br> Looks like a clown but I guess every gang's got their taste. This one's clearly got some weird chains and whips fetish goin' on. He stares at you in anger, as you look behind him, you notice everyone looking impatient and upset.
+          <br>
+          <br> You scan the room further and notice a massive screen on the wall big enough fill a swimming pool. These flops were arguing over the bot fight while waiting, heard the elevator stop and got even more antsy.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br>
+          <br> <span class="color-orange">...</span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> ...
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> A fucking robot match, you gigs serious?
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> <em>*eyeroll*</em>
+          <br>
+          <br> <span class="color-orange">${get(player1).name} and N-Vid chuckle.</span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Nah don't act like that didn't have y'all spooked!
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Knew we shoulda left your ass back in the CryberCruise.</span>
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Let's go.</span>
+          <br>
+          <br> <span class="color-red"><strong>Rammer:</strong></span> No take your time, you gigs are the only entertainment we've had all night.
+          <br>
+          <br> <span class="color-yellow"><strong>Razor:</strong></span> Dunno, laughed a bit when we saw your jank ass security gear. Nothin screams scared bit more than flashing a bunch of big guns and shiny cameras.
+          <br>
+          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Don't remember asking you to butt in?
+          <br>
+          <br> <span class="color-yellow"><strong>Razor:</strong></span> Don't remember needin' a dirty <span class="color-cornflower-blue">solid</span>'s approval. Surprised you kids even got invited to the adult table.
+          `
+        ];
         break;
       case '13':
         dialogueArr = [

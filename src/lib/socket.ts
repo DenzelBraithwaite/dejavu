@@ -2,13 +2,13 @@
 import { io } from 'socket.io-client';
 
 // Thanos (Home PC IP)
-// export const socket = io('http://192.168.2.10:6912');
+export const socket = io('http://192.168.2.10:6912');
 
 // Work Macbook (Home)
 // export const socket = io('http://192.168.2.13:6912');
 
 // Work Macbook (Work IP - Wired) CAN CHANGE, IP LEASED
-export const socket = io('http://10.3.112.80:6912');
+// export const socket = io('http://10.3.112.80:6912');
 
 // Work Macbook (Work IP - WiFi) CAN CHANGE, IP LEASED
 // export const socket = io('http://10.3.144.82:6912');
