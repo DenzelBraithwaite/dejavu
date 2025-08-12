@@ -19,14 +19,19 @@
     <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
   </svg>
   
-  <Item on:click={() => createEvent('select', 'main')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
-    <span slot="title">Main</span>
-    <span slot="description">Main game terminal</span>
+  <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
+    <span slot="title">Terminal</span>
+    <span slot="description">Main Game</span>
   </Item>
 
   <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
     <span slot="title">Character</span>
     <span slot="description">Check your stats</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'netrunners')} collapsed={!sidebarExpanded} color={'purple'} iconType={'cpu'}>
+    <span slot="title">NetRunners</span>
+    <span slot="description">Card game, bet on the fastest hacker to win.</span>
   </Item>
 </div>
 

@@ -3,7 +3,8 @@ import Client from './Client.svelte';
 import Dice from './Dice.svelte';
 import DiceTerminal from './DiceTerminal.svelte';
 import Item from './Item.svelte';
-import PlayerStats from './PlayerStats.svelte';
+import NetRunners from './NetRunners.svelte';
+import CharacterMenu from './CharacterMenu.svelte';
 import Sidebar from './Sidebar.svelte';
 import Terminal from './Terminal.svelte';
 import Toast from './Toast.svelte';
@@ -14,7 +15,8 @@ export {
   Dice,
   DiceTerminal,
   Item,
-  PlayerStats,
+  NetRunners,
+  CharacterMenu,
   Sidebar,
   Terminal,
   Toast

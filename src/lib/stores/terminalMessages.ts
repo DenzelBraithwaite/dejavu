@@ -239,18 +239,18 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
     switch (get(chapterPart)) {
       case '1':
         dialogueArr = [
-          `<span class="color-cornflower-blue"><strong>G-Force:</strong></span> Yo, you flops good? Think that's enough for y'all, been hitting the disks hard lately. Keep uploading that gunk to your brain, downgrade yourself back to the information ages no joke.
+          `<span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Yo, you flops good? Think that's enough for y'all, been hitting the disks hard lately. Keep uploading that gunk to your brain, downgrade yourself back to the information ages no joke.
           <br>
           <br>
-          <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> We'll be there soon, time to wake up, wake up. Sure you're good, got a lot riding on this flops, can't mess this up. Let you know when we're there, standby for now. Doors 'll unlock anyway, open when you're good.
+          <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> We'll be there soon, time to wake up, wake up. Sure you're good, got a lot riding on this flops, can't mess this up. Let you know when we're there, standby for now. Doors 'll unlock anyway, open when you're good.
           <br>
           <br>
-          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
           In the amazing year 2123, I find myself in the backseat of a cheap CyberCruise in the slums of the Keys. Beside me, my partner in crime and ride or die. Two of us made quite a name for ourselves in the underworld. Two gigs in front of us are solid too, done deals with 'em before, not blood but still family. Important meeting's comin' up between rival gangs to discuss a truce since fights been breakin' out more lately, that's where we're headed. 
           <br>
           <br>
-          <span class="color-orange"><strong>Terms I Always Hear:</strong></span>
+          <span class="color-orange cyberpunk-font"><strong>Terms I Always Hear</strong></span>
           <br>- Flop(Dude/Person)
           <br>- Gig(Dude/Person, less formal)
           <br>- Byte(boy)
@@ -261,13 +261,13 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br>- 8-bit(an idiot)
           <br>- Tag(name)
           <br>
-          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           `
         ];
         break;
       case '2':
         dialogueArr = [
-          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
           Car stops, still feelin' a little out of it but I'm waking up. In the passenger seat is G-force, not much when it comes to fighting but knows his way around computers. Not your typical field agent is what I always say. We go way back, know his mom since we were bytes.
           <br>
@@ -276,350 +276,352 @@ export function getNextDialogue(options: {chapter?: string, part?: string, playe
           <br>
           <br> The brothers hop out of the car and wait for us before entering the building. Good thing too, they'd fuck this up without us. 
           <br>
-          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           `
         ];
         break;
       case '3':
         dialogueArr = [
-          `<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Symbi-BioLink initiating...
+          `<span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Symbi-BioLink initiating...
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Loading...
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Loading...
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Performing P.O.S.T. Power On Self Test.
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Performing P.O.S.T. Power On Self Test.
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> P.O.S.T. <span class="color-green"><strong>Successful!</strong></span>
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> P.O.S.T. <span class="color-green"><strong>Successful!</strong></span>
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Establishing connection...
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Establishing connection...
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Connected!</strong></span>
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Connected!</strong></span>
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Measuring signal strength... 
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Measuring signal strength... 
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>98%!</strong></span>
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>98%!</strong></span>
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Wrapping up...
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Wrapping up...
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Symbi-BioLink now online!</strong></span>
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Symbi-BioLink now online!</strong></span>
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Please state your name.
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Please state your name.
           <br>
           <br>
-          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
           This is how flops will refer to you, make sure it's tough as nails.
           <br>
-          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           `
         ];
         break;
       case '3-again':
-        dialogueArr = ['<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Knew you had to be short circing, what\'s your actual name flop?'];
+        dialogueArr = ['<span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Knew you had to be short circing, what\'s your actual name flop?'];
         break;
       case '4':
-        dialogueArr = [`<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> They call you <span class="color-blue"><strong>"${options.player.name}"</strong></span>?`];
+        dialogueArr = [`<span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> They call you <span class="color-blue cyberpunk-font"><strong>"${options.player.name}"</strong></span>?`];
         break;
       case '5':
         dialogueArr = [
-          `<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Client registered!</strong></span>
+          `<span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Client registered!</strong></span>
           <br>
-          <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Synchronizing...
+          <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Synchronizing...
           `
         ];
         break;
         case '6':
           dialogueArr = [
-            `<span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Synchronized!</strong></span>
+            `<span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Synchronized!</strong></span>
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Both units online and connected.
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Both units online and connected.
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Livestream biodirectional data transmission operational.
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Livestream biodirectional data transmission operational.
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Hello, I am Genetic Lifeform and Disk Operating System (G.L.A.D.O.S.), your personal integrated dual A.I. system. I provide real-time data relay between us and our symbi-receiver.
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Hello, I am Genetic Lifeform and Disk Operating System (G.L.A.D.O.S.), your personal integrated dual A.I. system. I provide real-time data relay between us and our symbi-receiver.
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Your tag has been registered as  <span class="color-blue"><strong>${options.player.name}</strong></span>.
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Your tag has been registered as  <span class="color-blue cyberpunk-font"><strong>${options.player.name}</strong></span>.
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Initiating recipient state test...
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Initiating recipient state test...
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Authorization pending...
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Authorization pending...
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Approved!</strong></span>
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Approved!</strong></span>
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple"><strong>Unit #1:</strong></span> ${get(player1).name}
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple"><strong>Unit #1:</strong></span> ${get(player1).name}
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-pink"><strong>Unit #2:</strong></span> ${get(player2).name}
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-pink"><strong>Unit #2:</strong></span> ${get(player2).name}
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Sentry mode enabled, now monitoring both recipients and relaying real-time information. Should the two of you get seperated or need to communicate, my services are available to provide assistance.
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Sentry mode enabled, now monitoring both recipients and relaying real-time information. Should the two of you get seperated or need to communicate, my services are available to provide assistance.
             <br>
-            <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple"><strong>${get(player1).name}</strong></span>, <span class="color-pink"><strong>${get(player2).name}</strong></span>, ready to show these gigs who we are?
+            <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple"><strong>${get(player1).name}</strong></span>, <span class="color-pink"><strong>${get(player2).name}</strong></span>, ready to show these gigs who we are?
             <br>
             <br>
-            <span class="color-orange"><strong>Exit the vehicule
+            <span class="color-orange cyberpunk-font"><strong>Exit the vehicule
           `
         ];
         break;
       case '7':
         dialogueArr = [
-          `<span class="color-orange"><strong>We both exit the vehicule.</strong></span>
+          `<span class="color-orange cyberpunk-font"><strong>We both exit the vehicule.</strong></span>
             <br>
-            <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Seein' this shit? Fuckers are strapped with military grade cyberware. Got two guys by the door, probably dozen more inside.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Seein' this shit? Fuckers are strapped with military grade cyberware. Got two guys by the door, probably dozen more inside.
             <br>
-            <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Cameras top notch too, haven't seen long range biometric scanning like that before. Shit's black market for sure, bet my rig on it.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> Cameras top notch too, haven't seen long range biometric scanning like that before. Shit's black market for sure, bet my rig on it.
             <br>
-            <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Just be cool, didn't come here to give 'em an excuse to test that fancy equipment.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Just be cool, didn't come here to give 'em an excuse to test that fancy equipment.
             <br>
-            <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> ${get(player2).name}'s right, just keep your mouths shut and follow our lead. Be in and out before you flops know it.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> ${get(player2).name}'s right, just keep your mouths shut and follow our lead. Be in and out before you flops know it.
             <br>
-            <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Sure hope so, don't exactly look like they're eager for company.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Sure hope so, don't exactly look like they're eager for company.
             <br>
-            <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Ain't exactly eager to be here either.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Ain't exactly eager to be here either.
             <br>
-            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red"><strong>*Alert*</strong></span>
-            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Target approaching.
-            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
-            <br> <span class="color-blue">Association:</span> <span class="color-red">Rammer</span>
-            <br> <span class="color-blue">Tag:</span> Up-Lo
-            <br> <span class="color-blue">Gender:</span> Male
-            <br> <span class="color-blue">Muscles:</span> Average
-            <br> <span class="color-blue">Toughness:</span> Average
-            <br> <span class="color-blue">Speed:</span> Below Average
-            <br> <span class="color-blue">Stealth:</span> Weak
-            <br> <span class="color-blue">Intellect:</span> Weak
-            <br> <span class="color-blue">Perception:</span> Weak
-            <br> <span class="color-blue">Charisma:</span> Weak
-            <br> <span class="color-blue">Luck:</span> Weak
-            <br> <span class="color-blue">Hacking:</span> None
-            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green">Threat level minimum</span>
-            <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple">${get(player1).name}</span>, <span class="color-pink">${get(player2).name}</span>, danger levels assessed. Scans reveal that all targets outside are similar to this one, success levels remain positive.
+            <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red cyberpunk-font"><strong>*Alert*</strong></span>
+            <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Target approaching.
+            <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
+            <br>
+            <br> <span class="color-blue cyberpunk-font">Tag:</span> Up-Lo
+            <br> <span class="color-blue cyberpunk-font">Association:</span> <span class="color-red cyberpunk-font">Rammer</span>
+            <br> <span class="color-blue cyberpunk-font">Gender:</span> Male
+            <br> <span class="color-blue cyberpunk-font">Muscles:</span> Average
+            <br> <span class="color-blue cyberpunk-font">Toughness:</span> Average
+            <br> <span class="color-blue cyberpunk-font">Speed:</span> Below Average
+            <br> <span class="color-blue cyberpunk-font">Stealth:</span> Weak
+            <br> <span class="color-blue cyberpunk-font">Intellect:</span> Weak
+            <br> <span class="color-blue cyberpunk-font">Perception:</span> Weak
+            <br> <span class="color-blue cyberpunk-font">Charisma:</span> Weak
+            <br> <span class="color-blue cyberpunk-font">Luck:</span> Weak
+            <br> <span class="color-blue cyberpunk-font">Hacking:</span> None
+            <br>
+            <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green">Threat level minimum</span>
+            <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-purple">${get(player1).name}</span>, <span class="color-pink">${get(player2).name}</span>, danger levels assessed. Scans reveal that all targets outside are minimal threats, success levels remain positive.
             <br> 
-            <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Got one headin' this way, 0 this gig if he tries anything.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Got one headin' this way, 0 this gig if he tries anything.
             <br>
-            <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Relax, just routine. Probably escort us in.
+            <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Relax, just routine. Probably escort us in.
           `
         ];
         break;
       case '8':
         dialogueArr = [
-          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
-          <br> The man approaches, dressed like the other gigs. They wear baggy street clothes, jeans, joggers and caps, loose shirts and red sprinkled throughout the wardrobe as accessories or designs. Clearly a member of the notorious <span class="color-red">Rammers</span> gang, one of the 3 gangs meeting here tonight.
-          <br> Meeting is happenin on <span class="color-red">Rammer</span> turf, said they won't try no shady business but we'll see.
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> The man approaches, dressed like the other gigs. They wear baggy street clothes, jeans, joggers and caps, loose shirts and red sprinkled throughout the wardrobe as accessories or designs. Clearly a member of the notorious <span class="color-red cyberpunk-font">Rammers</span> gang, one of the 3 gangs meeting here tonight.
+          <br> Meeting is happenin on <span class="color-red cyberpunk-font">Rammer</span> turf, said they won't try no shady business but we'll see.
           <br>
-          <br> Other than the <span class="color-red">Rammers</span> there are the <span class="color-yellow"><strong>TeraRazors</strong></span>, they're the reasons we're even meeting at all. Full of young bytes eager to squeeze the tirgger and DDOS their grandparents for some quick crypto.
+          <br> Other than the <span class="color-red cyberpunk-font">Rammers</span> there are the <span class="color-yellow cyberpunk-font"><strong>TeraRazors</strong></span>, they're the reasons we're even meeting at all. Full of young bytes eager to squeeze the tirgger and DDOS their grandparents for some quick crypto.
           <br>
-          <br> Odds are if someone starts shit tonight, it'll be them. Last there's us, the <span class="color-cornflower-blue"><strong>SolidStates</strong></span>, we specialize in cybernetics and hacking, we think big picture like draining crypto from big wigs instead of robbin' flops on the street.
+          <br> Odds are if someone starts shit tonight, it'll be them. Last there's us, the <span class="color-cornflower-blue cyberpunk-font"><strong>SolidStates</strong></span>, we specialize in cybernetics and hacking, we think big picture like draining crypto from big wigs instead of robbin' flops on the street.
           <br>
-          <br> This is the first time we're all meeting like this, <span class="color-red">Rammers</span> were the one to call it. Said the tension's been rising too much lately, needa squash this beef. Don't think the <span class="color-yellow">Razor</span> gonna give two shits though, time to find out.
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> This is the first time we're all meeting like this, <span class="color-red cyberpunk-font">Rammers</span> were the one to call it. Said the tension's been rising too much lately, needa squash this beef. Don't think the <span class="color-yellow cyberpunk-font">Razors</span> gonna give two shits though, time to find out.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
           <br>
-          <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> You solid geeks got real-time info on everything right? That include the fuckin' traffic and weather? Wonderin' why a group of net geeks like you can't manage to show up on time. Everyone's inside waiting.
+          <span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> You solid geeks got real-time info on everything right? That include the fuckin' traffic and weather? Wonderin' why a group of net geeks like you can't manage to show up on time. Everyone's inside waiting.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> The fuck this micro bitch just say to us?
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> The fuck this micro bitch just say to us?
           <br>
           <br>
           <span class="color-orange"><strong>${get(player2).name} backhands the side of G-Force's head, making sure he keeps his loud mouth shut.</strong></span>
           <br>
           <br>
-          <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Don't got time for this, be a good little byte and lead us to your master why don't ya?
+          <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Don't got time for this, be a good little byte and lead us to your master why don't ya?
           <br>
-          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> Tsk. Ye whatevs, follow me.
+          <br> <span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> Tsk. Ye whatevs, follow me.
           `
         ];
         break;
       case '9':
         dialogueArr = [
-          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
-          <br> Our group follows the <span class="color-red">Rammer</span> into the building. There are multiple security checks, scans, frisking, you name it. Shit's locked down tighter than a MacroTech convention. Ain't seen any <span class="color-yellow">Razors</span> yet, just a bunch of <span class="color-red">Rammers</span>.
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> Our group follows the <span class="color-red cyberpunk-font">Rammer</span> into the building. There are multiple security checks, scans, frisking, you name it. Shit's locked down tighter than a MacroTech convention. Ain't seen any <span class="color-yellow cyberpunk-font">Razors</span> yet, just a bunch of <span class="color-red cyberpunk-font">Rammers</span>.
           <br>
-          <br> We follow them to an elevator, we're on the ground floor but seems the elevator only goes down. The door opens and the <span class="color-red">Rammer</span> motions us in.
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> We follow them to an elevator, we're on the ground floor but seems the elevator only goes down. The door opens and the <span class="color-red cyberpunk-font">Rammer</span> motions us in.
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Nah fuck that, ain't nobody say nothin' about going underground.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Nah fuck that, ain't nobody say nothin' about going underground.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Cool it Force, don't matter where we are, in their home now so needa play nice.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> Cool it Force, don't matter where we are, in their home now so needa play nice.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Gigs leadin' us into our graves, you see that right? Haven't seen a single <span class="color-yellow">Razor</span> since we been here.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Gigs leadin' us into our graves, you see that right? Haven't seen a single <span class="color-yellow cyberpunk-font">Razor</span> since we been here.
           <br>
-          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> That's because you're late, others are already downstairs and waiting. Scared so much why bother showin' up at all?
+          <br> <span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> That's because you're late, others are already downstairs and waiting. Scared so much why bother showin' up at all?
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Nobody said nothin' about being scared, don't survive this long without being cautious, that's all.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Nobody said nothin' about being scared, don't survive this long without being cautious, that's all.
           <br>
-          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> Great, when you bits are done crying the others are still waiting.
+          <br> <span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> Great, when you bits are done crying the others are still waiting.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Don't like this guy's tone ${get(player2).name}, feelin' like nobody ever tought this flop some fuckin' manners. Feelin' generous tonight.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Don't like this guy's tone ${get(player2).name}, feelin' like nobody ever tought this flop some fuckin' manners. Feelin' generous tonight.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Knew I shoulda hit you harder the first time, got no time for this, let's get goin'.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Knew I shoulda hit you harder the first time, got no time for this, let's get goin'.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Whatevs, we get deleted don't say I didn't warn you.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Whatevs, we get deleted don't say I didn't warn you.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Thanks for the warning.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Thanks for the warning.
           <br>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-orange"><strong>*Status Update*</strong></span>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning elevator...
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Nothing malicious detected.
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Vitals discovered below.
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-orange"><strong>*Status Update*</strong></span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Scanning elevator...
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Nothing malicious detected.
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Vitals discovered below.
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
           `
         ];
         break;
       case '10':
         dialogueArr = [
-          `<span class="color-red"><strong>Up-Lo(Rammer):</strong></span> The fuck's taking so long, gonna stand there all day?
+          `<span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> The fuck's taking so long, gonna stand there all day?
           <br>
-          <br> <span class="color-orange"><strong>${get(player1).name} glares at the <span class="color-red">Rammer</span></strong></span>
+          <br> <span class="color-orange"><strong>${get(player1).name} glares at the <span class="color-red cyberpunk-font">Rammer</span></strong></span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Cool it, ain't goin' nowhere till we're sure it's secure. Wouldn't expect some 8-bit to understand.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Cool it, ain't goin' nowhere till we're sure it's secure. Wouldn't expect some 8-bit to understand.
           <br>
-          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> The fuck you callin' an 8-bit? Maybe I pay your mom a visit, see if she feels the same way.
+          <br> <span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> The fuck you callin' an 8-bit? Maybe I pay your mom a visit, see if she feels the same way.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Nah now this gig's asking for it, don't bother holdin' me back, had this comin'.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Nah now this gig's asking for it, don't bother holdin' me back, had this comin'.
           <br>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Confirmed 2 syndicates below.
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red">Rammers</span>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-yellow">TeraRazors</span>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Route Secure.
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Confirmed 2 syndicates below.
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red cyberpunk-font">Rammers</span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-yellow cyberpunk-font">TeraRazors</span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Route Secure.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Elevator's clear, let's get moving.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Elevator's clear, let's get moving.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Yeah saved by the <strong>fucking</strong> bell, lucky ass 8-bit piece of shit.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Yeah saved by the <strong>fucking</strong> bell, lucky ass 8-bit piece of shit.
           <br>
-          <br> <span class="color-red"><strong>Up-Lo(Rammer):</strong></span> I'm right fucking here byte!
+          <br> <span class="color-red cyberpunk-font"><strong>Up-Lo:</strong></span> I'm right fucking here byte!
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> <em>*eyeroll*</em> let's go Force.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> <em>*eyeroll*</em> let's go Force.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Let's go bro.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> Let's go bro.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Ye whatever.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Ye whatever.
           <br>
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br> Our group enters the elevator and the descent begins.
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           `
         ];
         break;
       case '11':
           // TODO: change references to I if it's player.
         dialogueArr = [
-          `<span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> The fuck you thinking back there anyways? You know that flop woulda shut you down real quick, have you rebootin' in the hospital.
+          `<span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> The fuck you thinking back there anyways? You know that flop woulda shut you down real quick, have you rebootin' in the hospital.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> What seriously, don't think I coulda taken that <span class="color-red">Rammer</span> punk?
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> What seriously, don't think I coulda taken that <span class="color-red cyberpunk-font">Rammer</span> punk?
           <br>
           <br> <span class="color-orange"><strong>...</strong></span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Nope.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Nope.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Honestly, probably not.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> Honestly, probably not.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Nah not a chance.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Nah not a chance.
           <br>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red">Negative</span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-red cyberpunk-font">Negative</span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Ahh whatever, the fuck you guys know.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Ahh whatever, the fuck you guys know.
           <br>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> We will be arriving shortly.
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> We will be arriving shortly.
           <br>
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br> A loud ruckus slowly makes itself heard. The sound of muffled screaming and yelling waft through the air feintly. With every second the sound of the crowd gets louder and louder. Our group look at each other, expeceting a full blown war when those doors open.
           The sounds of screaming and violence are so loud after a while it's deafening. We approach the ground floor.
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> The fuck....
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> The fuck....
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> What did I fucking say? Y'all hear that, sound like a fuckin' casual discussion to you? Nah, not dying here today, getting my little bro home.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> What did I fucking say? Y'all hear that, sound like a fuckin' casual discussion to you? Nah, not dying here today, getting my little bro home.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Got a point, something seems wrong.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Got a point, something seems wrong.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Cycle it back, GLADOS scanned the joint, said all looked good, no need to go overclocking just yet.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Cycle it back, GLADOS scanned the joint, said all looked good, no need to go overclocking just yet.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Never heard of blockers? Somethin' clearly interfering, don't need scans to know what's on the other side of that door.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Never heard of blockers? Somethin' clearly interfering, don't need scans to know what's on the other side of that door.
           <br>
           <br> <span class="color-orange"><strong>G-Force slams the emergency stop button and the elevator comes to a halt between the B10 and B9. B10 being the lowest floor and source of the commotion.</strong></span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Knew this shit was sketchy, never shoulda come.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Knew this shit was sketchy, never shoulda come.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> Calm down, just needa think.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> Calm down, just needa think.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> No time, getting us out of here. Snuck this in with us, impossible to detect, single use calibur hidden in my right hand middle finger.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> No time, getting us out of here. Snuck this in with us, impossible to detect, single use calibur hidden in my right hand middle finger.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Hate to break it to you, gonna be more than one of em.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Hate to break it to you, gonna be more than one of em.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Think I'm an 8-bit too now? Know that already, better than nothing.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Think I'm an 8-bit too now? Know that already, better than nothing.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Freeze frame for a sec, gonna scan again.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Freeze frame for a sec, gonna scan again.
           <br>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
-          <br> <span class="color-blue"><strong>G.L.A.D.O.S.:</strong></span> Room Secured, no danger detected.
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Scanning...
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> <span class="color-green"><strong>Scan Complete!</strong></span>
+          <br> <span class="color-blue cyberpunk-font"><strong>G.L.A.D.O.S.:</strong></span> Room Secured, no danger detected.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Same as last time huh...
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Same as last time huh...
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Seems like it, say we open the doors and go in.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Seems like it, say we open the doors and go in.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> No way Flop, got a death wish, grant it on your own.
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> No way Flop, got a death wish, grant it on your own.
           <br>
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br> Suddenly we hear a large bang slamming the outside of the elevator doors. Hear someone yelling "get the fuck out here!". After a brief pause, ${get(player1).name} reaches to remove the emergency break from the elevator and get it working again.
           <br> G-Force stands in his way to block him, swears he won't let him open that door.
           <br>
           <br> An event is happening, I need to roll a dice to determine the outcome. The dice I roll will depend on the situation, right now I needa roll for strength to push G-Force outta the way. If I fail my roll, I fail the event. These rolls are based on my personal stats, I can always check my stats by opening my ai interface, then clicking on the sidebar icon that looks like a person. I can also expand the sidebar, fuck my mind's wandering again, needa focus.
           <br> For now, I gotta roll the dice to see if I can overpower him.
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           `
         ];
         break;
       case '12':
         dialogueArr = [
-          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
-          <br> The both of you push G-Force aside and release the emergency break. The elevator starts to lower again and after a few seconds, the door dings open. Standing there is a flop dressed in yellow bandanas with a spiky jean jacket vest and some massive jet black boots.
+          `<span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> The both of you push G-Force aside and release the emergency break. The elevator starts to lower again an' after a few seconds, the door dings open. Standing there is a flop dressed in yellow bandanas with a spiky jean jacket vest and some massive jet black boots.
           <br>
           <br> Looks like a clown but I guess every gang's got their taste. This one's clearly got some weird chains and whips fetish goin' on. He stares at you in anger, as you look behind him, you notice everyone looking impatient and upset.
           <br>
           <br> You scan the room further and notice a massive screen on the wall big enough fill a swimming pool. These flops were arguing over the bot fight while waiting, heard the elevator stop and got even more antsy.
-          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
+          <br> <span class="color-orange"><strong>/|\\_/|\\_/|\\-/|\\_/|\\_/|\\/|\\_/|\\_/|\\-/|\\_/|\\_/|\\</strong></span>
           <br>
           <br> <span class="color-orange">...</span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>N-Vid:</strong></span> ...
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>N-Vid:</strong></span> ...
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> A fucking robot match, you gigs serious?
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> A fucking robot match, you gigs serious?
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> <em>*eyeroll*</em>
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> <em>*eyeroll*</em>
           <br>
           <br> <span class="color-orange">${get(player1).name} and N-Vid chuckle.</span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Nah don't act like that didn't have y'all spooked!
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Nah don't act like that didn't have y'all spooked!
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player2).name}:</strong></span> Knew we shoulda left your ass back in the CryberCruise.</span>
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player2).name}:</strong></span> Knew we shoulda left your ass back in the CryberCruise.</span>
           <br>
-          <br> <span class="color-cornflower-blue"><strong>${get(player1).name}:</strong></span> Let's go.</span>
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>${get(player1).name}:</strong></span> Let's go.</span>
           <br>
-          <br> <span class="color-red"><strong>Rammer:</strong></span> No take your time, you gigs are the only entertainment we've had all night.
+          <br> <span class="color-red cyberpunk-font"><strong>Rammer:</strong></span> No take your time, you gigs are the only entertainment we've had all night.
           <br>
-          <br> <span class="color-yellow"><strong>Razor:</strong></span> Dunno, laughed a bit when we saw your jank ass security gear. Nothin screams scared bit more than flashing a bunch of big guns and shiny cameras.
+          <br> <span class="color-yellow cyberpunk-font"><strong>Razor:</strong></span> Dunno, laughed a bit when we saw your jank ass security gear. Nothin screams scared bit more than flashing a bunch of big guns and shiny cameras.
           <br>
-          <br> <span class="color-cornflower-blue"><strong>G-Force:</strong></span> Don't remember asking you to butt in?
+          <br> <span class="color-cornflower-blue cyberpunk-font"><strong>G-Force:</strong></span> Don't remember asking you to butt in?
           <br>
-          <br> <span class="color-yellow"><strong>Razor:</strong></span> Don't remember needin' a dirty <span class="color-cornflower-blue">solid</span>'s approval. Surprised you kids even got invited to the adult table.
+          <br> <span class="color-yellow cyberpunk-font"><strong>Razor:</strong></span> Don't remember needin' a dirty <span class="color-cornflower-blue cyberpunk-font">solid</span>'s approval. Surprised you kids even got invited to the adult table.
           `
         ];
         break;
       case '13':
         dialogueArr = [
-          `That was a quick example of a dice roll using a <span class="color-red">D8</span> dice. There are several dice in the game:
-          <br> <span class="color-blue">D4:</span> 4 sides from 1-4.
+          `That was a quick example of a dice roll using a <span class="color-red cyberpunk-font">D8</span> dice. There are several dice in the game:
+          <br> <span class="color-blue cyberpunk-font">D4:</span> 4 sides from 1-4.
           <br> <span class="color-green">D6:</span> 6 sides from 1-6.
-          <br> <span class="color-red">D8:</span> 8 sides from 1-8.
+          <br> <span class="color-red cyberpunk-font">D8:</span> 8 sides from 1-8.
           <br> <span class="color-pink">D10:</span> 10 sides from 1-10.
           <br> <span class="color-purple">D12:</span> 12 sides from 1-12.
           <br> <span class="color-orange">D20:</span> 20 sides from 1-20.
           <br>
           <br>
-          Usually, you will be rolling a <span class="color-orange">D20</span> dice but there are occassions where you will use the other dice. For instance, you roll a <span class="color-orange">D20</span> dice to jump over a gap and you are <span class="color-green">successful</span>. Then you roll a <span class="color-blue">D4</span> dice to see how successful you were. If it's a <span class="color-blue">1</span>, maybe you just barely made the jump where as if it was a <span class="color-blue">4</span> then you nailed the jump gracefully.
+          Usually, you will be rolling a <span class="color-orange">D20</span> dice but there are occassions where you will use the other dice. For instance, you roll a <span class="color-orange">D20</span> dice to jump over a gap and you are <span class="color-green">successful</span>. Then you roll a <span class="color-blue cyberpunk-font">D4</span> dice to see how successful you were. If it's a <span class="color-blue cyberpunk-font">1</span>, maybe you just barely made the jump where as if it was a <span class="color-blue cyberpunk-font">4</span> then you nailed the jump gracefully.
           <br>
           <br>
-          Now, let's imagine a scenario where the building you are in catches 🔥<span class="color-red">fire</span>🔥 and as it's collapsing one of the support beams fall on your ally. You need to roll for strength to see if you can save them.
+          Now, let's imagine a scenario where the building you are in catches 🔥<span class="color-red cyberpunk-font">fire</span>🔥 and as it's collapsing one of the support beams fall on your ally. You need to roll for strength to see if you can save them.
           `
           ];
         break;
@@ -743,12 +745,12 @@ export function getNextDiceDialogue(options: {player: Player, dice: PolyhedralDi
   const resultMessage = successfulRoll ? 'You were successful' : 'You were unsuccessful';
 
   let dialogueArr = [`
-    You are rolling a <span class="color-${findDiceColor(options.dice.numOfSides)}">D${options.dice.numOfSides}</span> dice for your <span class="color-blue">${options.stat}</span> stat.
-    <br> Your <span class="color-blue">${options.stat}</span> base stat is <span class="color-blue">${baseStat}</span>.
-    <br> Your <span class="color-blue">luck</span> stat is <span class="color-blue">${luckStat}</span> and will be added to your total roll.
-    <br> You need a total of at least <span class="color-blue">${options.threshold}</span>.
-    <br> You roll the dice and get a <span class="color-blue">${diceRoll}</span>!
-    <br> <span class="color-blue">${diceRoll}(roll)</span> + <span class="color-blue">${baseStat}(${options.stat})</span> + <span class="color-blue">${luckStat}(luck)</span> gives you a total of <span class="color-blue stat-roll-result">${totalRoll}</span>.
+    You are rolling a <span class="color-${findDiceColor(options.dice.numOfSides)}">D${options.dice.numOfSides}</span> dice for your <span class="color-blue cyberpunk-font">${options.stat}</span> stat.
+    <br> Your <span class="color-blue cyberpunk-font">${options.stat}</span> base stat is <span class="color-blue cyberpunk-font">${baseStat}</span>.
+    <br> Your <span class="color-blue cyberpunk-font">luck</span> stat is <span class="color-blue cyberpunk-font">${luckStat}</span> and will be added to your total roll.
+    <br> You need a total of at least <span class="color-blue cyberpunk-font">${options.threshold}</span>.
+    <br> You roll the dice and get a <span class="color-blue cyberpunk-font">${diceRoll}</span>!
+    <br> <span class="color-blue cyberpunk-font">${diceRoll}(roll)</span> + <span class="color-blue cyberpunk-font">${baseStat}(${options.stat})</span> + <span class="color-blue cyberpunk-font">${luckStat}(luck)</span> gives you a total of <span class="color-blue stat-roll-result">${totalRoll}</span>.
     <br> <span class="color-${successfulRoll ? 'green' : 'red'}">${resultMessage}</span>
   `];
 

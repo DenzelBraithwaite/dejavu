@@ -1,4 +1,3 @@
-// @ts-ignore
 import { writable } from 'svelte/store';
 
 export type Player = {

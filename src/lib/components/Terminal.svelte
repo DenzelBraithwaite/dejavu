@@ -20,7 +20,7 @@
   import { Button, DiceTerminal } from '.';
 
   // Props
-  export let terminalColor: 'grey' | 'green' | 'blue' = 'grey';
+  export let location: Writable<string>;
   export let dialogueOptions: Writable<DialogueOptions>;
 
   let typed: Typed;
@@ -97,7 +97,7 @@
   }
 </script>
 
-<div transition:blur={{duration: 1000}} class="terminal terminal__{terminalColor}">
+<div transition:blur={{duration: 1000}} class="terminal" class:hide={$location !== 'terminal'}>
   <div class="terminal-screen">
     <p>Chapter {$chapter}: part {$chapterPart}</p>
     <p id="terminal-text"></p>
@@ -105,7 +105,7 @@
       <DiceTerminal {currentGameState} {dice} {playerStat} {statThreshold}/>
     {/if}
   </div>
-  <div class="terminal-option-flex-group">
+  <div >
     {#if $dialogueOptions.option1Visible}
       <Button btnType="terminal-option" disabled={$dialogueOptions.option1Disabled} on:click={() => updateTerminal(1)}>{$dialogueOptions.option1}</Button>
     {/if}
@@ -144,6 +144,7 @@
 
     display: flex;
     flex-direction: column;
+
   }
   
   .terminal-screen {
@@ -155,6 +156,20 @@
     padding: 12px;
     overflow-y: scroll;
     box-shadow: inset -4px 0 20px #00000086;
+
+    ::-webkit-scrollbar-track {
+      background-color: #111111;
+    }
+  
+    ::-webkit-scrollbar-thumb {
+      background: #ddd;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
   }
 
   #terminal-text {
@@ -214,59 +229,4 @@
       opacity: 0.15;
     }
  }
-
-  // v--Terminal colors--v
-  .terminal__grey {
-    border: 6px solid #ddd;
-    border-top: 16px solid #ddd;
-    background-color: #111111;
-    
-    .terminal-screen::-webkit-scrollbar-track {
-      background-color: #111111;
-    }
-
-    .terminal-screen::-webkit-scrollbar-thumb {
-      background: #ddd;
-      border-radius: 4px;
-    }
-  }
-
-  .terminal__green {
-    background-color: #05180b;
-    border: 6px solid #279821;
-    border-top: 16px solid #279821;
-
-    .terminal-screen::-webkit-scrollbar-track {
-      background-color: #05180b;
-    }
-
-    .terminal-screen::-webkit-scrollbar-thumb {
-      background: #279821;
-      border-radius: 4px;
-    }
-  }
-
-  .terminal__blue {
-    background-color: #071424;
-    border: 6px solid #215798;
-    border-top: 16px solid #215798;
-    
-    .terminal-screen::-webkit-scrollbar-track {
-      background-color: #071424;
-    }
-
-    .terminal-screen::-webkit-scrollbar-thumb {
-      background: #215798;
-      border-radius: 4px;
-    }
-  }
-
-  // ^--Terminal colors--^
-
-  // Utility //
-  .terminal-screen::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
 </style>

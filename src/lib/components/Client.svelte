@@ -6,28 +6,23 @@
   import { LogPage } from '../../routes/index';
 
   // Stores
+  import location from '../stores/location';
   import { chapter, chapterPart } from '../stores/terminalMessages';
 
   // Components
-  import { PlayerStats, Sidebar } from './index';
+  import { Sidebar } from './index';
 
   let sidebarExpanded = false;
-  let currentPage = 'main';
   let background = '';
-  let playerStatsVisible = false;
 
   // The delay because the female player initially has a bag over her head and the male is trying to focus his vision.
   $: if ($chapter === '1') setTimeout(() => background = 'audience-chamber', 10_000);
 
-  function changePage(event: {detail: string}): void {
-    currentPage = event.detail;
-
-    if (currentPage === 'character') playerStatsVisible = !playerStatsVisible;
+  function changePage(event: CustomEvent) {
+    const newLocation: string = event.detail;
+    location.set(newLocation);
   }
 
-  function closeCharacterMenu() {
-    playerStatsVisible = false;
-  }
 </script>
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -36,7 +31,6 @@
   <Sidebar {sidebarExpanded} on:select={changePage} on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}/>
 
   <div class="screen">
-    <PlayerStats isVisible={playerStatsVisible} on:close-menu={closeCharacterMenu}/>
     <LogPage />
   </div>
 </div>

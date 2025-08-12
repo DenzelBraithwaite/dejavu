@@ -6,14 +6,15 @@
   import { blur } from 'svelte/transition';
 
   // Modules / Components
-  import { Terminal } from '../lib/components';
+  import { Terminal, NetRunners, CharacterMenu  } from '../lib/components';
 
   // Stores
+  import location from '../lib/stores/location';
   import { socket } from '../lib/socket';
   import { player1, player2 } from '../lib/stores/players';
-  import { type GameState, currentGameState } from '../lib/stores/gameState';
-  import { dialogueOptions, type DialogueOptions } from '../lib/stores/terminalMessages'
-  import { chapter, chapterPart, getNextDialogue } from '../lib/stores/terminalMessages';
+  import { currentGameState } from '../lib/stores/gameState';
+  import { dialogueOptions } from '../lib/stores/terminalMessages'
+  import { chapter, chapterPart } from '../lib/stores/terminalMessages';
 
   onMount(() => {
     // Handles connects
@@ -129,10 +130,13 @@
         });
       }
   }
+
 </script>
 
 <div in:blur class="main-content">
-  <Terminal {dialogueOptions} terminalColor="grey" />
+  <Terminal {location} {dialogueOptions} />
+  <CharacterMenu {location} />
+  <NetRunners {location}  />
 </div>
 
 <style lang="scss">
