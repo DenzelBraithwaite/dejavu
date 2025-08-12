@@ -50,7 +50,7 @@
     max-height: 95vh;
     width: 100%;
     max-width: 1100px; // 
-    border: 2px solid var(--white);
+    border: 2px solid #063d7a;
     border-top-width: 24px;
     border-radius: var(--border-radius-small);
     padding: 8px;
