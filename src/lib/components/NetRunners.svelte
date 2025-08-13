@@ -21,14 +21,119 @@
     return $currentGameState.playingAs === 'male' ? $player1 : $player2;
   }
 
-  const purpleDeck = Array(10).fill('purple');
-  const pinkDeck = Array(10).fill('pink');
-  const yellowDeck = Array(10).fill('yellow');
-  const cyanDeck = Array(10).fill('cyan');
-  const blueDeck = Array(10).fill('blue');
-  const fullDeck = [...purpleDeck, ...pinkDeck, ...yellowDeck, ...cyanDeck, ...blueDeck, ];
+  const purpleDeck = Array(15).fill('purple');
+  const pinkDeck = Array(15).fill('pink');
+  const yellowDeck = Array(15).fill('yellow');
+  const cyanDeck = Array(15).fill('cyan');
+  const blueDeck = Array(15).fill('blue');
+  let fullDeck: string[] = [...purpleDeck, ...pinkDeck, ...yellowDeck, ...cyanDeck, ...blueDeck];
+  let trackCards: string[] = [];
+  let odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
+  let gameState = {
+    p1: {
+      name: 'should be players actual name from game',
+      wallet: 0,
+      amountBet: 0,
+      colorBet: ''
+    },
+    p2: {
+      name: 'CPU if singleplayer, hooman if multiplayer',
+      wallet: 0,
+      amountBet: 0,
+      colorBet: ''
+    },
+    p3: {
+      name: 'CPU Bob',
+      wallet: 0,
+      amountBet: 0,
+      colorBet: ''
+    },
+    p4: {
+      name: 'CPU Quinn',
+      wallet: 0,
+      amountBet: 0,
+      colorBet: ''
+    } // cpu
+  };
+  // TODO: singplayer first, then when game is done, add multi
+  let gameMode: 'singleplayer' | 'multiplayer' = 'singleplayer';
 
-  // TODO: logic
+  // Starts game
+  function startGame(): void {
+    resetGame();
+    trackCards = drawLaneCards();
+    odds = calculateBettingOdds();
+    // TODO:
+  }
+
+  // Ends game
+  function endGame() {
+    // TODO:
+  }
+
+  // Resets game, restoring original deck.
+  function resetGame(): void {
+    fullDeck = [...purpleDeck, ...pinkDeck, ...yellowDeck, ...cyanDeck, ...blueDeck];
+    trackCards = [];
+    odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
+
+    gameState.p1.amountBet = 0;
+    gameState.p2.amountBet = 0;
+    gameState.p3.amountBet = 0;
+    gameState.p4.amountBet = 0;
+    gameState.p1.colorBet = '';
+    gameState.p2.colorBet = '';
+    gameState.p3.colorBet = '';
+    gameState.p4.colorBet = '';
+  }
+
+  // Draws initial 7 cards that will represent the track and betting odds
+  function drawLaneCards(): string[] {
+    let cards: string[] = [];
+    for(let i = 0; i < 7; i++) {
+      const index = Math.floor(Math.random() * fullDeck.length);
+      const card: string = fullDeck.splice(index, 1)[0];
+      cards = [...cards, card];
+    }
+
+    return cards;
+  }
+
+  // Calculate odds for each color based on removed track cards
+  function calculateBettingOdds(): {pink: number, purple: number, yellow: number, cyan: number, blue: number,} {
+    const numOfPinkCards = fullDeck.filter(c => c === 'pink').length;
+    const numOfPurpleCards = fullDeck.filter(c => c === 'purple').length;
+    const numOfYellowCards = fullDeck.filter(c => c === 'yellow').length;
+    const numOfCyanCards = fullDeck.filter(c => c === 'cyan').length;
+    const numOfBlueCards = fullDeck.filter(c => c === 'blue').length;
+    const total = [numOfPinkCards, numOfPurpleCards, numOfYellowCards, numOfCyanCards, numOfBlueCards].reduce((acc, curr) => acc + curr, 0);
+
+    return {
+      pink: Math.round(numOfPinkCards / total * 100),
+      purple: Math.round(numOfPurpleCards / total * 100),
+      yellow: Math.round(numOfYellowCards / total * 100),
+      cyan: Math.round(numOfCyanCards / total * 100),
+      blue: Math.round(numOfBlueCards / total * 100)
+    }
+  }
+  
+  // Flip/Draw a card
+  function drawCard() {
+    // TODO:
+    
+  }
+  
+  // Move's card after card is flipped
+  function moveCard() {
+    // TODO:
+    
+  }
+
+  // Determines how much the player wins based on the odds of their winning bet.
+  // 50% chance = 1/2 (keep denominator 2) 2x payout. 10% chance is 1/10 so 10x winnings.
+  function calculateWinnings() {
+
+  }
 </script>
 
 <div transition:blur={{duration: 1000}} class="terminal" class:hide={$location !== 'netrunners'}>
@@ -52,6 +157,33 @@
     </svg>
   </h1>
   <div class="terminal-screen">
+    <div class="terminal-screen-content"></div>
+    <div style="border: 2px solid red; display: inline-block; padding: 4px; background-color: black">
+      <button>SINGLEPLAYER</button>
+      <button>MULTIPLAYER</button>
+      <br>
+      <br>
+      <button on:click={startGame}>START</button>
+      <br>
+      <br>
+      <h2>Odds of Winning</h2>
+      <p>pink: {odds.pink}%</p>
+      <p>purple: {odds.purple}%</p>
+      <p>yellow: {odds.yellow}%</p>
+      <p>cyan: {odds.cyan}%</p>
+      <p>blue: {odds.blue}%</p>
+      <br>
+      <h2>Lane Cards</h2>
+      <p>{trackCards}</p>
+      <br>
+      <h2>Winning amount</h2>
+      <!-- TODO: altho may not make sense to do it like this -->
+      <!-- <p>pink: payout multiplier {}, payout ammount if bet was 100$: {}$</p>
+      <p>purple: payout multiplier {}, payout ammount if bet was 100$: {}$</p>
+      <p>yellow: payout multiplier {}, payout ammount if bet was 100$: {}$</p>
+      <p>cyan: payout multiplier {}, payout ammount if bet was 100$: {}$</p>
+      <p>blue: payout multiplier {}, payout ammount if bet was 100$: {}$</p> -->
+    </div>
     <!-- TODO: suit imgs -->
     <div class="cards">
       <div class="card card__pink">
@@ -110,6 +242,8 @@
     overflow-wrap: break-word;
     transition: all 0.5s ease-out;
     margin-bottom: 20px;
+    box-shadow: 0 0 20px color.scale($yellow, $alpha: -50%);
+    z-index: 0;
 
     display: flex;
     flex-direction: column;
@@ -124,7 +258,8 @@
     padding: 12px;
     overflow-y: scroll;
     box-shadow: inset -4px 0 20px #00000086;
-
+    z-index: 0;
+    
     &::after {
       content: '';
       height: 100%;
@@ -135,6 +270,7 @@
       background-position: center;
       background-size: cover;
       filter: blur(6px);
+      z-index: -1;
 
       position: absolute;
       top: 0;
