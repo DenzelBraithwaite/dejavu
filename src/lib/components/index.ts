@@ -4,6 +4,7 @@ import Dice from './Dice.svelte';
 import DiceTerminal from './DiceTerminal.svelte';
 import Item from './Item.svelte';
 import NetRunners from './NetRunners.svelte';
+import NetRunnersCard from './NetRunnersCard.svelte';
 import CharacterMenu from './CharacterMenu.svelte';
 import Sidebar from './Sidebar.svelte';
 import Terminal from './Terminal.svelte';
@@ -16,6 +17,7 @@ export {
   DiceTerminal,
   Item,
   NetRunners,
+  NetRunnersCard,
   CharacterMenu,
   Sidebar,
   Terminal,

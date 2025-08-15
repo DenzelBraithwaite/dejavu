@@ -11,6 +11,9 @@
   import { player1, player2, type Player } from '../stores/players';
   import { type GameState, currentGameState } from '../stores/gameState';
 
+  // Components
+  import { NetRunnersCard } from './';
+
   // Props
   export let location: Writable<string>;
 
@@ -27,9 +30,10 @@
   const cyanDeck = Array(15).fill('cyan');
   const blueDeck = Array(15).fill('blue');
   let fullDeck: string[] = [...purpleDeck, ...pinkDeck, ...yellowDeck, ...cyanDeck, ...blueDeck];
-  let trackCards: string[] = [];
+  let trackCards: ('pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string)[] = [];
   let odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
   let gameState = {
+    gameInProgress: false,
     p1: {
       name: 'should be players actual name from game',
       wallet: 0,
@@ -55,19 +59,23 @@
       colorBet: ''
     } // cpu
   };
+
   // TODO: singplayer first, then when game is done, add multi
   let gameMode: 'singleplayer' | 'multiplayer' = 'singleplayer';
 
   // Starts game
   function startGame(): void {
     resetGame();
+    gameState.gameInProgress = true;
     trackCards = drawLaneCards();
     odds = calculateBettingOdds();
-    // TODO:
+    
+    // TODO: Players choose which color to vote for.
   }
 
   // Ends game
   function endGame() {
+    gameState.gameInProgress = false;
     // TODO:
   }
 
@@ -157,24 +165,30 @@
     </svg>
   </h1>
   <div class="terminal-screen">
-    <div class="terminal-screen-content"></div>
+    <div class="lane-cards">
+      {#each trackCards as card}
+        <NetRunnersCard color={card}/>
+      {:else}
+        <NetRunnersCard placeholder={true}/>
+      {/each}
+      <div class="color-odds-wrapper">
+        <p><span class="color-purple">purple: {odds.purple}%</span></p>
+        <p><span class="color-pink">pink:{odds.pink}%</span></p>
+        <p><span class="color-yellow">yellow:{odds.yellow}%</span></p>
+        <p><span class="color-cyan">cyan:{odds.cyan}%</span></p>
+        <p><span class="color-blue">blue:{odds.blue}%</span></p>
+      </div>
+    </div>
     <div style="border: 2px solid red; display: inline-block; padding: 4px; background-color: black">
       <button>SINGLEPLAYER</button>
       <button>MULTIPLAYER</button>
       <br>
       <br>
-      <button on:click={startGame}>START</button>
+      <button on:click={startGame}>{gameState.gameInProgress ? 'RESET' : 'START'}</button>
       <br>
       <br>
       <h2>Odds of Winning</h2>
-      <p>pink: {odds.pink}%</p>
-      <p>purple: {odds.purple}%</p>
-      <p>yellow: {odds.yellow}%</p>
-      <p>cyan: {odds.cyan}%</p>
-      <p>blue: {odds.blue}%</p>
-      <br>
-      <h2>Lane Cards</h2>
-      <p>{trackCards}</p>
+      
       <br>
       <h2>Winning amount</h2>
       <!-- TODO: altho may not make sense to do it like this -->
@@ -185,47 +199,17 @@
       <p>blue: payout multiplier {}, payout ammount if bet was 100$: {}$</p> -->
     </div>
     <!-- TODO: suit imgs -->
-    <div class="cards">
-      <div class="card card__pink">
-        Card
-      </div>
-
-      <div class="card card__blue">
-        Card
-      </div>
-
-      <div class="card card__yellow">
-        Card
-      </div>
-
-      <div class="card card__cyan">
-        Card
-      </div>
-
-      <div class="card card__purple">
-        Card
-      </div>
-    </div>
   </div>
 </div>
 
 <style lang="scss">
   @use 'sass:color';
-
   $terminalBg: #241c55;
   $purple: #9962ff;
   $pink: #F837CD;
   $yellow: #F2D40E;
   $cyan: #02FBFB;
   $blue: #0779FC;
-
-  // Neons
-  $neonPurple: #BC13FE;
-  $neonPink: #F535AA;
-  $neonYellow: #FFF01F;
-  $neonYellowGreen: #CCFF00;
-  $neonCyan: #00F0FF;
-  $neonBlue: #1F51FF;
 
   .terminal {
     position: relative;
@@ -269,7 +253,7 @@
       background-repeat: no-repeat;
       background-position: center;
       background-size: cover;
-      filter: blur(6px);
+      filter: blur(4px);
       z-index: -1;
 
       position: absolute;
@@ -310,49 +294,18 @@
     left: 0;
   }
 
-  .cards {
-    background-color: black;
-    padding: 18px;
-    border: 1px solid grey;
+  .lane-cards {
+    position: relative;
+    background-color: color.scale($yellow, $alpha: -90%);
+    padding: 16px 20px 32px;
+    border: 1px solid color.scale($yellow, $alpha: -50%);
+    box-shadow: 0 0 8px color.scale($yellow, $alpha: -70%);
     border-radius: 8px;
-    width: 80%;
-
-    position: absolute;
-    bottom: 50%;
-    right: 50%;
-    transform: translate(50%, 50%);
+    width: 90%;
+    margin: 50px auto 0;
 
     display: flex;
     justify-content: space-evenly;
-  }
-
-  .card {
-    font-family: "Orbitron", "Space Mono", sans-serif;
-    letter-spacing: 2px;
-    height: 200px;
-    width: 125px;
-    padding: 4px;
-    border-radius: 4px 20px;
-  }
-
-  .card__purple {
-    border: 2px double $purple;
-  }
-
-  .card__pink {
-    border: 2px double $pink;
-  }
-
-  .card__yellow {
-    border: 2px double $yellow;
-  }
-
-  .card__cyan {
-    border: 2px double $cyan;
-  }
-
-  .card__blue {
-    border: 2px double $blue;
   }
 
   .colored-r {
@@ -372,5 +325,44 @@
 
     position: relative;
     top: 4px;
+  }
+
+  .color-odds-wrapper {
+    background-color: #0000006b;
+    border-radius: 0 0 8px 8px;
+    width: 100%;
+    position: absolute;
+    bottom: 0;
+    padding: 2px 0;
+
+    display: flex;
+    justify-content: space-evenly;
+    align-content: baseline;
+  }
+
+    // Some overwrite app.scss
+  .color-purple {
+    color: $purple;
+    text-shadow: 0 0 4px $purple;
+  }
+  
+  .color-pink {
+    color: $pink;
+    text-shadow: 0 0 4px $pink;
+  }
+
+  .color-yellow {
+    color: $yellow;
+    text-shadow: 0 0 4px $yellow;
+  }
+  
+  .color-cyan {
+    color: $cyan;
+    text-shadow: 0 0 4px $cyan;
+  }
+
+  .color-blue {
+    color: $blue;
+    text-shadow: 0 0 4px $blue;
   }
 </style>
