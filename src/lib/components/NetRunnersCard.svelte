@@ -2,6 +2,7 @@
   // Props
   export let color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string | undefined = undefined;
   export let placeholder = false;
+  export let smallVersion = false;
 
   // Based on color, determines what letter the card should display in corners.
   function setCardLetter(color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string = ''): 'PC' | 'PM' | 'YM' | 'CS' | 'BE' | '**' {
@@ -17,13 +18,13 @@
 
 {#if placeholder}
   <div class="card card__placeholder">
-      <p class="card-letter-top color-{color}">{setCardLetter(color)[0]}</p>
-      <p class="card-letter-bot color-{color}">{setCardLetter(color)[1]}</p>
+      <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
+      <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
     </div>
 {:else}
   <div class="card card__{color}">
-    <p class="card-letter-top color-{color}">{setCardLetter(color)[0]}</p>
-    <p class="card-letter-bot color-{color}">{setCardLetter(color)[1]}</p>
+    <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
+    <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
   </div>
 {/if}
 
@@ -46,7 +47,6 @@
 
     background-position: center;
     background-size: contain;
-    // background-repeat: no-repeat;
   }
 
   .card__purple {
@@ -87,6 +87,12 @@
   .card__placeholder {
     border: 4px double #888;
     background-color: #333;
+  }
+
+  .card__small {
+    height: 150px;
+    width: 100px;
+    padding: 4px;
   }
 
   .card-letter-top {

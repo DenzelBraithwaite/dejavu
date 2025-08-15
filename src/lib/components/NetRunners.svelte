@@ -172,13 +172,21 @@
         <NetRunnersCard placeholder={true}/>
       {/each}
       <div class="color-odds-wrapper">
-        <p><span class="color-purple">purple: {odds.purple}%</span></p>
-        <p><span class="color-pink">pink:{odds.pink}%</span></p>
-        <p><span class="color-yellow">yellow:{odds.yellow}%</span></p>
-        <p><span class="color-cyan">cyan:{odds.cyan}%</span></p>
-        <p><span class="color-blue">blue:{odds.blue}%</span></p>
+        <p class="color-odds odds-color-purple">purple: {odds.purple}%</p>
+        <p class="color-odds odds-color-pink">pink:{odds.pink}%</p>
+        <p class="color-odds odds-color-yellow">yellow:{odds.yellow}%</p>
+        <p class="color-odds odds-color-cyan">cyan:{odds.cyan}%</p>
+        <p class="color-odds odds-color-blue">blue:{odds.blue}%</p>
       </div>
     </div>
+
+    <div class="track">
+      <NetRunnersCard placeholder={Boolean(! gameState.p1.colorBet)}/>
+      <NetRunnersCard placeholder={Boolean(! gameState.p2.colorBet)}/>
+      <NetRunnersCard placeholder={Boolean(! gameState.p3.colorBet)}/>
+      <NetRunnersCard placeholder={Boolean(! gameState.p4.colorBet)}/>
+    </div>
+
     <div style="border: 2px solid red; display: inline-block; padding: 4px; background-color: black">
       <button>SINGLEPLAYER</button>
       <button>MULTIPLAYER</button>
@@ -198,7 +206,6 @@
       <p>cyan: payout multiplier {}, payout ammount if bet was 100$: {}$</p>
       <p>blue: payout multiplier {}, payout ammount if bet was 100$: {}$</p> -->
     </div>
-    <!-- TODO: suit imgs -->
   </div>
 </div>
 
@@ -297,7 +304,7 @@
   .lane-cards {
     position: relative;
     background-color: color.scale($yellow, $alpha: -90%);
-    padding: 16px 20px 32px;
+    padding: 16px 20px 42px;
     border: 1px solid color.scale($yellow, $alpha: -50%);
     box-shadow: 0 0 8px color.scale($yellow, $alpha: -70%);
     border-radius: 8px;
@@ -333,35 +340,43 @@
     width: 100%;
     position: absolute;
     bottom: 0;
-    padding: 2px 0;
-
+    padding: 6px 0;
+    
     display: flex;
     justify-content: space-evenly;
     align-content: baseline;
   }
 
+  .color-odds {
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    letter-spacing: 2px;
+    padding: 0 4px;
+  }
+
     // Some overwrite app.scss
-  .color-purple {
+  .odds-color-purple {
     color: $purple;
     text-shadow: 0 0 4px $purple;
+    border-left: 2px double $purple;
+    border-right: 2px double $purple;
   }
   
-  .color-pink {
+  .odds-color-pink {
     color: $pink;
     text-shadow: 0 0 4px $pink;
   }
 
-  .color-yellow {
+  .odds-color-yellow {
     color: $yellow;
     text-shadow: 0 0 4px $yellow;
   }
   
-  .color-cyan {
+  .odds-color-cyan {
     color: $cyan;
     text-shadow: 0 0 4px $cyan;
   }
 
-  .color-blue {
+  .odds-color-blue {
     color: $blue;
     text-shadow: 0 0 4px $blue;
   }
