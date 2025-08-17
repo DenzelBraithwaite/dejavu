@@ -110,6 +110,10 @@ a {
   display: none !important;
 }
 
+.show {
+  display: block;
+}
+
 /* When content overflows, scrollbar visible */
 // .<CLASS_NAME>::-webkit-scrollbar {
 ::-webkit-scrollbar {

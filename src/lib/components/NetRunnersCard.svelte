@@ -1,8 +1,20 @@
 <script lang="ts">
+  // Hooks
+  import { createEventDispatcher } from "svelte";
+
+  // Stores
+  import { netRunnersgameState, type NetRunnersGameState } from '../stores/netRunnersgameState';
+
   // Props
   export let color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string | undefined = undefined;
   export let placeholder = false;
   export let smallVersion = false;
+  export let canHover = false;
+  export let bettingCard = false;
+  export let backgroundRepeat = true;
+  
+  const createEvent = createEventDispatcher();
+  $: cardSelected = $netRunnersgameState.p1.colorBet === color;
 
   // Based on color, determines what letter the card should display in corners.
   function setCardLetter(color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string = ''): 'PC' | 'PM' | 'YM' | 'CS' | 'BE' | '**' {
@@ -16,13 +28,20 @@
   }
 </script>
 
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if placeholder}
-  <div class="card card__placeholder">
+  <div class="card card__placeholder" class:no-repeat={!backgroundRepeat}>
       <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
       <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
     </div>
+{:else if bettingCard}
+  <div class="card card__{color}" class:card__hovered={canHover} class:card__selected={cardSelected} class:no-repeat={!backgroundRepeat}>
+    <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
+    <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
+  </div>
 {:else}
-  <div class="card card__{color}">
+  <div class="card card__{color}" class:card__hovered={canHover} class:no-repeat={!backgroundRepeat}>
     <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
     <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
   </div>
@@ -37,6 +56,7 @@
   $blue: #0779FC;
 
   .card {
+    cursor: default;
     position: relative;
     font-family: "Orbitron", "Space Mono", sans-serif;
     letter-spacing: 2px;
@@ -44,9 +64,15 @@
     width: 100px;
     padding: 4px;
     border-radius: 4px 20px;
-
+    transition: all 0.2s ease-in-out;
+    
     background-position: center;
     background-size: contain;
+  }
+  
+  .card__hovered:hover {
+    cursor: pointer;
+    scale: 1.1;
   }
 
   .card__purple {
@@ -56,11 +82,21 @@
     box-shadow: 0 2px 6px $purple;
   }
   
+  .card__hovered.card__purple:hover,
+  .card__purple.card__selected {
+    box-shadow: 0 0 400px 60px $purple;
+  }
+  
   .card__pink {
     border: 4px double $pink;
     background-color: darken($pink, 45%);
     background-image: url('/pink_mouse.png');
     box-shadow: 0 2px 6px $pink;
+  }
+
+  .card__hovered.card__pink:hover,
+  .card__pink.card__selected {
+    box-shadow: 0 0 400px 60px $pink;
   }
   
   .card__yellow {
@@ -69,6 +105,11 @@
     background-image: url('/yellow_monkey.png');
     box-shadow: 0 2px 6px $yellow;
   }
+
+  .card__hovered.card__yellow:hover,
+  .card__yellow.card__selected {
+    box-shadow: 0 0 400px 60px $yellow;
+  }
   
   .card__cyan {
     border: 4px double $cyan;
@@ -76,12 +117,26 @@
     background-image: url('/cyan_shark.png');
     box-shadow: 0 2px 6px $cyan;
   }
+
+  .card__hovered.card__cyan:hover,
+  .card__cyan.card__selected {
+    box-shadow: 0 0 400px 60px $cyan;
+  }
   
   .card__blue {
     border: 4px double $blue;
     background-color: darken($blue, 35%);
     background-image: url('/blue_eagle.png');
     box-shadow: 0 2px 6px $blue;
+  }
+
+  .card__hovered.card__blue:hover,
+  .card__blue.card__selected {
+    box-shadow: 0 0 400px 60px $blue;
+  }
+
+  .card__selected {
+    scale: 1.1;
   }
 
   .card__placeholder {
@@ -135,5 +190,9 @@
   .color-blue {
     color: $blue;
     text-shadow: 0 0 4px $blue;
+  }
+
+  .no-repeat {
+    background-repeat: no-repeat;
   }
 </style>
