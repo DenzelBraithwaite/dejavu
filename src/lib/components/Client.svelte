@@ -30,7 +30,7 @@
 <div in:blur={{duration: 2000}} class:client-collapsed={!sidebarExpanded} class="client bg-{background}">
   <Sidebar {sidebarExpanded} on:select={changePage} on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}/>
 
-  <div class="screen">
+  <div class="main-content">
     <LogPage />
   </div>
 </div>
@@ -47,7 +47,7 @@
     grid-template-columns: 300px minmax(70%, 1fr); // fixed for transition... doesn't react to % units
   }
 
-  .screen {
+  .main-content {
     position: relative;
     padding: 24px 40px;
     grid-column: 2 / span 1;

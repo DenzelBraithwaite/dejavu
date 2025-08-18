@@ -130,8 +130,7 @@
   .terminal {
     position: relative;
     background-color: $terminalBg;
-    height: 100%;
-    max-height: 95vh;
+    height: 95vh;
     width: 100%;
     max-width: 1100px; // 
     border: 2px solid var(--white);

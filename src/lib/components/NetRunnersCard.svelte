@@ -3,18 +3,19 @@
   import { createEventDispatcher } from "svelte";
 
   // Stores
-  import { netRunnersgameState, type NetRunnersGameState } from '../stores/netRunnersgameState';
+  import { netRunnersGameState, type NetRunnersGameState } from '../stores/netRunnersGameState';
 
   // Props
   export let color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string | undefined = undefined;
   export let placeholder = false;
-  export let smallVersion = false;
+  export let compactVersion = false;
+  export let largeVersion = false;
   export let canHover = false;
   export let bettingCard = false;
   export let backgroundRepeat = true;
   
   const createEvent = createEventDispatcher();
-  $: cardSelected = $netRunnersgameState.p1.colorBet === color;
+  $: cardSelected = $netRunnersGameState.p1.colorBet === color;
 
   // Based on color, determines what letter the card should display in corners.
   function setCardLetter(color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string = ''): 'PC' | 'PM' | 'YM' | 'CS' | 'BE' | '**' {
@@ -32,18 +33,20 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 {#if placeholder}
   <div class="card card__placeholder" class:no-repeat={!backgroundRepeat}>
-      <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
-      <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
+      <p class="card-letter-top color-{color}">{setCardLetter(color)[0]}</p>
+      <p class="card-letter-bot color-{color}">{setCardLetter(color)[1]}</p>
     </div>
 {:else if bettingCard}
-  <div class="card card__{color}" class:card__hovered={canHover} class:card__selected={cardSelected} class:no-repeat={!backgroundRepeat}>
-    <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
-    <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
+  <div class="card card__{color} large-version" class:card__hovered={canHover} class:card__selected={cardSelected} class:no-repeat={!backgroundRepeat}>
+    <p class="card-letter-top color-{color}">{setCardLetter(color)[0]}</p>
+    <p class="card-letter-bot color-{color}">{setCardLetter(color)[1]}</p>
   </div>
 {:else}
-  <div class="card card__{color}" class:card__hovered={canHover} class:no-repeat={!backgroundRepeat}>
-    <p class="card-letter-top color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[0]}</p>
-    <p class="card-letter-bot color-{color}" class:card__small={smallVersion}>{setCardLetter(color)[1]}</p>
+  <div class="card card__{color}" class:large-version={largeVersion} class:compact-version={compactVersion} class:card__hovered={canHover} class:no-repeat={!backgroundRepeat}>
+    {#if !compactVersion}
+      <p class="card-letter-top color-{color}">{setCardLetter(color)[0]}</p>
+      <p class="card-letter-bot color-{color}">{setCardLetter(color)[1]}</p>
+    {/if}
   </div>
 {/if}
 
@@ -60,8 +63,8 @@
     position: relative;
     font-family: "Orbitron", "Space Mono", sans-serif;
     letter-spacing: 2px;
-    height: 150px;
-    width: 100px;
+    height: 100px;
+    width: 75px;
     padding: 4px;
     border-radius: 4px 20px;
     transition: all 0.2s ease-in-out;
@@ -144,10 +147,19 @@
     background-color: #333;
   }
 
-  .card__small {
-    height: 150px;
+  .compact-version {
+    background-image: none;
+    height: 50px;
+    width: 40px;
+    box-shadow: none;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: 8px 24px 4px 6px;
+  }
+
+  .large-version {
+    height: 125px;
     width: 100px;
-    padding: 4px;
   }
 
   .card-letter-top {
