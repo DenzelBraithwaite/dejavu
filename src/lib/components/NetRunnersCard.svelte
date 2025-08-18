@@ -148,13 +148,13 @@
   }
 
   .compact-version {
-    background-image: none;
     height: 50px;
     width: 40px;
     box-shadow: none;
     border-style: solid;
     border-width: 1px;
     border-radius: 8px 24px 4px 6px;
+    background-repeat: no-repeat;
   }
 
   .large-version {

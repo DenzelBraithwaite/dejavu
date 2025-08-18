@@ -25,24 +25,28 @@ export type NetRunnersGameState = {
     wallet: number;
     amountBet: number;
     colorBet: string;
+    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   },
   p2: {
     name: string;
     wallet: number;
     amountBet: number;
     colorBet: string;
+    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   },
   p3: {
     name: string;
     wallet: number;
     amountBet: number;
     colorBet: string;
+    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   },
   p4: {
     name: string;
     wallet: number;
     amountBet: number;
     colorBet: string;
+    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   }
 };
 
@@ -63,24 +67,28 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
     name: 'should be players actual name from game',
     wallet: 0,
     amountBet: 0,
-    colorBet: ''
+    colorBet: '',
+    points: 0
   },
   p2: {
     name: 'CPU if singleplayer, hooman if multiplayer',
     wallet: 0,
     amountBet: 0,
-    colorBet: ''
+    colorBet: '',
+    points: 0
   },
   p3: {
     name: 'CPU Bob',
     wallet: 0,
     amountBet: 0,
-    colorBet: ''
+    colorBet: '',
+    points: 0
   },
   p4: {
     name: 'CPU Quinn',
     wallet: 0,
     amountBet: 0,
-    colorBet: ''
+    colorBet: '',
+    points: 0
   } // cpu
 });

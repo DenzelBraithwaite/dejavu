@@ -39,12 +39,13 @@
   function resetGame(): void {
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.fullDeck = [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')];
-      $netRunnersGameState.trackCards = [],
-      $netRunnersGameState.odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0} 
-      $netRunnersGameState.p1.amountBet = 0;
-      $netRunnersGameState.p2.amountBet = 0;
-      $netRunnersGameState.p3.amountBet = 0;
-      $netRunnersGameState.p4.amountBet = 0;
+      $netRunnersGameState.trackCards = [];
+      $netRunnersGameState.cardsDrawn = [];
+      $netRunnersGameState.odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
+      [$netRunnersGameState.p1.amountBet, $netRunnersGameState.p1.points] = [0, 0];
+      [$netRunnersGameState.p2.amountBet, $netRunnersGameState.p2.points] = [0, 0];
+      [$netRunnersGameState.p3.amountBet, $netRunnersGameState.p3.points] = [0, 0];
+      [$netRunnersGameState.p4.amountBet, $netRunnersGameState.p4.points] = [0, 0];
       $netRunnersGameState.p1.colorBet = '';
       $netRunnersGameState.p2.colorBet = '';
       $netRunnersGameState.p3.colorBet = '';
@@ -52,6 +53,8 @@
       $netRunnersGameState.gameInProgress = true;
       $netRunnersGameState.menuVisible = false;
       $netRunnersGameState.colorSelectVisible = true;
+      $netRunnersGameState.lanesVisible = false;
+      $netRunnersGameState.roundStarted = false;
       $netRunnersGameState.trackCards = drawLaneCards();
       $netRunnersGameState.odds = calculateBettingOdds();
 
@@ -136,6 +139,11 @@
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.fullDeck = [...fullDeckCopy];
       $netRunnersGameState.cardsDrawn = [...$netRunnersGameState.cardsDrawn, card]; // looks better this way
+
+      if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
+      if ($netRunnersGameState.p2.colorBet === card) $netRunnersGameState.p2.points +=1;
+      if ($netRunnersGameState.p3.colorBet === card) $netRunnersGameState.p3.points +=1;
+      if ($netRunnersGameState.p4.colorBet === card) $netRunnersGameState.p4.points +=1;
       return $netRunnersGameState
     });
     
@@ -241,35 +249,43 @@
       </div>
 
       <div class="track" class:hide={!$netRunnersGameState.lanesVisible}>
-        <div class="lane-{$netRunnersGameState.p1.colorBet}">
-          <div class="betting-chip betting-chip__{$netRunnersGameState.p1.colorBet}">
-            <p>P1</p>
+        <div class="lane lane__{$netRunnersGameState.p1.colorBet} row-1 col-{$netRunnersGameState.p1.points + 1}">
+          <div class="track-card">
+            <div class="betting-chip betting-chip__{$netRunnersGameState.p1.colorBet}">
+              <p>P1</p>
+            </div>
+            <NetRunnersCard color={$netRunnersGameState.p1.colorBet}/>
           </div>
-          <NetRunnersCard color={$netRunnersGameState.p1.colorBet}/>
         </div>
 
-        <div class="lane-{$netRunnersGameState.p2.colorBet}">
-          <div class="betting-chip betting-chip__{$netRunnersGameState.p2.colorBet}">
-            <p>P2</p>
+        <div class="lane lane__{$netRunnersGameState.p2.colorBet} row-2 col-{$netRunnersGameState.p2.points + 1}">
+          <div class="track-card">
+            <div class="betting-chip betting-chip__{$netRunnersGameState.p2.colorBet}">
+              <p>P2</p>
+            </div>
+            <NetRunnersCard color={$netRunnersGameState.p2.colorBet}/>
           </div>
-          <NetRunnersCard color={$netRunnersGameState.p2.colorBet}/>
         </div>
 
-        <div class="lane-{$netRunnersGameState.p3.colorBet}">
-          <div class="betting-chip betting-chip__{$netRunnersGameState.p3.colorBet}">
-            <p>P3</p>
+        <div class="lane lane__{$netRunnersGameState.p3.colorBet} row-3 col-{$netRunnersGameState.p3.points + 1}">
+          <div class="track-card">
+            <div class="betting-chip betting-chip__{$netRunnersGameState.p3.colorBet}">
+              <p>P3</p>
+            </div>
+            <NetRunnersCard color={$netRunnersGameState.p3.colorBet}/>
           </div>
-          <NetRunnersCard color={$netRunnersGameState.p3.colorBet}/>
         </div>
 
-        <div class="lane-{$netRunnersGameState.p4.colorBet}">
-          <div class="betting-chip betting-chip__{$netRunnersGameState.p4.colorBet}">
-            <p>P4</p>
+        <div class="lane lane__{$netRunnersGameState.p4.colorBet} row-4 col-{$netRunnersGameState.p4.points + 1}">
+          <div class="track-card">
+            <div class="betting-chip betting-chip__{$netRunnersGameState.p4.colorBet}">
+              <p>P4</p>
+            </div>
+            <NetRunnersCard color={$netRunnersGameState.p4.colorBet}/>
           </div>
-          <NetRunnersCard color={$netRunnersGameState.p4.colorBet}/>
         </div>
 
-        <div class="card-log">
+        <div class="card-log row-5">
           {#each $netRunnersGameState.cardsDrawn as card}
             <span in:fly={{duration: 500, x: 50}} out:blur>
               <NetRunnersCard compactVersion={true} color={card}/>
@@ -406,13 +422,19 @@
     height: 100%;
     position: relative;
     display: grid;
-    grid-template-columns: repeat(1fr, 7);
+    grid-template-columns: repeat(8, 1fr);
     row-gap: 4px;
 
     >div {
       position: relative;
       padding: 10px 8px;
     }
+  }
+
+  .track-card {
+    position: relative;
+    margin-left: auto;
+    width: 75px; // Matches card width
   }
 
   .game-controls {
@@ -441,38 +463,46 @@
     grid-template-columns: repeat(2, 1fr);
     justify-items: center;
     row-gap: 50px;
-    margin: 100px 0 12px;
+    margin: 72px auto 0;
+    width: 50%;
 
     :nth-of-type(3).grid-child {
       grid-column: 1 / span 2;
     }
   }
 
-  .lane-purple {
+  .lane {
+    border-radius: 0 32px 32px 0;
+  }
+
+  .lane__purple {
     background-color: color.scale($purple, $alpha: -75%);
   }
 
-  .lane-pink {
+  .lane__pink {
     background-color: color.scale($pink, $alpha: -75%);
   }
 
-  .lane-yellow {
+  .lane__yellow {
     background-color: color.scale($yellow, $alpha: -75%);
   }
 
-  .lane-cyan {
+  .lane__cyan {
     background-color: color.scale($cyan, $alpha: -75%);
   }
 
-  .lane-blue {
+  .lane__blue {
     background-color: color.scale($blue, $alpha: -75%);
   }
 
   .card-log {
+    background-color: #0000006c;
+    min-height: 60px; // to avoid area growing when first card added
+    grid-column: 1 / -1;
+
     display: flex;
     align-items: center;
     gap: 12px;
-    background-color: color.scale($yellow, $alpha: -70%);
 
     span:last-child {
       scale: 1.1;
@@ -543,10 +573,12 @@
     height: 24px;
     width: 24px;
     border-radius: 50%;
+    z-index: 1;
 
     position: absolute;
-    top: 0;
-    left: 100px;
+    top: -8px;
+    right: 50%;
+    transform: translateX(50%);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -653,5 +685,58 @@
     text-shadow: 0 0 4px $blue;
     border-left: 2px double $blue;
     border-right: 2px double $blue;
+  }
+
+  // To move along the track
+  .row-1 {
+    grid-row: 1 / 2;
+  }
+
+  .row-2 {
+    grid-row: 2 / 3;
+  }
+
+  .row-3 {
+    grid-row: 3 / 4;
+  }
+
+  .row-4 {
+    grid-row: 4 / 5;
+  }
+
+  .row-5 {
+    grid-row: 5 / 6;
+  }
+
+  .col-1 {
+    grid-column: 1 / 2;
+  }
+
+  .col-2 {
+    grid-column: 1 / 3;
+  }
+
+  .col-3 {
+    grid-column: 1 / 4;
+  }
+
+  .col-4 {
+    grid-column: 1 / 5;
+  }
+
+  .col-5 {
+    grid-column: 1 / 6;
+  }
+
+  .col-6 {
+    grid-column: 1 / 7;
+  }
+
+  .col-7 {
+    grid-column: 1 / 8;
+  }
+
+  .col-8 {
+    grid-column: 1 / 9;
   }
 </style>
