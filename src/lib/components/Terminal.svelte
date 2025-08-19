@@ -150,7 +150,6 @@
     position: relative;
     height: 90%;
     width: 100%;
-    min-width: 400px;
     border-radius: 24px;
     padding: 12px;
     overflow-y: scroll;

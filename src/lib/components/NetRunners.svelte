@@ -1,7 +1,4 @@
 <script lang="ts">
-  // Hooks
-  import { createEventDispatcher } from 'svelte';
-
   // Transitions
   import { blur, fly } from 'svelte/transition';
 
@@ -9,15 +6,14 @@
   import { type Writable } from 'svelte/store';
   import { player1, player2, type Player } from '../stores/players';
   import { currentGameState } from '../stores/gameState';
-  import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { netRunnersGameState, type CardColor } from '../stores/netRunnersGameState';
 
   // Components
-  import { NetRunnersCard } from './';
+  import { NetRunnersCard, PlayerGamblingCard } from './';
 
   // Props
   export let location: Writable<string>;
 
-  const createEvent = createEventDispatcher();
   const player: Player = returnPlayer();
 
   function returnPlayer(): Player {
@@ -27,18 +23,28 @@
   // Starts game
   function startGame(): void {
     resetGame();
+    netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.gameInProgress = true;
+      $netRunnersGameState.trackCards = drawLaneCards();
+      $netRunnersGameState.odds = calculateBettingOdds();
+      return $netRunnersGameState;
+    });
+    
+    hideGameMenu();
+    showColorSelectScreen();
+    showColorOddsCards();
   }
 
   // Ends game
   function endGame() {
     netRunnersGameState.set({...$netRunnersGameState, gameInProgress: false});
+    hideDrawBtn();
     // TODO:
   }
 
   // Resets game, restoring original deck.
   function resetGame(): void {
     netRunnersGameState.update($netRunnersGameState => {
-      $netRunnersGameState.fullDeck = [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')];
       $netRunnersGameState.trackCards = [];
       $netRunnersGameState.cardsDrawn = [];
       $netRunnersGameState.odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
@@ -50,20 +56,21 @@
       $netRunnersGameState.p2.colorBet = '';
       $netRunnersGameState.p3.colorBet = '';
       $netRunnersGameState.p4.colorBet = '';
-      $netRunnersGameState.gameInProgress = true;
-      $netRunnersGameState.menuVisible = false;
-      $netRunnersGameState.colorSelectVisible = true;
-      $netRunnersGameState.lanesVisible = false;
+      $netRunnersGameState.gameInProgress = false;
       $netRunnersGameState.roundStarted = false;
-      $netRunnersGameState.trackCards = drawLaneCards();
-      $netRunnersGameState.odds = calculateBettingOdds();
-
       return $netRunnersGameState;
     });
+
+    resetDeck();
+    showGameMenu();
+    hideGameControls();
+    hideColorSelectScreen();
+    hideLanes();
+    hideDrawBtn();
   }
 
   // Draws initial 7 cards that will represent the track and betting odds
-  function drawLaneCards(): string[] {
+  function drawLaneCards(): CardColor[] {
     let cards: string[] = [];
     const fullDeckCopy = [...$netRunnersGameState.fullDeck];
 
@@ -76,6 +83,12 @@
     }
 
     return cards;
+  }
+
+  // Shuffles lane cards so players can click a few times before starting.
+  function shuffleLaneCards(): void{
+    resetDeck();
+    netRunnersGameState.set({...$netRunnersGameState, trackCards: drawLaneCards()});
   }
 
   // Calculate odds for each color based on removed track cards
@@ -97,7 +110,7 @@
   }
 
   // event: any bcuz event: customEvent makes normal <button> with on:click complain due to lacking event listeners.
-  function selectColor(color: 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue'): void {
+  function selectColor(color: CardColor): void {
     // TODO: determine if player is  1p or 2p in future if multiplayer.
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.p1.colorBet = color;
@@ -118,14 +131,19 @@
     }
   }
 
+  function placeBet(): void {
+    hideBettingScreen();
+    startRound();
+  }
+
   function startRound(): void {
-    selectBotColors();
-    netRunnersGameState.set({...$netRunnersGameState, 
-      colorSelectVisible: false,
-      roundStarted: true,
-      lanesVisible: true,
-      gameControlsVisible: true
-    })
+    hideBettingScreen()
+    hideColorSelectScreen();
+    showGameControls();
+    showDrawBtn();
+    showLanes();
+    showColorOddsCards();
+    netRunnersGameState.set({...$netRunnersGameState, roundStarted: true});
   }
   
   // Flip/Draw a card
@@ -139,26 +157,32 @@
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.fullDeck = [...fullDeckCopy];
       $netRunnersGameState.cardsDrawn = [...$netRunnersGameState.cardsDrawn, card]; // looks better this way
+      AdvanceColor(card);
 
-      if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
-      if ($netRunnersGameState.p2.colorBet === card) $netRunnersGameState.p2.points +=1;
-      if ($netRunnersGameState.p3.colorBet === card) $netRunnersGameState.p3.points +=1;
-      if ($netRunnersGameState.p4.colorBet === card) $netRunnersGameState.p4.points +=1;
       return $netRunnersGameState
     });
     
+    if (hasPlayerFinishedRace()) endGame();
   }
   
-  // Move's card after card is flipped
-  function moveCard() {
-    // TODO:
-    
+  // Moves any card if their color matches the flipped card's color.
+  function AdvanceColor(card: CardColor): void {
+    if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
+    if ($netRunnersGameState.p2.colorBet === card) $netRunnersGameState.p2.points +=1;
+    if ($netRunnersGameState.p3.colorBet === card) $netRunnersGameState.p3.points +=1;
+    if ($netRunnersGameState.p4.colorBet === card) $netRunnersGameState.p4.points +=1;
+  }
+
+  // Checks each turn if someone has reached the end
+  function hasPlayerFinishedRace(): boolean {
+    const playerPoints = [$netRunnersGameState.p1.points, $netRunnersGameState.p2.points, $netRunnersGameState.p3.points, $netRunnersGameState.p4.points];
+    return playerPoints.some(p => p === 7);
   }
 
   // Determines how much the player wins based on the odds of their winning bet.
   // 50% chance = 1/2 (keep denominator 2) 2x payout. 10% chance is 1/10 so 10x winnings.
   function calculateWinnings() {
-
+  // TODO:
   }
 
   function setSingleplayer(): void {
@@ -167,6 +191,71 @@
 
   function setMultiplayer(): void {
     netRunnersGameState.set({...$netRunnersGameState, singleplayer: false})
+  }
+
+  // Resets deck with all cards
+  function resetDeck(): void {
+    netRunnersGameState.set({...$netRunnersGameState, fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')]});
+  }
+
+  // Toggle Visibility
+  function showGameMenu(): void {
+    netRunnersGameState.set({...$netRunnersGameState, menuVisible: true});
+  }
+
+  function hideGameMenu(): void {
+    netRunnersGameState.set({...$netRunnersGameState, menuVisible: false});
+  }
+
+  function showColorSelectScreen(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorSelectVisible: true});
+  }
+
+  function hideColorSelectScreen(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorSelectVisible: false});
+    selectBotColors();
+  }
+
+  function showBettingScreen(): void {
+    hideColorSelectScreen();
+    hideColorOddsCards();
+    netRunnersGameState.set({...$netRunnersGameState, betSelectVisible: true});
+  }
+
+  function hideBettingScreen(): void {
+    netRunnersGameState.set({...$netRunnersGameState, betSelectVisible: false});
+  }
+
+  function showLanes(): void {
+    netRunnersGameState.set({...$netRunnersGameState, lanesVisible: true});
+  }
+
+  function hideLanes(): void {
+    netRunnersGameState.set({...$netRunnersGameState, lanesVisible: false});
+  }
+
+  function showColorOddsCards(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorOddsCardsVisible: true});
+  }
+
+  function hideColorOddsCards(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorOddsCardsVisible: false});
+  }
+
+  function showGameControls(): void {
+    netRunnersGameState.set({...$netRunnersGameState, gameControlsVisible: true});
+  }
+
+  function hideGameControls(): void {
+    netRunnersGameState.set({...$netRunnersGameState, gameControlsVisible: false});
+  }
+  
+  function showDrawBtn(): void {
+    netRunnersGameState.set({...$netRunnersGameState, drawBtnVisible: true});
+  }
+
+  function hideDrawBtn(): void {
+    netRunnersGameState.set({...$netRunnersGameState, drawBtnVisible: false});
   }
 </script>
 
@@ -192,29 +281,43 @@
   </h1>
   <div class="terminal-screen">
     <div class="lane-cards">
-      {#each $netRunnersGameState.trackCards as card}
-        <NetRunnersCard largeVersion={true} color={card}/>
-      {:else}
-        {#each Array(7) as _}
-          <NetRunnersCard placeholder={true}/>
+      {#if $netRunnersGameState.colorOddsCardsVisible}
+        {#each $netRunnersGameState.trackCards as card}
+          <NetRunnersCard largeVersion={true} color={card}/>
+        {:else}
+          {#each Array(7) as _}
+            <NetRunnersCard placeholder={true}/>
+          {/each}
         {/each}
-      {/each}
+      {:else if $netRunnersGameState.betSelectVisible}
+        <PlayerGamblingCard player={$netRunnersGameState.p1}/>
+        <PlayerGamblingCard player={$netRunnersGameState.p2}/>
+        <PlayerGamblingCard player={$netRunnersGameState.p3}/>
+        <PlayerGamblingCard player={$netRunnersGameState.p4}/>
+      {/if}
+
       <div class="color-odds-wrapper">
-        <p class="color-odds odds-color-purple">purple: {$netRunnersGameState.odds.purple}%</p>
-        <p class="color-odds odds-color-pink">pink:{$netRunnersGameState.odds.pink}%</p>
-        <p class="color-odds odds-color-yellow">yellow:{$netRunnersGameState.odds.yellow}%</p>
-        <p class="color-odds odds-color-cyan">cyan:{$netRunnersGameState.odds.cyan}%</p>
-        <p class="color-odds odds-color-blue">blue:{$netRunnersGameState.odds.blue}%</p>
+        <p class="color-odds odds-color-purple">PC -{$netRunnersGameState.odds.purple}%</p>
+        <p class="color-odds odds-color-pink">PM - {$netRunnersGameState.odds.pink}%</p>
+        <p class="color-odds odds-color-yellow">YM - {$netRunnersGameState.odds.yellow}%</p>
+        <p class="color-odds odds-color-cyan">CS - {$netRunnersGameState.odds.cyan}%</p>
+        <p class="color-odds odds-color-blue">BE - {$netRunnersGameState.odds.blue}%</p>
       </div>
     </div>
 
     <div class="game-controls">
       <button on:click={resetGame} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible} disabled={!$netRunnersGameState.gameControlsVisible}>RESET</button>
       {#if $netRunnersGameState.roundStarted}
-        <button on:click={drawCard} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible} disabled={!$netRunnersGameState.gameControlsVisible}>DRAW</button>
+        <button on:click={drawCard} class="menu-btn" class:btn-disabled={!$netRunnersGameState.drawBtnVisible} disabled={!$netRunnersGameState.drawBtnVisible}>DRAW</button>
       {/if}
+
       {#if $netRunnersGameState.colorSelectVisible}
-        <button on:click={startRound} class="confirm-btn" class:btn-disabled={!$netRunnersGameState.p1.colorBet} disabled={!$netRunnersGameState.p1.colorBet}>CONFIRM</button>
+        <button on:click={showBettingScreen} class="confirm-btn" class:btn-disabled={!$netRunnersGameState.p1.colorBet} disabled={!$netRunnersGameState.p1.colorBet}>CONFIRM</button>
+        <button on:click={shuffleLaneCards} class="menu-btn" class:btn-disabled={!$netRunnersGameState.colorSelectVisible} disabled={!$netRunnersGameState.colorSelectVisible}>SHUFFLE</button>
+      {/if}
+
+      {#if $netRunnersGameState.betSelectVisible}
+        <button on:click={placeBet} class="confirm-btn" class:btn-disabled={$netRunnersGameState.p1.amountBet === 0} disabled={$netRunnersGameState.p1.amountBet === 0}>CONFIRM</button>
       {/if}
     </div>
 
@@ -227,24 +330,48 @@
 
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
+     <!-- TODO: should i use {#if} for all these?TODO: instead of hide... -->
       <div class:hide={!$netRunnersGameState.colorSelectVisible}>
-        <p class="game-message">SELECT A FACTION TO BET ON</p>
+        <p class="game-message">SELECT A FACTION</p>
         <div class="color-select-grid">
-          <div on:click={() => selectColor('purple')} class="grid-child">
+          <div on:click={() => selectColor('purple')} class="card-description-wrapper card-description-wrapper__purple">
             <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="purple"/>
+            <div class="faction-description">
+              <p class="faction-description__purple">Purple Cougars</p>
+            </div>
           </div>
-          <div on:click={() => selectColor('pink')} class="grid-child">
+          <div on:click={() => selectColor('pink')} class="card-description-wrapper card-description-wrapper__pink">
             <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="pink"/>
+            <div class="faction-description">
+              <p class="faction-description__pink">Pink Mice</p>
+            </div>
           </div>
-          <div on:click={() => selectColor('yellow')} class="grid-child">
+          <div on:click={() => selectColor('yellow')} class="card-description-wrapper card-description-wrapper__yellow">
             <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="yellow"/>
+            <div class="faction-description">
+              <p class="faction-description__yellow">Yellow Monkeys</p>
+            </div>
           </div>
-          <div on:click={() => selectColor('cyan')} class="grid-child">
+          <div on:click={() => selectColor('cyan')} class="card-description-wrapper card-description-wrapper__cyan">
             <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="cyan"/>
+            <div class="faction-description">
+              <p class="faction-description__cyan">Cyan Sharks</p>
+            </div>
           </div>
-          <div on:click={() => selectColor('blue')} class="grid-child">
+          <div on:click={() => selectColor('blue')} class="card-description-wrapper card-description-wrapper__blue">
             <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="blue"/>
+            <div class="faction-description">
+              <p class="faction-description__blue">Blue Eagles</p>
+            </div>
           </div>
+        </div>
+      </div>
+
+      <div class:hide={!$netRunnersGameState.betSelectVisible}>
+        <p class="game-message">PLACE YOUR BET</p>
+        <!-- TODO: -->
+        <div class="bet-select-grid">
+          <input on:input={() => netRunnersGameState.set({...$netRunnersGameState, p1: {name: 'CPU Bob', money: 0, amountBet: 1, colorBet: 'purple', points: 0}})} type="text">
         </div>
       </div>
 
@@ -332,7 +459,6 @@
     position: relative;
     height: 100%;
     width: 100%;
-    min-width: 400px;
     border-radius: 24px;
     padding: 12px;
     overflow-y: scroll;
@@ -415,7 +541,7 @@
     
     display: flex;
     justify-content: space-evenly;
-    
+    gap: 6px;
   }
   
   .track {
@@ -434,7 +560,8 @@
   .track-card {
     position: relative;
     margin-left: auto;
-    width: 75px; // Matches card width
+    max-width: 75px;
+    flex: 0 1 75px;
   }
 
   .game-controls {
@@ -466,9 +593,75 @@
     margin: 72px auto 0;
     width: 50%;
 
-    :nth-of-type(3).grid-child {
+    :nth-of-type(3).card-description-wrapper {
       grid-column: 1 / span 2;
     }
+  }
+
+  .card-description-wrapper {
+    background-color: #00000050;
+    border-radius: 100px 10px 4px 100px;
+    cursor: default;
+    
+    display: flex;
+    align-items: center;
+  }
+
+  .card-description-wrapper__purple {
+    border-bottom: 2px solid $purple;
+  }
+
+  .card-description-wrapper__pink {
+    border-bottom: 2px solid $pink;
+  }
+
+  .card-description-wrapper__yellow {
+    border-bottom: 2px solid $yellow;
+  }
+
+  .card-description-wrapper__cyan {
+    border-bottom: 2px solid $cyan;
+  }
+
+  .card-description-wrapper__blue {
+    border-bottom: 2px solid $blue;
+  }
+  
+  .faction-description {
+    text-align: center;
+    padding-right: 2px;
+    margin-left: 8px;
+    margin-top: 4px;
+  }
+
+  .faction-description__purple {
+    text-shadow: 0 0 0px #fff;
+    color: $purple;
+    font-weight: bold;
+  }
+
+  .faction-description__pink {
+    text-shadow: 0 0 0px #fff;
+    color: $pink;
+    font-weight: bold;
+  }
+
+  .faction-description__yellow {
+    text-shadow: 0 0 0px #fff;
+    color: $yellow;
+    font-weight: bold;
+  }
+
+  .faction-description__cyan {
+    text-shadow: 0 0 0px #fff;
+    color: $cyan;
+    font-weight: bold;
+  }
+
+  .faction-description__blue {
+    text-shadow: 0 0 0px #fff;
+    color: $blue;
+    font-weight: bold;
   }
 
   .lane {
@@ -649,6 +842,7 @@
     font-family: "Orbitron", "Space Mono", sans-serif;
     letter-spacing: 2px;
     padding: 0 4px;
+    font-size: 0.9rem;
   }
 
     // Some overwrite app.scss

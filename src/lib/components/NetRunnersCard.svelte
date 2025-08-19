@@ -159,7 +159,7 @@
 
   .large-version {
     height: 125px;
-    width: 100px;
+    flex: 0 1 100px;
   }
 
   .card-letter-top {

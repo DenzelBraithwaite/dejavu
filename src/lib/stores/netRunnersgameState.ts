@@ -1,13 +1,16 @@
 import { writable } from 'svelte/store';
 
-type CardColor = ('purple' | 'pink' | 'yellow' | 'cyan' | 'blue' | string);
+export type CardColor = ('purple' | 'pink' | 'yellow' | 'cyan' | 'blue' | string);
 export type NetRunnersGameState = {
   singleplayer: boolean;
   gameInProgress: boolean;
   menuVisible: boolean;
   colorSelectVisible: boolean;
+  betSelectVisible: boolean;
   lanesVisible: boolean;
+  colorOddsCardsVisible: boolean;
   gameControlsVisible: boolean;
+  drawBtnVisible: boolean;
   fullDeck: CardColor[];
   trackCards: CardColor[];
   odds: {
@@ -22,28 +25,28 @@ export type NetRunnersGameState = {
   cardsDrawn: CardColor[];
   p1: {
     name: string;
-    wallet: number;
+    money: number;
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   },
   p2: {
     name: string;
-    wallet: number;
+    money: number;
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   },
   p3: {
     name: string;
-    wallet: number;
+    money: number;
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
   },
   p4: {
     name: string;
-    wallet: number;
+    money: number;
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -55,8 +58,11 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
   gameInProgress: false,
   menuVisible: true,
   colorSelectVisible: false,
+  betSelectVisible: false,
   lanesVisible: false,
+  colorOddsCardsVisible: true,
   gameControlsVisible: false,
+  drawBtnVisible: false,
   fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')],
   trackCards: [],
   odds: {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0},
@@ -64,29 +70,29 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
   roundStarted: false,
   cardsDrawn: [],
   p1: {
-    name: 'should be players actual name from game',
-    wallet: 0,
+    name: 'P1 name',
+    money: 0,
     amountBet: 0,
     colorBet: '',
     points: 0
   },
   p2: {
-    name: 'CPU if singleplayer, hooman if multiplayer',
-    wallet: 0,
+    name: 'P2 name or CPU',
+    money: 0,
     amountBet: 0,
     colorBet: '',
     points: 0
   },
   p3: {
     name: 'CPU Bob',
-    wallet: 0,
+    money: 0,
     amountBet: 0,
     colorBet: '',
     points: 0
   },
   p4: {
     name: 'CPU Quinn',
-    wallet: 0,
+    money: 0,
     amountBet: 0,
     colorBet: '',
     points: 0

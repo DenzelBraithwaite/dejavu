@@ -146,5 +146,6 @@
     max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
+    min-width: 600px;
   }
 </style>
