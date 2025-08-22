@@ -37,9 +37,19 @@
 
   // Ends game
   function endGame() {
-    netRunnersGameState.set({...$netRunnersGameState, gameInProgress: false});
+    netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.gameInProgress = false;
+      $netRunnersGameState.lastWinningColor = returnWinningColor();
+      
+      return $netRunnersGameState;
+    });
+
+    setLosers();
     hideDrawBtn();
-    // TODO:
+    calculateWinnings($netRunnersGameState.p1, 'p1');
+    calculateWinnings($netRunnersGameState.p2, 'p2');
+    calculateWinnings($netRunnersGameState.p3, 'p3');
+    calculateWinnings($netRunnersGameState.p4, 'p4');
   }
 
   // Resets game, restoring original deck.
@@ -48,16 +58,30 @@
       $netRunnersGameState.trackCards = [];
       $netRunnersGameState.cardsDrawn = [];
       $netRunnersGameState.odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
-      [$netRunnersGameState.p1.amountBet, $netRunnersGameState.p1.points] = [0, 0];
-      [$netRunnersGameState.p2.amountBet, $netRunnersGameState.p2.points] = [0, 0];
-      [$netRunnersGameState.p3.amountBet, $netRunnersGameState.p3.points] = [0, 0];
-      [$netRunnersGameState.p4.amountBet, $netRunnersGameState.p4.points] = [0, 0];
-      $netRunnersGameState.p1.colorBet = '';
-      $netRunnersGameState.p2.colorBet = '';
-      $netRunnersGameState.p3.colorBet = '';
-      $netRunnersGameState.p4.colorBet = '';
+      $netRunnersGameState.points = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
       $netRunnersGameState.gameInProgress = false;
       $netRunnersGameState.roundStarted = false;
+
+      // p1
+      [$netRunnersGameState.p1.amountBet, $netRunnersGameState.p1.points] = [0, 0];
+      $netRunnersGameState.p1.colorBet = '';
+      $netRunnersGameState.p1.hasLost = false;
+
+      // p2
+      [$netRunnersGameState.p2.amountBet, $netRunnersGameState.p2.points] = [0, 0];
+      $netRunnersGameState.p2.colorBet = '';
+      $netRunnersGameState.p2.hasLost = false;
+
+      // p3
+      [$netRunnersGameState.p3.amountBet, $netRunnersGameState.p3.points] = [0, 0];
+      $netRunnersGameState.p3.colorBet = '';
+      $netRunnersGameState.p3.hasLost = false;
+
+      // p4
+      [$netRunnersGameState.p4.amountBet, $netRunnersGameState.p4.points] = [0, 0];
+      $netRunnersGameState.p4.colorBet = '';
+      $netRunnersGameState.p4.hasLost = false;
+
       return $netRunnersGameState;
     });
 
@@ -70,6 +94,9 @@
     hideColorSelectScreen();
     hideLanes();
     hideDrawBtn();
+    showColorOdds();
+    hideAllColorsProgress();
+    resetWinningColor();
   }
 
   // Draws initial 7 cards that will represent the track and betting odds
@@ -178,6 +205,7 @@
     showGameControls();
     showDrawBtn();
     showLanes();
+    showAllColorsProgress();
     netRunnersGameState.set({...$netRunnersGameState, roundStarted: true});
   }
   
@@ -197,15 +225,20 @@
       return $netRunnersGameState
     });
     
-    if (hasPlayerFinishedRace()) endGame();
+    if (hasColorFinishedRace()) endGame();
   }
   
   // Moves any card if their color matches the flipped card's color.
   function AdvanceColor(card: CardColor): void {
-    if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
-    if ($netRunnersGameState.p2.colorBet === card) $netRunnersGameState.p2.points +=1;
-    if ($netRunnersGameState.p3.colorBet === card) $netRunnersGameState.p3.points +=1;
-    if ($netRunnersGameState.p4.colorBet === card) $netRunnersGameState.p4.points +=1;
+    netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.points[card as 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue'] += 1;
+      if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
+      if ($netRunnersGameState.p2.colorBet === card) $netRunnersGameState.p2.points +=1;
+      if ($netRunnersGameState.p3.colorBet === card) $netRunnersGameState.p3.points +=1;
+      if ($netRunnersGameState.p4.colorBet === card) $netRunnersGameState.p4.points +=1;
+
+      return $netRunnersGameState;
+    });
   }
 
   // Checks each turn if someone has reached the end
@@ -214,11 +247,69 @@
     return playerPoints.some(p => p === 7);
   }
 
-  // Determines how much the player wins based on the odds of their winning bet.
-  // 50% chance = 1/2 (keep denominator 2) 2x payout. 10% chance is 1/10 so 10x winnings.
-  function calculateWinnings() {
-  // TODO:
+  // Checks each turn if any color (even if nobody bet on it) has reached the end
+  function hasColorFinishedRace(): boolean {
+    return Object.values($netRunnersGameState.points).some(points => points === 7);
   }
+
+  function returnWinningColor(): CardColor {
+    const winningColor = Object.entries($netRunnersGameState.points).find(([color, points]) => points === 7);
+    
+    // ts complaining, but it won't be undefined so it's ok.
+    return winningColor[0];
+  }
+
+  // Determines how much the player wins based on the odds of their winning bet.
+  // In all cases, for every time the color bet appears in the odds lane (reducing odds of winning) gain 25%. e.g. 2/7 odds cards are pink, pink gets + 50% on win.
+  function calculateWinnings(player: {name: string; money: number; amountBet: number; colorBet: string; points: number}, playerNum: 'p1' | 'p2' | 'p3' | 'p4') {
+    if (player.colorBet === $netRunnersGameState.lastWinningColor) {
+      netRunnersGameState.update($netRunnersGameState => {
+        if (didAllPlayersPickSameColor()) {
+          // Bonus 200% from 3x to 5x if all players won with same color.
+          $netRunnersGameState[playerNum].money += Math.round(($netRunnersGameState[playerNum].amountBet * (5 + (calculateBonusBasedOnTrackCardOdds(player.colorBet) * 0.25))));
+          
+        } else if (didOnlyOnePlayerPickThisColor(player.colorBet)) {
+          // Bonus 100% from 3x to 4x if player was the only to pick this color.
+          $netRunnersGameState[playerNum].money += Math.round(($netRunnersGameState[playerNum].amountBet * (4 + (calculateBonusBasedOnTrackCardOdds(player.colorBet) * 0.25))));
+
+        } else if (calculateHowManyPlayersPickedThisColor(player.colorBet) > 1) {          
+          // For every person who also picked that color, reduce reward by 50%
+          $netRunnersGameState[playerNum].money += Math.round(($netRunnersGameState[playerNum].amountBet * (3 + (calculateBonusBasedOnTrackCardOdds(player.colorBet) * 0.25) - (calculateHowManyPlayersPickedThisColor(player.colorBet) * 0.5))));
+        } else {
+          // If no special win conditions, return a simple 3x bet
+          $netRunnersGameState[playerNum].money += Math.round(($netRunnersGameState[playerNum].amountBet * (3 + (calculateBonusBasedOnTrackCardOdds(player.colorBet) * 0.25))));
+        }
+  
+        return $netRunnersGameState;
+      });
+    } else {
+      netRunnersGameState.update($netRunnersGameState => {
+        $netRunnersGameState[playerNum].money -= $netRunnersGameState[playerNum].amountBet;
+        return $netRunnersGameState;
+      });
+    }
+  }
+
+  function didAllPlayersPickSameColor(): boolean {
+    const allColorBets = [$netRunnersGameState.p1.colorBet, $netRunnersGameState.p2.colorBet, $netRunnersGameState.p3.colorBet, $netRunnersGameState.p4.colorBet];
+    return allColorBets.every(c => c === allColorBets[0]);
+  }
+
+  function didOnlyOnePlayerPickThisColor(color: CardColor): boolean {
+    const allColorBets = [$netRunnersGameState.p1.colorBet, $netRunnersGameState.p2.colorBet, $netRunnersGameState.p3.colorBet, $netRunnersGameState.p4.colorBet];
+    return allColorBets.filter(c => c === color).length === 1;
+  }
+
+  function calculateHowManyPlayersPickedThisColor(color: CardColor): number {
+    const allColorBets = [$netRunnersGameState.p1.colorBet, $netRunnersGameState.p2.colorBet, $netRunnersGameState.p3.colorBet, $netRunnersGameState.p4.colorBet];
+    return allColorBets.filter(c => c === color).length - 1; // don't count self
+  }
+
+  // Calculates every time the color bet appears in the odds lane (reducing odds of winning) gain 25%. e.g. 2/7 odds cards are pink, pink gets + 50% on win.
+  function calculateBonusBasedOnTrackCardOdds(color: CardColor): number {
+    return $netRunnersGameState.trackCards.filter(c => c === color).length;
+  }
+  
 
   function setSingleplayer(): void {
     netRunnersGameState.set({...$netRunnersGameState, singleplayer: true})
@@ -233,6 +324,11 @@
     netRunnersGameState.set({...$netRunnersGameState, fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')]});
   }
 
+  // Removes the last winning color so the box-shadow in game area can reset
+  function resetWinningColor(): void {
+    netRunnersGameState.set({...$netRunnersGameState, lastWinningColor: ''});
+  }
+
   // Handles user setting their bet amount, +/- amount.
   function updateBetAmount(amount: 1 | 10 | 100 | 1000 | -1 | -10 | -100 | -1000): void {
     // TODO: handle multiplayer
@@ -245,7 +341,23 @@
     });
   }
 
+  // Determines who has lost and won, this greys out the losing bets.
+  function setLosers(): void {
+    netRunnersGameState.update($netRunnersGameState => {
+      if ($netRunnersGameState.p1.points < 7) $netRunnersGameState.p1.hasLost = true;
+      if ($netRunnersGameState.p2.points < 7) $netRunnersGameState.p2.hasLost = true;
+      if ($netRunnersGameState.p3.points < 7) $netRunnersGameState.p3.hasLost = true;
+      if ($netRunnersGameState.p4.points < 7) $netRunnersGameState.p4.hasLost = true;
+
+      return $netRunnersGameState;
+    });
+  }
+
   // Toggle Visibility
+  function toggleInfo(): void {
+    netRunnersGameState.set({...$netRunnersGameState, infoVisible: !$netRunnersGameState.infoVisible});
+  }
+
   function showGameMenu(): void {
     netRunnersGameState.set({...$netRunnersGameState, menuVisible: true});
   }
@@ -314,6 +426,22 @@
   function hideDrawBtn(): void {
     netRunnersGameState.set({...$netRunnersGameState, drawBtnVisible: false});
   }
+
+  function showColorOdds(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorOddsVisible: true});
+  }
+  
+  function hideColorOdds(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorOddsVisible: false});
+  }
+  
+  function showAllColorsProgress(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorsProgressVisible: true});
+  }
+
+  function hideAllColorsProgress(): void {
+    netRunnersGameState.set({...$netRunnersGameState, colorsProgressVisible: false});
+  }
 </script>
 
 <div transition:blur={{duration: 1000}} class="terminal" class:hide={$location !== 'netrunners'}>
@@ -337,156 +465,242 @@
     </svg>
   </h1>
   <div class="terminal-screen">
-    <div class="lane-cards">
-      {#if $netRunnersGameState.colorOddsCardsVisible}
-        {#each $netRunnersGameState.trackCards as card}
-          <NetRunnersCard largeVersion={true} color={card}/>
-        {:else}
-          {#each Array(7) as _}
-            <NetRunnersCard placeholder={true}/>
+    {#if $netRunnersGameState.infoVisible}
+      <div class="info-screen">
+        <h2><strong>INSTRUCTIONS:</strong></h2>
+        <p>The object of the game is to bet on the fastest hacker. Seven cards will be drawn randomly from the deck, these cards represent the lane cards. Lane cards can be <span class="color-purple">purple</span>, <span class="color-pink">pink</span>, <span class="color-yellow">yellow</span>, <span class="color-cyan">cyan</span> or <span class="color-blue">blue</span>. This represents what cards have been removed from the deck, which determines the odds for that card to be drawn during the game.</p>
+        <br>
+        <p>The more times a card appears above as a lane card, the less likely that color is to win. The higher the risk, the better the reward, but it's not that simple. Each round you'll select how much <span class="color-green">₭rypto</span> you want to bet, below is how winning and losing affects your <span class="color-green">₭rypto</span> balance.</p>
+        <br>
+        <br>
+        <h2><strong>WINNING/LOSING</strong></h2>
+        <p>&bull; A standard win grants you 300% (3x) your bet.</p>
+        <p>&bull; Winning while betting on a color that appeared in the lane section will reward you 25% (0.25) extra per matching card in the lane section.</p>
+        <p>&bull; Winning while nobody else bet on the same color rewards you with an extra 100% (4x total) <span class="color-green">₭rypto</span>.</p>
+        <p>&bull; Winning while other players bet on the same color will reduce your winnings by 50% (0.5x) per person who bet on the same color.</p>
+        <p>&bull; Winning while all others bet on the same color will reward all players with 500% (5x) their bet.</p>
+        <br>
+        <p>&bull; <span class="color-red">LOSING</span> simply removes your amount bet from your <span class="color-green">₭rypto</span> balance. A minimum of 5 <span class="color-green">₭rypto</span> will always be retained for each player.</p>
+        <br>
+        <br>
+        <br>
+        <p><strong>Alright Flop, get back to breaching that network!</strong></p>
+        <br>
+        <button on:click={toggleInfo} class="menu-btn">BACK TO GAME</button>
+      </div>
+    {:else}
+      {#if $netRunnersGameState.lastWinningColor}
+        <p class="winning-message winning-message__{$netRunnersGameState.lastWinningColor}">
+          {$netRunnersGameState.lastWinningColor} WINS
+        </p>
+      {/if}
+
+      <div class="lane-cards">
+        {#if $netRunnersGameState.colorOddsCardsVisible}
+          {#each $netRunnersGameState.trackCards as card}
+            <NetRunnersCard largeVersion={true} color={card}/>
+          {:else}
+            {#each Array(7) as _}
+              <NetRunnersCard placeholder={true}/>
+            {/each}
           {/each}
-        {/each}
-      {:else if $netRunnersGameState.gamblingCardsVisible}
-        <PlayerGamblingCard player={$netRunnersGameState.p1}/>
-        <PlayerGamblingCard player={$netRunnersGameState.p2}/>
-        <PlayerGamblingCard player={$netRunnersGameState.p3}/>
-        <PlayerGamblingCard player={$netRunnersGameState.p4}/>
-      {/if}
+        {:else if $netRunnersGameState.gamblingCardsVisible}
+          <PlayerGamblingCard player={$netRunnersGameState.p1}/>
+          <PlayerGamblingCard player={$netRunnersGameState.p2}/>
+          <PlayerGamblingCard player={$netRunnersGameState.p3}/>
+          <PlayerGamblingCard player={$netRunnersGameState.p4}/>
+        {/if}
 
-      <div class="color-odds-wrapper">
-        <p class="color-odds odds-color-purple">PC -{$netRunnersGameState.odds.purple}%</p>
-        <p class="color-odds odds-color-pink">PM - {$netRunnersGameState.odds.pink}%</p>
-        <p class="color-odds odds-color-yellow">YM - {$netRunnersGameState.odds.yellow}%</p>
-        <p class="color-odds odds-color-cyan">CS - {$netRunnersGameState.odds.cyan}%</p>
-        <p class="color-odds odds-color-blue">BE - {$netRunnersGameState.odds.blue}%</p>
-      </div>
-    </div>
-
-    <div class="game-controls">
-      <button on:click={resetGame} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible} disabled={!$netRunnersGameState.gameControlsVisible}>RESET</button>
-      {#if $netRunnersGameState.roundStarted}
-        <button on:click={drawCard} class="menu-btn" class:btn-disabled={!$netRunnersGameState.drawBtnVisible} disabled={!$netRunnersGameState.drawBtnVisible}>DRAW</button>
-      {/if}
-
-      {#if $netRunnersGameState.colorSelectVisible}
-        <button on:click={showBettingScreen} class="confirm-btn" class:btn-disabled={!$netRunnersGameState.p1.colorBet} disabled={!$netRunnersGameState.p1.colorBet}>CONFIRM</button>
-        <button on:click={shuffleLaneCards} class="menu-btn" class:btn-disabled={!$netRunnersGameState.colorSelectVisible} disabled={!$netRunnersGameState.colorSelectVisible}>SHUFFLE</button>
-      {/if}
-
-      {#if $netRunnersGameState.betSelectVisible}
-        <button on:click={placeBet} class="confirm-btn" class:btn-disabled={$netRunnersGameState.p1.amountBet === 0} disabled={$netRunnersGameState.p1.amountBet === 0}>CONFIRM</button>
-      {/if}
-    </div>
-
-    <div class="game-area">
-      <div class="menu" class:hide={!$netRunnersGameState.menuVisible}>
-        <button class="menu-btn" on:click={setSingleplayer} class:selected-btn={$netRunnersGameState.singleplayer}>SINGLEPLAYER</button>
-        <button class="menu-btn" on:click={setMultiplayer} class:selected-btn={!$netRunnersGameState.singleplayer}>MULTIPLAYER</button>
-        <button class="start-btn" on:click={startGame}>START</button>
+        {#if $netRunnersGameState.colorOddsVisible}
+          <div class="color-odds-wrapper">
+            <p class="color-odds odds-color-purple">PC -{$netRunnersGameState.odds.purple}%</p>
+            <p class="color-odds odds-color-pink">PM - {$netRunnersGameState.odds.pink}%</p>
+            <p class="color-odds odds-color-yellow">YM - {$netRunnersGameState.odds.yellow}%</p>
+            <p class="color-odds odds-color-cyan">CS - {$netRunnersGameState.odds.cyan}%</p>
+            <p class="color-odds odds-color-blue">BE - {$netRunnersGameState.odds.blue}%</p>
+          </div>
+        {/if}
       </div>
 
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-     <!-- TODO: should i use {#if} for all these?TODO: instead of hide... -->
-      <div class:hide={!$netRunnersGameState.colorSelectVisible}>
-        <p class="game-message">SELECT A FACTION</p>
-        <div class="color-select-grid">
-          <div on:click={() => selectColor('purple')} class="card-description-wrapper card-description-wrapper__purple">
-            <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="purple"/>
-            <div class="faction-description">
-              <p class="faction-description__purple">Purple Cougars</p>
-            </div>
-          </div>
-          <div on:click={() => selectColor('pink')} class="card-description-wrapper card-description-wrapper__pink">
-            <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="pink"/>
-            <div class="faction-description">
-              <p class="faction-description__pink">Pink Mice</p>
-            </div>
-          </div>
-          <div on:click={() => selectColor('yellow')} class="card-description-wrapper card-description-wrapper__yellow">
-            <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="yellow"/>
-            <div class="faction-description">
-              <p class="faction-description__yellow">Yellow Monkeys</p>
-            </div>
-          </div>
-          <div on:click={() => selectColor('cyan')} class="card-description-wrapper card-description-wrapper__cyan">
-            <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="cyan"/>
-            <div class="faction-description">
-              <p class="faction-description__cyan">Cyan Sharks</p>
-            </div>
-          </div>
-          <div on:click={() => selectColor('blue')} class="card-description-wrapper card-description-wrapper__blue">
-            <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="blue"/>
-            <div class="faction-description">
-              <p class="faction-description__blue">Blue Eagles</p>
-            </div>
-          </div>
+      <div class="game-controls">
+        <button on:click={toggleInfo} class="menu-btn">INFO</button>
+        <button on:click={resetGame} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible} disabled={!$netRunnersGameState.gameControlsVisible}>RESET</button>
+        {#if $netRunnersGameState.roundStarted}
+          <button on:click={drawCard} class="menu-btn" class:btn-disabled={!$netRunnersGameState.drawBtnVisible} disabled={!$netRunnersGameState.drawBtnVisible}>DRAW</button>
+        {/if}
+
+        {#if $netRunnersGameState.colorSelectVisible}
+          <button on:click={showBettingScreen} class="confirm-btn" class:btn-disabled={!$netRunnersGameState.p1.colorBet} disabled={!$netRunnersGameState.p1.colorBet}>CONFIRM</button>
+          <button on:click={shuffleLaneCards} class="menu-btn" class:btn-disabled={!$netRunnersGameState.colorSelectVisible} disabled={!$netRunnersGameState.colorSelectVisible}>SHUFFLE</button>
+        {/if}
+
+        {#if $netRunnersGameState.betSelectVisible}
+          <button on:click={placeBet} class="confirm-btn" class:btn-disabled={$netRunnersGameState.p1.amountBet === 0} disabled={$netRunnersGameState.p1.amountBet === 0}>CONFIRM</button>
+        {/if}
+      </div>
+
+      <div class="game-area game-area__{$netRunnersGameState.lastWinningColor}">
+        <div class="menu" class:hide={!$netRunnersGameState.menuVisible}>
+          <button class="menu-btn" on:click={setSingleplayer} class:selected-btn={$netRunnersGameState.singleplayer}>SINGLEPLAYER</button>
+          <button class="menu-btn" on:click={setMultiplayer} class:selected-btn={!$netRunnersGameState.singleplayer}>MULTIPLAYER</button>
+          <button class="start-btn" on:click={startGame}>START</button>
         </div>
-      </div>
 
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <div class:hide={!$netRunnersGameState.betSelectVisible}>
-        <p class="game-message">PLACE YOUR BET</p>
-        <div class="bet-select-wrapper">
-          <div on:click={() => updateBetAmount(-1)} class="bet-amount-btn">-1</div>
-          <div on:click={() => updateBetAmount(-10)} class="bet-amount-btn">-10</div>
-          <div on:click={() => updateBetAmount(-100)} class="bet-amount-btn">-100</div>
-          <div on:click={() => updateBetAmount(-1000)} class="bet-amount-btn">-1000</div>
-          <p class="bet-amount">{$netRunnersGameState.p1.amountBet}<span class="color-green">₭</span></p>
-          <div on:click={() => updateBetAmount(1)} class="bet-amount-btn">+1</div>
-          <div on:click={() => updateBetAmount(10)} class="bet-amount-btn">+10</div>
-          <div on:click={() => updateBetAmount(100)} class="bet-amount-btn">+100</div>
-          <div on:click={() => updateBetAmount(1000)} class="bet-amount-btn">+1000</div>
+      <!-- TODO: should i use {#if} for all these?TODO: instead of hide... -->
+        <div class:hide={!$netRunnersGameState.colorSelectVisible}>
+          <p class="game-message">SELECT A FACTION</p>
+          <div class="color-select-grid">
+            <div on:click={() => selectColor('purple')} class="card-description-wrapper card-description-wrapper__purple">
+              <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="purple"/>
+              <div class="faction-description">
+                <p class="faction-description__purple">Purple Cougars</p>
+              </div>
+            </div>
+            <div on:click={() => selectColor('pink')} class="card-description-wrapper card-description-wrapper__pink">
+              <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="pink"/>
+              <div class="faction-description">
+                <p class="faction-description__pink">Pink Mice</p>
+              </div>
+            </div>
+            <div on:click={() => selectColor('yellow')} class="card-description-wrapper card-description-wrapper__yellow">
+              <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="yellow"/>
+              <div class="faction-description">
+                <p class="faction-description__yellow">Yellow Monkeys</p>
+              </div>
+            </div>
+            <div on:click={() => selectColor('cyan')} class="card-description-wrapper card-description-wrapper__cyan">
+              <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="cyan"/>
+              <div class="faction-description">
+                <p class="faction-description__cyan">Cyan Sharks</p>
+              </div>
+            </div>
+            <div on:click={() => selectColor('blue')} class="card-description-wrapper card-description-wrapper__blue">
+              <NetRunnersCard bettingCard={true} backgroundRepeat={false} canHover={true} color="blue"/>
+              <div class="faction-description">
+                <p class="faction-description__blue">Blue Eagles</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div class:hide={!$netRunnersGameState.betSelectVisible}>
+          <p class="game-message">PLACE YOUR BET</p>
+          <div class="bet-select-wrapper">
+            <div on:click={() => updateBetAmount(-1)} class="bet-amount-btn">-1</div>
+            <div on:click={() => updateBetAmount(-10)} class="bet-amount-btn">-10</div>
+            <div on:click={() => updateBetAmount(-100)} class="bet-amount-btn">-100</div>
+            <div on:click={() => updateBetAmount(-1000)} class="bet-amount-btn">-1000</div>
+            <p class="bet-amount">{$netRunnersGameState.p1.amountBet}<span class="color-green">₭</span></p>
+            <div on:click={() => updateBetAmount(1)} class="bet-amount-btn">+1</div>
+            <div on:click={() => updateBetAmount(10)} class="bet-amount-btn">+10</div>
+            <div on:click={() => updateBetAmount(100)} class="bet-amount-btn">+100</div>
+            <div on:click={() => updateBetAmount(1000)} class="bet-amount-btn">+1000</div>
+          </div>
+        </div>
+
+        <div class="track" class:hide={!$netRunnersGameState.lanesVisible}>
+          <div class="card-log row-1">
+            {#each $netRunnersGameState.cardsDrawn as card}
+              <span in:fly={{duration: 500, x: 50}} out:blur>
+                <NetRunnersCard compactVersion={true} color={card}/>
+              </span>
+            {/each}
+            
+            <div class="color-progress-wrapper">
+              <div class="progress-circle-group progress-circle-group__purple">
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 1}></div>
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 2}></div>
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 3}></div>
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 4}></div>
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 5}></div>
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 6}></div>
+                <div class="progress-circle" class:progress-circle__purple={$netRunnersGameState.points.purple >= 7}></div>
+              </div>
+
+              <div class="progress-circle-group progress-circle-group__pink">
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 1}></div>
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 2}></div>
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 3}></div>
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 4}></div>
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 5}></div>
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 6}></div>
+                <div class="progress-circle" class:progress-circle__pink={$netRunnersGameState.points.pink >= 7}></div>
+              </div>
+
+              <div class="progress-circle-group progress-circle-group__yellow">
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 1}></div>
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 2}></div>
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 3}></div>
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 4}></div>
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 5}></div>
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 6}></div>
+                <div class="progress-circle" class:progress-circle__yellow={$netRunnersGameState.points.yellow >= 7}></div>
+              </div>
+
+              <div class="progress-circle-group progress-circle-group__cyan">
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 1}></div>
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 2}></div>
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 3}></div>
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 4}></div>
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 5}></div>
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 6}></div>
+                <div class="progress-circle" class:progress-circle__cyan={$netRunnersGameState.points.cyan >= 7}></div>
+              </div>
+
+              <div class="progress-circle-group progress-circle-group__blue">
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 1}></div>
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 2}></div>
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 3}></div>
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 4}></div>
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 5}></div>
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 6}></div>
+                <div class="progress-circle" class:progress-circle__blue={$netRunnersGameState.points.blue >= 7}></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lane lane__{$netRunnersGameState.p1.colorBet} row-2 col-{$netRunnersGameState.p1.points + 1}" class:lane__grey={$netRunnersGameState.p1.hasLost}>
+            <div class="track-card">
+              <div class="betting-chip betting-chip__{$netRunnersGameState.p1.colorBet}">
+                <p>P1</p>
+              </div>
+              <NetRunnersCard color={$netRunnersGameState.p1.colorBet}/>
+            </div>
+          </div>
+
+          <div class="lane lane__{$netRunnersGameState.p2.colorBet} row-3 col-{$netRunnersGameState.p2.points + 1}" class:lane__grey={$netRunnersGameState.p2.hasLost}>
+            <div class="track-card">
+              <div class="betting-chip betting-chip__{$netRunnersGameState.p2.colorBet}">
+                <p>P2</p>
+              </div>
+              <NetRunnersCard color={$netRunnersGameState.p2.colorBet}/>
+            </div>
+          </div>
+
+          <div class="lane lane__{$netRunnersGameState.p3.colorBet} row-4 col-{$netRunnersGameState.p3.points + 1}" class:lane__grey={$netRunnersGameState.p3.hasLost}>
+            <div class="track-card">
+              <div class="betting-chip betting-chip__{$netRunnersGameState.p3.colorBet}">
+                <p>P3</p>
+              </div>
+              <NetRunnersCard color={$netRunnersGameState.p3.colorBet}/>
+            </div>
+          </div>
+
+          <div class="lane lane__{$netRunnersGameState.p4.colorBet} row-5 col-{$netRunnersGameState.p4.points + 1}" class:lane__grey={$netRunnersGameState.p4.hasLost}>
+            <div class="track-card">
+              <div class="betting-chip betting-chip__{$netRunnersGameState.p4.colorBet}">
+                <p>P4</p>
+              </div>
+              <NetRunnersCard color={$netRunnersGameState.p4.colorBet}/>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div class="track" class:hide={!$netRunnersGameState.lanesVisible}>
-        <div class="lane lane__{$netRunnersGameState.p1.colorBet} row-1 col-{$netRunnersGameState.p1.points + 1}">
-          <div class="track-card">
-            <div class="betting-chip betting-chip__{$netRunnersGameState.p1.colorBet}">
-              <p>P1</p>
-            </div>
-            <NetRunnersCard color={$netRunnersGameState.p1.colorBet}/>
-          </div>
-        </div>
-
-        <div class="lane lane__{$netRunnersGameState.p2.colorBet} row-2 col-{$netRunnersGameState.p2.points + 1}">
-          <div class="track-card">
-            <div class="betting-chip betting-chip__{$netRunnersGameState.p2.colorBet}">
-              <p>P2</p>
-            </div>
-            <NetRunnersCard color={$netRunnersGameState.p2.colorBet}/>
-          </div>
-        </div>
-
-        <div class="lane lane__{$netRunnersGameState.p3.colorBet} row-3 col-{$netRunnersGameState.p3.points + 1}">
-          <div class="track-card">
-            <div class="betting-chip betting-chip__{$netRunnersGameState.p3.colorBet}">
-              <p>P3</p>
-            </div>
-            <NetRunnersCard color={$netRunnersGameState.p3.colorBet}/>
-          </div>
-        </div>
-
-        <div class="lane lane__{$netRunnersGameState.p4.colorBet} row-4 col-{$netRunnersGameState.p4.points + 1}">
-          <div class="track-card">
-            <div class="betting-chip betting-chip__{$netRunnersGameState.p4.colorBet}">
-              <p>P4</p>
-            </div>
-            <NetRunnersCard color={$netRunnersGameState.p4.colorBet}/>
-          </div>
-        </div>
-
-        <div class="card-log row-5">
-          {#each $netRunnersGameState.cardsDrawn as card}
-            <span in:fly={{duration: 500, x: 50}} out:blur>
-              <NetRunnersCard compactVersion={true} color={card}/>
-            </span>
-          {/each}
-        </div>
-      </div>
-    </div>
+    {/if}
   </div>
 </div>
 
@@ -498,6 +712,27 @@
   $yellow: #F2D40E;
   $cyan: #02FBFB;
   $blue: #0779FC;
+
+  // These colors overwrite app.scss
+  .color-purple {
+    color: $purple;
+  }
+
+  .color-pink {
+    color: $pink;
+  }
+
+  .color-yellow {
+    color: $yellow;
+  }
+
+  .color-cyan {
+    color: $cyan;
+  }
+
+  .color-blue {
+    color: $blue;
+  }
 
   .terminal {
     position: relative;
@@ -563,6 +798,12 @@
     }
   }
 
+  .info-screen {
+    padding: 12px;
+    margin-top: 100px;
+    font-size: 1.25rem;
+  }
+
   .title {
     font-size: 2rem;
     font-family: "Orbitron", "Space Mono", sans-serif;
@@ -595,10 +836,31 @@
     height: 70%;
     overflow-y: scroll;
 
+
     &::-webkit-scrollbar {
       width: 0px;
       height: 0px;
     }
+  }
+
+  .game-area__purple {
+    box-shadow: inset 0 0 250px color.scale($purple, $alpha: -50%);
+  }
+
+  .game-area__pink {
+    box-shadow: inset 0 0 250px color.scale($pink, $alpha: -50%);
+  }
+
+  .game-area__yellow {
+    box-shadow: inset 0 0 250px color.scale($yellow, $alpha: -50%);
+  }
+
+  .game-area__cyan {
+    box-shadow: inset 0 0 250px color.scale($cyan, $alpha: -50%);
+  }
+
+  .game-area__blue {
+    box-shadow: inset 0 0 250px color.scale($blue, $alpha: -50%);
   }
   
   .lane-cards {
@@ -732,6 +994,7 @@
 
   .lane {
     border-radius: 0 32px 32px 0;
+    transition: all 0.2s ease-in-out;
   }
 
   .lane__purple {
@@ -753,17 +1016,23 @@
   .lane__blue {
     background-color: color.scale($blue, $alpha: -75%);
   }
+  
+  .lane__grey {
+    opacity: 0.5;
+    background-color: #000;
+    filter: blur(1px);
+  }
 
   .card-log {
     background-color: #0000006c;
-    min-height: 60px; // to avoid area growing when first card added
+    min-height: 70px; // to avoid area growing when first card added
     grid-column: 1 / -1;
 
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
 
-    span:last-child {
+    span:last-of-type {
       scale: 1.1;
       box-shadow: 0 0 12px #fff;
       transform: translateY(-4px);
@@ -950,7 +1219,8 @@
     top: 4px;
   }
 
-  .color-odds-wrapper {
+  .color-odds-wrapper,
+  .color-progress-wrapper {
     background-color: #0000006b;
     border-radius: 0 0 8px 8px;
     width: 100%;
@@ -961,6 +1231,76 @@
     display: flex;
     justify-content: space-evenly;
     align-content: baseline;
+  }
+
+  .progress-circle-group {
+    padding: 0 8px;
+
+    display: flex;
+    justify-content: space-evenly;
+    gap: 2px;
+  }
+
+  .progress-circle-group__purple {
+    border-left: 1px dotted $purple;
+    border-right : 1px dotted $purple;
+  }
+
+  .progress-circle-group__pink {
+    border-left: 1px dotted $pink;
+    border-right : 1px dotted $pink;
+  }
+
+  .progress-circle-group__yellow {
+    border-left: 1px dotted $yellow;
+    border-right : 1px dotted $yellow;
+  }
+
+  .progress-circle-group__cyan {
+    border-left: 1px dotted $cyan;
+    border-right : 1px dotted $cyan;
+  }
+
+  .progress-circle-group__blue {
+    border-left: 1px dotted $blue;
+    border-right : 1px dotted $blue;
+  }
+
+  .progress-circle {
+    height: 12px;
+    width: 12px;
+    border-radius: 90% 10% 90% 90%;
+    border: 1px solid #eeeeeebc;
+  }
+  
+  .progress-circle__purple {
+    border: 1px solid $purple;
+    background-color: darken($purple, 20%);
+    box-shadow: 0 0 6px color.scale($purple, $alpha: -5%);
+  }
+
+  .progress-circle__pink {
+    border: 1px solid $pink;
+    background-color: darken($pink, 20%);
+    box-shadow: 0 0 6px color.scale($pink, $alpha: -5%);
+  }
+
+  .progress-circle__yellow {
+    border: 1px solid $yellow;
+    background-color: darken($yellow, 20%);
+    box-shadow: 0 0 6px color.scale($yellow, $alpha: -5%);
+  }
+
+  .progress-circle__cyan {
+    border: 1px solid $cyan;
+    background-color: darken($cyan, 20%);
+    box-shadow: 0 0 6px color.scale($cyan, $alpha: -5%);
+  }
+
+  .progress-circle__blue {
+    border: 1px solid $blue;
+    background-color: darken($blue, 20%);
+    box-shadow: 0 0 6px color.scale($blue, $alpha: -5%);
   }
 
   .color-odds {
@@ -1004,6 +1344,50 @@
     text-shadow: 0 0 4px $blue;
     border-left: 2px double $blue;
     border-right: 2px double $blue;
+  }
+  
+  .winning-message {
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 3rem;
+    text-wrap: nowrap;
+    font-weight: bold;
+    text-transform: uppercase;
+    z-index: 1;
+
+    position: absolute;
+    right: 50%;
+    bottom: 50%;
+    transform: translate(50%, 50%);
+  }
+
+  .winning-message__purple {
+    border-top: 4px double $purple;
+    border-bottom: 4px double $purple;
+    text-shadow: 0 0 12px $purple;
+  }
+
+  .winning-message__pink {
+    border-top: 4px double $pink;
+    border-bottom: 4px double $pink;
+    text-shadow: 0 0 12px $pink;
+  }
+
+  .winning-message__yellow {
+    border-top: 4px double $yellow;
+    border-bottom: 4px double $yellow;
+    text-shadow: 0 0 12px $yellow;
+  }
+
+  .winning-message__cyan {
+    border-top: 4px double $cyan;
+    border-bottom: 4px double $cyan;
+    text-shadow: 0 0 12px $cyan;
+  }
+
+  .winning-message__blue {
+    border-top: 4px double $blue;
+    border-bottom: 4px double $blue;
+    text-shadow: 0 0 12px $blue;
   }
 
   // To move along the track

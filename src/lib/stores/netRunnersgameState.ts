@@ -1,22 +1,33 @@
 import { writable } from 'svelte/store';
 
-export type CardColor = ('purple' | 'pink' | 'yellow' | 'cyan' | 'blue' | string);
+export type CardColor = ('purple' | 'purple' | 'yellow' | 'cyan' | 'blue' | string);
 export type NetRunnersGameState = {
   singleplayer: boolean;
+  infoVisible: boolean;
   gameInProgress: boolean;
   menuVisible: boolean;
   colorSelectVisible: boolean;
   betSelectVisible: boolean;
   lanesVisible: boolean;
+  colorOddsVisible: boolean;
   colorOddsCardsVisible: boolean;
+  colorsProgressVisible: boolean;
   gameControlsVisible: boolean;
   drawBtnVisible: boolean;
   gamblingCardsVisible: boolean;
+  lastWinningColor: CardColor;
   fullDeck: CardColor[];
   trackCards: CardColor[];
   odds: {
-    pink: number,
     purple: number,
+    pink: number,
+    yellow: number,
+    cyan: number,
+    blue: number
+  };
+  points: {
+    purple: number,
+    pink: number,
     yellow: number,
     cyan: number,
     blue: number
@@ -30,6 +41,7 @@ export type NetRunnersGameState = {
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    hasLost: boolean;
   },
   p2: {
     name: string;
@@ -37,6 +49,7 @@ export type NetRunnersGameState = {
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    hasLost: boolean;
   },
   p3: {
     name: string;
@@ -44,6 +57,7 @@ export type NetRunnersGameState = {
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    hasLost: boolean;
   },
   p4: {
     name: string;
@@ -51,52 +65,62 @@ export type NetRunnersGameState = {
     amountBet: number;
     colorBet: string;
     points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    hasLost: boolean;
   }
 };
 
 export const netRunnersGameState = writable<NetRunnersGameState>({
   singleplayer: true,
+  infoVisible: false,
   gameInProgress: false,
   menuVisible: true,
   colorSelectVisible: false,
   betSelectVisible: false,
   lanesVisible: false,
+  colorOddsVisible: true,
   colorOddsCardsVisible: true,
+  colorsProgressVisible: false,
   gameControlsVisible: false,
   drawBtnVisible: false,
   gamblingCardsVisible: false,
-  fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')],
+  lastWinningColor: '',
+  fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('purple'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')],
   trackCards: [],
-  odds: {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0},
+  odds: {purple: 0, pink: 0, yellow: 0, cyan: 0, blue: 0},
+  points: {purple: 0, pink: 0, yellow: 0, cyan: 0, blue: 0},
   round: 0,
   roundStarted: false,
   cardsDrawn: [],
   p1: {
-    name: 'P1 name',
+    name: 'Kaz',
     money: 1000,
     amountBet: 0,
     colorBet: '',
-    points: 0
+    points: 0,
+    hasLost: false
   },
   p2: {
-    name: 'P2 name or CPU',
-    money: 1000,
+    name: 'CPhUman',
+    money: 500,
     amountBet: 0,
     colorBet: '',
-    points: 0
+    points: 0,
+    hasLost: false
   },
   p3: {
-    name: 'CPU Bob',
-    money: 1000,
+    name: 'Moon',
+    money: 3000,
     amountBet: 0,
     colorBet: '',
-    points: 0
+    points: 0,
+    hasLost: false
   },
   p4: {
-    name: 'CPU Quinn',
-    money: 1000,
+    name: 'Slides',
+    money: 200,
     amountBet: 0,
     colorBet: '',
-    points: 0
+    points: 0,
+    hasLost: false
   } // cpu
 });
