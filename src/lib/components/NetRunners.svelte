@@ -62,6 +62,9 @@
     });
 
     resetDeck();
+    avoidBankruptcy();
+    hideGamblingCards();
+    showColorOddsCards();
     showGameMenu();
     hideGameControls();
     hideColorSelectScreen();
@@ -131,6 +134,39 @@
     }
   }
 
+  // I have them select a num between 5 and their total funds. Then, I ensure it's a multiple of 5, always ending in 0 or 5.
+  function selectBotBets(singleplayer = true): void {
+    netRunnersGameState.update($netRunnersGameState => {
+      if (singleplayer) $netRunnersGameState.p2.amountBet = Math.floor(Math.random() * (($netRunnersGameState.p2.money - 5) / 5)) * 5 + 5;
+      $netRunnersGameState.p3.amountBet = Math.floor(Math.random() * (($netRunnersGameState.p3.money - 5) / 5)) * 5 + 5;
+      $netRunnersGameState.p4.amountBet = Math.floor(Math.random() * (($netRunnersGameState.p4.money - 5) / 5)) * 5 + 5;
+
+      return $netRunnersGameState;
+    })
+  }
+
+  function avoidBankruptcy(): void {
+    if ($netRunnersGameState.p1.money <= 0) netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.p1.money = 5;
+      return $netRunnersGameState;
+    });
+
+    if ($netRunnersGameState.p2.money <= 0) netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.p2.money = 5;
+      return $netRunnersGameState;
+    });
+
+    if ($netRunnersGameState.p3.money <= 0) netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.p3.money = 5;
+      return $netRunnersGameState;
+    });
+
+    if ($netRunnersGameState.p4.money <= 0) netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.p4.money = 5;
+      return $netRunnersGameState;
+    });
+  }
+
   function placeBet(): void {
     hideBettingScreen();
     startRound();
@@ -142,7 +178,6 @@
     showGameControls();
     showDrawBtn();
     showLanes();
-    showColorOddsCards();
     netRunnersGameState.set({...$netRunnersGameState, roundStarted: true});
   }
   
@@ -198,6 +233,18 @@
     netRunnersGameState.set({...$netRunnersGameState, fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')]});
   }
 
+  // Handles user setting their bet amount, +/- amount.
+  function updateBetAmount(amount: 1 | 10 | 100 | 1000 | -1 | -10 | -100 | -1000): void {
+    // TODO: handle multiplayer
+
+    netRunnersGameState.update($netRunnersGameState => {
+      $netRunnersGameState.p1.amountBet += amount;
+      if ($netRunnersGameState.p1.amountBet <= 0) $netRunnersGameState.p1.amountBet = 0;
+      if ($netRunnersGameState.p1.amountBet > $netRunnersGameState.p1.money) $netRunnersGameState.p1.amountBet = $netRunnersGameState.p1.money;
+      return $netRunnersGameState
+    });
+  }
+
   // Toggle Visibility
   function showGameMenu(): void {
     netRunnersGameState.set({...$netRunnersGameState, menuVisible: true});
@@ -213,17 +260,27 @@
 
   function hideColorSelectScreen(): void {
     netRunnersGameState.set({...$netRunnersGameState, colorSelectVisible: false});
-    selectBotColors();
   }
 
   function showBettingScreen(): void {
     hideColorSelectScreen();
     hideColorOddsCards();
+    selectBotColors();
+    selectBotBets();
+    showGamblingCards();
     netRunnersGameState.set({...$netRunnersGameState, betSelectVisible: true});
   }
 
   function hideBettingScreen(): void {
     netRunnersGameState.set({...$netRunnersGameState, betSelectVisible: false});
+  }
+
+  function showGamblingCards(): void {
+    netRunnersGameState.set({...$netRunnersGameState, gamblingCardsVisible: true});
+  }
+
+  function hideGamblingCards(): void {
+    netRunnersGameState.set({...$netRunnersGameState, gamblingCardsVisible: false});
   }
 
   function showLanes(): void {
@@ -289,7 +346,7 @@
             <NetRunnersCard placeholder={true}/>
           {/each}
         {/each}
-      {:else if $netRunnersGameState.betSelectVisible}
+      {:else if $netRunnersGameState.gamblingCardsVisible}
         <PlayerGamblingCard player={$netRunnersGameState.p1}/>
         <PlayerGamblingCard player={$netRunnersGameState.p2}/>
         <PlayerGamblingCard player={$netRunnersGameState.p3}/>
@@ -323,8 +380,8 @@
 
     <div class="game-area">
       <div class="menu" class:hide={!$netRunnersGameState.menuVisible}>
-        <button class="menu-btn" on:click={setSingleplayer} class:btn-selected={$netRunnersGameState.singleplayer}>SINGLEPLAYER</button>
-        <button class="menu-btn" on:click={setMultiplayer} class:btn-selected={!$netRunnersGameState.singleplayer}>MULTIPLAYER</button>
+        <button class="menu-btn" on:click={setSingleplayer} class:selected-btn={$netRunnersGameState.singleplayer}>SINGLEPLAYER</button>
+        <button class="menu-btn" on:click={setMultiplayer} class:selected-btn={!$netRunnersGameState.singleplayer}>MULTIPLAYER</button>
         <button class="start-btn" on:click={startGame}>START</button>
       </div>
 
@@ -367,11 +424,20 @@
         </div>
       </div>
 
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div class:hide={!$netRunnersGameState.betSelectVisible}>
         <p class="game-message">PLACE YOUR BET</p>
-        <!-- TODO: -->
-        <div class="bet-select-grid">
-          <input on:input={() => netRunnersGameState.set({...$netRunnersGameState, p1: {name: 'CPU Bob', money: 0, amountBet: 1, colorBet: 'purple', points: 0}})} type="text">
+        <div class="bet-select-wrapper">
+          <div on:click={() => updateBetAmount(-1)} class="bet-amount-btn">-1</div>
+          <div on:click={() => updateBetAmount(-10)} class="bet-amount-btn">-10</div>
+          <div on:click={() => updateBetAmount(-100)} class="bet-amount-btn">-100</div>
+          <div on:click={() => updateBetAmount(-1000)} class="bet-amount-btn">-1000</div>
+          <p class="bet-amount">{$netRunnersGameState.p1.amountBet}<span class="color-green">₭</span></p>
+          <div on:click={() => updateBetAmount(1)} class="bet-amount-btn">+1</div>
+          <div on:click={() => updateBetAmount(10)} class="bet-amount-btn">+10</div>
+          <div on:click={() => updateBetAmount(100)} class="bet-amount-btn">+100</div>
+          <div on:click={() => updateBetAmount(1000)} class="bet-amount-btn">+1000</div>
         </div>
       </div>
 
@@ -725,10 +791,10 @@
   .menu-btn,
   .confirm-btn,
   .start-btn {
-    padding: 6px;
+    padding: 6px 8px;
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-weight: bold;
-    font-size: 1.25rem;
+    font-size: 1rem;
     border: 2px double $purple;
     border-radius: 2px;
     letter-spacing: 2px;
@@ -746,9 +812,41 @@
     margin: 8px auto 0;
   }
 
-  .btn-selected {
+  .selected-btn {
     background-color: #444;
     color: $cyan;
+  }
+
+  .bet-amount-btn {
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    background-color: darken($purple, 10%);
+    color: $yellow;
+    font-weight: bold;
+    height: 55px;
+    width: 55px;
+    border-radius: 50%;
+    border: 2px solid $purple;
+    box-shadow: 0 2px 8px $purple;
+    transition: 0.1s all ease-in-out;
+    
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    &:hover {
+      cursor: pointer;
+      scale: 1.125;
+      background-color: $yellow;
+      color: $purple;
+    }
+
+    &:active {
+      scale: 1.25;
+    }
+
+    &::selection {
+      background-color: transparent; // avoids highlighting numbers by accident.
+    }
   }
 
   .btn-disabled,
@@ -756,7 +854,34 @@
     cursor: default;
     background-color: #777;
     color: #444;
-    border: none;
+    border: 2px solid transparent;
+  }
+
+  .bet-select-wrapper {
+    width: 100%;
+    position: absolute;
+    bottom: 50%;
+    right: 50%;
+    transform: translate(50%, 50%);
+
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+  }
+
+  .bet-amount {
+    cursor: default;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    background-color: darken($purple, 10%);
+    color: $yellow;
+    padding: 6px 4px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    border-radius:4px;
+    border-bottom: 2px solid $purple;
+    box-shadow: 0 2px 8px $purple;
+    min-width: 100px;
+    text-align: right;
   }
 
   .betting-chip {

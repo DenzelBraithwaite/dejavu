@@ -11,6 +11,7 @@ export type NetRunnersGameState = {
   colorOddsCardsVisible: boolean;
   gameControlsVisible: boolean;
   drawBtnVisible: boolean;
+  gamblingCardsVisible: boolean;
   fullDeck: CardColor[];
   trackCards: CardColor[];
   odds: {
@@ -63,6 +64,7 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
   colorOddsCardsVisible: true,
   gameControlsVisible: false,
   drawBtnVisible: false,
+  gamblingCardsVisible: false,
   fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')],
   trackCards: [],
   odds: {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0},
@@ -71,28 +73,28 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
   cardsDrawn: [],
   p1: {
     name: 'P1 name',
-    money: 0,
+    money: 1000,
     amountBet: 0,
     colorBet: '',
     points: 0
   },
   p2: {
     name: 'P2 name or CPU',
-    money: 0,
+    money: 1000,
     amountBet: 0,
     colorBet: '',
     points: 0
   },
   p3: {
     name: 'CPU Bob',
-    money: 0,
+    money: 1000,
     amountBet: 0,
     colorBet: '',
     points: 0
   },
   p4: {
     name: 'CPU Quinn',
-    money: 0,
+    money: 1000,
     amountBet: 0,
     colorBet: '',
     points: 0
