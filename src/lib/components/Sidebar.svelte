@@ -63,6 +63,11 @@
     <span slot="title">NetRunners</span>
     <span slot="description">Card game, bet on the fastest hacker to win.</span>
   </Item>
+
+  <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'}>
+    <span slot="title">Settings</span>
+    <span slot="description">Music and sound controls</span>
+  </Item>
 </div>
 
 <style lang="scss">

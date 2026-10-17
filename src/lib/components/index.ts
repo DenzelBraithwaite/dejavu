@@ -12,6 +12,7 @@ import NetRunnersCard from './NetRunnersCard.svelte';
 import PlayerGamblingCard from './PlayerGamblingCard.svelte';
 import Sidebar from './Sidebar.svelte';
 import SaveMenu from './SaveMenu.svelte';
+import SettingsMenu from './SettingsMenu.svelte';
 import Terminal from './Terminal.svelte';
 import Toast from './Toast.svelte';
 
@@ -29,6 +30,7 @@ export {
   CharacterMenu,
   ChatPanel,
   SaveMenu,
+  SettingsMenu,
   Sidebar,
   Terminal,
   Toast

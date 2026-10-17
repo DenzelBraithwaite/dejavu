@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
+  import { applySceneAudio } from '../audio/audioManager';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import location from '../stores/location';
@@ -20,6 +21,7 @@
   let clock: number;
   let textValues: Record<string, string | number> = {};
   let lastScrollKey = '';
+  let lastAudioSceneId = '';
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -66,6 +68,11 @@
   $: if (terminalScreenElement && scrollKey !== lastScrollKey) {
     lastScrollKey = scrollKey;
     void scrollTerminalToBottom();
+  }
+
+  $: if (scene && sceneId !== lastAudioSceneId) {
+    lastAudioSceneId = sceneId;
+    applySceneAudio(scene);
   }
 
   $: if (sceneId) {

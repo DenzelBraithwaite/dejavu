@@ -38,6 +38,8 @@
  * @property {string} [src]
  * @property {string} [alt]
  * @property {string} [background]
+ * @property {string | null} [music]
+ * @property {string} [sound]
  * @property {boolean} [clearTerminal]
  * @property {string} [minigameId]
  * @property {Record<string, string>} [resultNext]

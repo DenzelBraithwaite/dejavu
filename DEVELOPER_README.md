@@ -348,6 +348,31 @@ Place tracked runtime artwork in `public/`. The future visual builder will uploa
 
 Per-node terminal themes are part of the planned builder schema but are not yet rendered by the current runtime.
 
+## Music and sound effects
+
+Put looping background music in `public/audio/music/` and one-shot effects in `public/audio/sounds/`. MP3 and OGG files are both suitable for browser playback.
+
+A scene can change the current music and trigger a sound:
+
+```js
+defineScene({
+  id: 'chapter-01.alarm',
+  type: 'dialogue',
+  audience: 'both',
+  text: 'The facility alarm tears through the corridor.',
+  music: '/audio/music/facility-escape.mp3',
+  sound: '/audio/sounds/alarm-start.mp3',
+  next: 'chapter-01.run'
+})
+```
+
+- A `music` path replaces the current track and loops it.
+- `music: null` stops the current music.
+- Omitting `music` keeps the existing track playing.
+- A `sound` path plays once when the scene begins.
+- Music and sound volumes are independent, local to each browser, and persisted in `localStorage`.
+- Playback failures caused by browser autoplay rules are ignored safely.
+
 ## Minigame nodes
 
 The scene contract reserves `minigame` nodes:

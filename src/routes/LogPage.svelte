@@ -5,6 +5,7 @@
     Journal,
     NetRunners,
     SaveMenu,
+    SettingsMenu,
     Terminal
   } from '../lib/components';
 </script>
@@ -16,6 +17,7 @@
   <BagMenu />
   <SaveMenu />
   <NetRunners />
+  <SettingsMenu />
 </div>
 
 <style lang="scss">
