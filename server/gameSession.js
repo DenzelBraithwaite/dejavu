@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { getScene, initialSceneIds } from '../src/lib/story/storyRegistry.js';
 
 const PLAYER_IDS = ['p1', 'p2'];
+const DEFAULT_TIMED_CHOICE_DURATION_MS = 20_000;
 
 const DEFAULT_STATS = {
   p1: {
@@ -226,6 +227,15 @@ function handleAdvance(state, playerId, scene, action) {
 }
 
 function handleChoice(state, playerId, scene, action) {
+  if (scene.type === 'timed-choice' && action.type === 'start-timer') {
+    if (!state.deadlines[playerId]) {
+      state.deadlines[playerId] = Date.now()
+        + (scene.durationMs ?? DEFAULT_TIMED_CHOICE_DURATION_MS);
+    }
+
+    return actionSuccess();
+  }
+
   if (action.type !== 'choose') {
     return actionError('This scene requires a choice.');
   }
@@ -293,7 +303,7 @@ function handleConversation(state, playerId, scene, action) {
   const conversation = initializeConversation(state, scene);
 
   if (conversation.activePlayer !== playerId) {
-    return actionError('Wait for the other player to reply.');
+    return actionError('Wait for the other player to speak.');
   }
 
   const message = String(action.value ?? '').trim().slice(0, 300);
@@ -497,10 +507,6 @@ export function initializeDeadlines(state) {
   for (const playerId of PLAYER_IDS) {
     const scene = getScene(state.currentScene[playerId]);
 
-    if (scene?.type === 'timed-choice' && !state.deadlines[playerId]) {
-      state.deadlines[playerId] = Date.now() + scene.durationMs;
-    }
-
     if (scene?.type !== 'timed-choice') {
       delete state.deadlines[playerId];
     }
@@ -614,15 +620,14 @@ function initializeConversation(state, scene) {
     return conversation;
   }
 
-  let activePlayer = scene.firstPlayer === 'p1' || scene.firstPlayer === 'p2'
+  const preferredFirstPlayer = scene.firstPlayer === 'p1' || scene.firstPlayer === 'p2'
     ? scene.firstPlayer
     : PLAYER_IDS[Math.floor(Math.random() * PLAYER_IDS.length)];
-  const requiredMessages = getRequiredMessageCounts(scene, activePlayer);
-  const otherPlayer = activePlayer === 'p1' ? 'p2' : 'p1';
-
-  if (requiredMessages[activePlayer] === 0 && requiredMessages[otherPlayer] > 0) {
-    activePlayer = otherPlayer;
-  }
+  const requiredMessages = getRequiredMessageCounts(scene, preferredFirstPlayer);
+  const activePlayer = getValidFirstSpeaker(
+    preferredFirstPlayer,
+    requiredMessages
+  );
 
   const conversation = {
     activePlayer,
@@ -682,17 +687,28 @@ function hasConversationFinished(conversation) {
   );
 }
 
-function getNextConversationSpeaker(currentPlayer, conversation) {
-  const otherPlayer = currentPlayer === 'p1' ? 'p2' : 'p1';
+function getValidFirstSpeaker(preferredPlayer, requiredMessages) {
+  const difference = requiredMessages.p1 - requiredMessages.p2;
 
-  if (
-    conversation.messageCounts[otherPlayer]
-    < conversation.requiredMessages[otherPlayer]
-  ) {
-    return otherPlayer;
+  if (Math.abs(difference) > 1) {
+    throw new Error(
+      'Conversation message quotas must differ by no more than one to alternate turns.'
+    );
   }
 
-  return currentPlayer;
+  if (difference === 1) {
+    return 'p1';
+  }
+
+  if (difference === -1) {
+    return 'p2';
+  }
+
+  return preferredPlayer;
+}
+
+function getNextConversationSpeaker(currentPlayer, conversation) {
+  return currentPlayer === 'p1' ? 'p2' : 'p1';
 }
 
 function addUnique(items, value) {

@@ -22,6 +22,7 @@
   let textValues: Record<string, string | number> = {};
   let lastScrollKey = '';
   let lastAudioSceneId = '';
+  let diceTerminalOpen = false;
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -79,6 +80,11 @@
     typingComplete = false;
     inputValue = '';
     errorMessage = '';
+    diceTerminalOpen = false;
+  }
+
+  $: if (pendingDice) {
+    diceTerminalOpen = true;
   }
 
   $: if (
@@ -174,6 +180,10 @@
     });
   }
 
+  function openDiceTerminal(): void {
+    diceTerminalOpen = true;
+  }
+
   function closeDiceTerminal(): void {
     if (!scene) {
       return;
@@ -183,6 +193,17 @@
       type: 'close-dice',
       sceneId: scene.id
     });
+  }
+
+  function completeTyping(): void {
+    typingComplete = true;
+
+    if (scene?.type === 'timed-choice' && !remainingMs) {
+      sendAction({
+        type: 'start-timer',
+        sceneId: scene.id
+      });
+    }
   }
 
   function launchMinigame(): void {
@@ -262,7 +283,7 @@
           timing: scene.speaker
             ? typewriterProfiles.dialogue
             : typewriterProfiles.narration,
-          onComplete: () => typingComplete = true
+          onComplete: completeTyping
         }}
         aria-live="polite"
       ></p>
@@ -272,13 +293,6 @@
           <p>
             <strong>{$campaignState.players[conversation.activePlayer].name}</strong>
             has the floor
-          </p>
-          <p>
-            {$campaignState.players.p1.name}
-            {conversation.messageCounts.p1}/{conversation.requiredMessages.p1}
-            ·
-            {$campaignState.players.p2.name}
-            {conversation.messageCounts.p2}/{conversation.requiredMessages.p2}
           </p>
         </div>
 
@@ -305,7 +319,7 @@
           Continue
         </button>
       {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
-        {#if scene.type === 'timed-choice'}
+        {#if scene.type === 'timed-choice' && typingComplete && remainingMs}
           <p class="timer" aria-live="polite">
             AUTO-SELECT IN {remainingSeconds}s
           </p>
@@ -344,7 +358,7 @@
         </button>
       {:else if scene.type === 'conversation'}
         {#if conversation?.activePlayer === playerId}
-          <label class="input-label" for="conversation-input">Your reply</label>
+          <label class="input-label" for="conversation-input">Say something</label>
           <div class="input-row">
             <input
               id="conversation-input"
@@ -363,7 +377,7 @@
           </div>
         {:else}
           <button type="button" disabled>
-            Waiting for response
+            Waiting for the other player to speak
           </button>
         {/if}
       {:else if scene.type === 'dice-check'}
@@ -372,8 +386,8 @@
           <span>{scene.stat?.toUpperCase()}</span>
           <span>TARGET {scene.threshold}</span>
         </div>
-        <button type="button" disabled={!typingComplete} on:click={rollDice}>
-          Roll D{scene.die}
+        <button type="button" disabled={!typingComplete} on:click={openDiceTerminal}>
+          Prepare D{scene.die} roll
         </button>
       {:else if scene.type === 'vote'}
         {#if playerId && vote?.[playerId]}
@@ -413,8 +427,17 @@
     </div>
   {/if}
 
-  {#if pendingDice}
-    <DiceTerminal result={pendingDice} on:close={closeDiceTerminal} />
+  {#if diceTerminalOpen && scene?.type === 'dice-check' && player}
+    <DiceTerminal
+      die={scene.die ?? 20}
+      stat={scene.stat ?? 'unknown'}
+      base={Number(player.stats[scene.stat ?? ''] ?? 0)}
+      luck={Number(player.stats.luck ?? 0)}
+      threshold={scene.threshold ?? 0}
+      result={pendingDice}
+      on:roll={rollDice}
+      on:close={closeDiceTerminal}
+    />
   {/if}
 </section>
 

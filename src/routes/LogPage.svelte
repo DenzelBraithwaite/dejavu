@@ -1,10 +1,8 @@
 <script lang="ts">
   import {
-    BagMenu,
     CharacterMenu,
     Journal,
     NetRunners,
-    SaveMenu,
     SettingsMenu,
     Terminal
   } from '../lib/components';
@@ -14,8 +12,6 @@
   <Terminal />
   <CharacterMenu />
   <Journal />
-  <BagMenu />
-  <SaveMenu />
   <NetRunners />
   <SettingsMenu />
 </div>

@@ -210,7 +210,7 @@ Both nodes must use the same `checkpointId` and destination.
 
 ## Fixed-length player conversations
 
-Conversation nodes represent characters speaking while they are physically together. The server selects who has the floor, prevents the waiting player from sending, tracks each player's quota, and advances both players as soon as both quotas are complete.
+Conversation nodes represent characters speaking while they are physically together. The server selects who has the floor, prevents the waiting player from sending, tracks each player's quota, and advances both players as soon as both quotas are complete. The runtime never displays the remaining message count to players.
 
 ```js
 defineScene({
@@ -227,7 +227,7 @@ defineScene({
 })
 ```
 
-Use `firstPlayer: 'p1'`, `firstPlayer: 'p2'`, or `firstPlayer: 'random'`. Omitting `firstPlayer` also lets the server choose randomly. `messagesPerPlayer` supports equal conversations such as three messages each or intentionally uneven conversations such as three from Player 1 and two from Player 2.
+Use `firstPlayer: 'p1'`, `firstPlayer: 'p2'`, or `firstPlayer: 'random'`. Omitting `firstPlayer` also lets the server choose randomly. `messagesPerPlayer` supports equal conversations such as three messages each or intentionally uneven conversations such as three from Player 1 and two from Player 2. Quotas may differ by at most one so turns can always alternate. When the quotas differ, the player with the extra message necessarily speaks first.
 
 The older `messageCount` field remains supported. Its total is divided across alternating turns, with the first speaker receiving the extra message when the total is odd.
 
@@ -255,7 +255,7 @@ defineScene({
 
 Supported dice are D4, D6, D8, D10, D12, and D20. A dice outcome is stored in the decision log.
 
-Rolling opens the dedicated dice terminal. It animates the configured die and types the die, base stat, luck, threshold, total, and outcome calculation. The campaign remains on the dice node until the player presses **Close terminal**, so a result cannot be skipped accidentally.
+Opening a roll displays the dedicated dice terminal and types the die, base stat, luck, and threshold briefing. The player must then press **Roll** inside that terminal. The configured die shakes before the server rolls it, then the terminal types the color-coded result, total, and outcome calculation. The campaign remains on the dice node until the player presses **Close terminal**, so a result cannot be skipped accidentally.
 
 ## Neuro-Link Chat mod
 
@@ -301,7 +301,7 @@ defineScene({
 
 ## Timed choices
 
-Timed choices store their deadline on the server. A fallback is applied even if a browser is slow or stops responding.
+Timed choices store their deadline on the server. The browser signals that the scene has finished typing before the countdown begins, so reading time is never deducted. A fallback is applied even if a browser is slow or stops responding. If `durationMs` is omitted, the countdown defaults to 20 seconds.
 
 ```js
 defineScene({
@@ -309,7 +309,7 @@ defineScene({
   type: 'timed-choice',
   audience: 'p2',
   text: 'Something moves in the dark.',
-  durationMs: 8000,
+  durationMs: 20000,
   fallbackChoiceId: 'freeze',
   choices: [
     {
@@ -371,6 +371,7 @@ defineScene({
 - Omitting `music` keeps the existing track playing.
 - A `sound` path plays once when the scene begins.
 - Music and sound volumes are independent, local to each browser, and persisted in `localStorage`.
+- Music and sound effects are muted by default until the local player enables them.
 - Playback failures caused by browser autoplay rules are ignored safely.
 
 ## Minigame nodes

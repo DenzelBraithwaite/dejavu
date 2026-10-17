@@ -36,16 +36,6 @@
     <span slot="description">Transcript and decisions</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'bag')} collapsed={!sidebarExpanded} color={'green'} iconType={'bag'}>
-    <span slot="title">Bag</span>
-    <span slot="description">Inventory and contacts</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'grey'} iconType={'save'}>
-    <span slot="title">Saves</span>
-    <span slot="description">Save or restore campaign</span>
-  </Item>
-
   {#if chatAvailable}
     <Item
       on:click={() => createEvent('toggle-chat')}

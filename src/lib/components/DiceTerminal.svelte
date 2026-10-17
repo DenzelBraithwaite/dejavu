@@ -1,34 +1,105 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { fade, scale } from 'svelte/transition';
-  import { typewriter, typewriterProfiles } from '../actions/typewriter';
+  import {
+    richTypewriter,
+    typewriterProfiles,
+    type TypewriterSegment
+  } from '../actions/typewriter';
   import type { DiceRollResult } from '../stores/campaign';
   import { PolyhedralDice } from '../stores/dice';
   import Dice from './Dice.svelte';
 
-  export let result: DiceRollResult;
+  export let die: 4 | 6 | 8 | 10 | 12 | 20;
+  export let stat: string;
+  export let base: number;
+  export let luck: number;
+  export let threshold: number;
+  export let result: DiceRollResult | undefined = undefined;
 
   const dispatch = createEventDispatcher<{
+    roll: void;
     close: void;
   }>();
 
+  let briefingTextElement: HTMLElement;
   let resultTextElement: HTMLElement;
-  let typingComplete = false;
+  let briefingComplete = false;
+  let resultTypingComplete = false;
+  let rolling = false;
+  let rollTimer: number;
 
-  $: dice = new PolyhedralDice(result.die, `/d${result.die}-dice.png`);
-  $: outcome = result.successful ? 'You were successful.' : 'You were unsuccessful.';
-  $: resultText = [
-    `You are rolling a D${result.die} die for your ${result.stat} stat.`,
-    `Your ${result.stat} base stat is ${result.base}.`,
-    `Your luck stat is ${result.luck} and will be added to your total roll.`,
-    `You need a total of at least ${result.threshold}.`,
-    `You roll the die and get a ${result.roll}!`,
-    `${result.roll} (roll) + ${result.base} (${result.stat}) + ${result.luck} (luck) gives you a total of ${result.total}.`,
-    outcome
-  ].join('\n\n');
+  $: dice = new PolyhedralDice(die, `/d${die}-dice.png`);
+  $: briefingSegments = createBriefingSegments();
+  $: resultSegments = result ? createResultSegments(result) : [];
+  $: if (result) {
+    rolling = false;
+    resultTypingComplete = false;
+  }
+
+  onDestroy(() => {
+    window.clearTimeout(rollTimer);
+  });
+
+  function beginRoll(): void {
+    if (!briefingComplete || rolling || result) {
+      return;
+    }
+
+    rolling = true;
+    rollTimer = window.setTimeout(() => {
+      dispatch('roll');
+    }, 750);
+  }
 
   function skipTyping(): void {
-    resultTextElement?.dispatchEvent(new CustomEvent('typewriterskip'));
+    const activeTextElement = result
+      ? resultTextElement
+      : briefingTextElement;
+
+    activeTextElement?.dispatchEvent(new CustomEvent('typewriterskip'));
+  }
+
+  function createBriefingSegments(): TypewriterSegment[] {
+    return [
+      { text: 'You are rolling a ' },
+      { text: `D${die}`, className: 'dice-value' },
+      { text: ' die for your ' },
+      { text: stat, className: 'stat-value' },
+      { text: ' stat.\n\nYour ' },
+      { text: stat, className: 'stat-value' },
+      { text: ' base stat is ' },
+      { text: String(base), className: 'stat-value' },
+      { text: '.\n\nYour ' },
+      { text: 'luck', className: 'luck-value' },
+      { text: ' stat is ' },
+      { text: String(luck), className: 'luck-value' },
+      { text: ' and will be added to your total roll.\n\nYou need a total of at least ' },
+      { text: String(threshold), className: 'threshold-value' },
+      { text: '.' }
+    ];
+  }
+
+  function createResultSegments(rollResult: DiceRollResult): TypewriterSegment[] {
+    return [
+      { text: 'You roll the die and get a ' },
+      { text: String(rollResult.roll), className: 'roll-value' },
+      { text: '!\n\n' },
+      { text: String(rollResult.roll), className: 'roll-value' },
+      { text: ' (roll) + ' },
+      { text: String(rollResult.base), className: 'stat-value' },
+      { text: ` (${rollResult.stat}) + ` },
+      { text: String(rollResult.luck), className: 'luck-value' },
+      { text: ' (luck) gives you a total of ' },
+      { text: String(rollResult.total), className: 'total-value' },
+      { text: '.\n\n' },
+      {
+        text: rollResult.successful
+          ? 'You were successful.'
+          : 'You were unsuccessful.',
+        className: rollResult.successful ? 'outcome-success' : 'outcome-failure'
+      }
+    ];
   }
 </script>
 
@@ -42,40 +113,65 @@
   >
     <header class="dice-terminal-header">
       <span id="dice-terminal-title">DEJAVU://DICE_PROTOCOL</span>
-      <span>D{result.die}</span>
+      <strong class="dice-value">D{die}</strong>
     </header>
 
     <div class="dice-terminal-body">
-      <div class="dice-wrapper" aria-hidden="true">
+      <div
+        class="dice-wrapper"
+        class:rolling
+        class:rolled={Boolean(result)}
+        aria-hidden="true"
+      >
         <Dice {dice} />
       </div>
 
       <div class="terminal-text">
-        <p
-          class:successful={result.successful}
-          class:unsuccessful={!result.successful}
-          bind:this={resultTextElement}
-          use:typewriter={{
-            text: resultText,
-            timing: typewriterProfiles.system,
-            onComplete: () => typingComplete = true
-          }}
-          aria-live="polite"
-        ></p>
+        {#if result}
+          <p
+            bind:this={resultTextElement}
+            use:richTypewriter={{
+              segments: resultSegments,
+              timing: typewriterProfiles.system,
+              onComplete: () => resultTypingComplete = true
+            }}
+            aria-live="polite"
+          ></p>
+        {:else}
+          <p
+            bind:this={briefingTextElement}
+            use:richTypewriter={{
+              segments: briefingSegments,
+              timing: typewriterProfiles.system,
+              onComplete: () => briefingComplete = true
+            }}
+            aria-live="polite"
+          ></p>
+        {/if}
       </div>
 
     </div>
 
     <footer class="dice-terminal-controls">
-      <button
-        type="button"
-        disabled={!typingComplete}
-        on:click={() => dispatch('close')}
-      >
-        Close terminal
-      </button>
+      {#if result}
+        <button
+          type="button"
+          disabled={!resultTypingComplete}
+          on:click={() => dispatch('close')}
+        >
+          Close terminal
+        </button>
+      {:else}
+        <button
+          type="button"
+          disabled={!briefingComplete || rolling}
+          on:click={beginRoll}
+        >
+          {rolling ? 'Rolling...' : `Roll D${die}`}
+        </button>
+      {/if}
 
-      {#if !typingComplete}
+      {#if (!result && !briefingComplete) || (result && !resultTypingComplete)}
         <button class="skip-button" type="button" on:click={skipTyping}>
           Skip typing
         </button>
@@ -146,10 +242,17 @@
 
   .dice-wrapper {
     margin-bottom: 20px;
-    animation: dice-roll 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
 
     display: flex;
     justify-content: center;
+  }
+
+  .dice-wrapper.rolling {
+    animation: dice-shake 180ms ease-in-out infinite;
+  }
+
+  .dice-wrapper.rolled {
+    animation: dice-settle 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .terminal-text {
@@ -166,8 +269,44 @@
       white-space: pre-wrap;
     }
 
-    .successful::first-line {
-      color: #e8edf6;
+    :global(.dice-value) {
+      color: #02fbfb;
+      font-weight: 800;
+    }
+
+    :global(.stat-value) {
+      color: #9dffa6;
+      font-weight: 800;
+    }
+
+    :global(.luck-value) {
+      color: #ff75fd;
+      font-weight: 800;
+    }
+
+    :global(.threshold-value) {
+      color: #f8e69a;
+      font-weight: 800;
+    }
+
+    :global(.roll-value) {
+      color: #fb716d;
+      font-weight: 800;
+    }
+
+    :global(.total-value) {
+      color: #6dc2fb;
+      font-weight: 800;
+    }
+
+    :global(.outcome-success) {
+      color: #9dffa6;
+      font-weight: 800;
+    }
+
+    :global(.outcome-failure) {
+      color: #e58271;
+      font-weight: 800;
     }
   }
 
@@ -218,10 +357,20 @@
     }
   }
 
-  @keyframes dice-roll {
+  @keyframes dice-shake {
+    0%,
+    100% {
+      transform: translateX(-5px) rotate(-4deg);
+    }
+
+    50% {
+      transform: translateX(5px) rotate(4deg);
+    }
+  }
+
+  @keyframes dice-settle {
     0% {
-      opacity: 0;
-      transform: rotate(-18deg) scale(0.5);
+      transform: rotate(-18deg) scale(0.84);
     }
 
     45% {
@@ -239,7 +388,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dice-wrapper {
+    .dice-wrapper.rolling,
+    .dice-wrapper.rolled {
       animation: none;
     }
   }

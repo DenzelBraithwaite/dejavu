@@ -76,13 +76,13 @@ The terminal uses a game-specific typewriter rather than `typed.js`. It supports
 
 ### Audio settings and scene audio
 
-Each browser stores independent music and sound-effect mute and volume settings. Story scenes can start or stop looping music and trigger a one-shot sound. Audio assets live under `public/audio/music` and `public/audio/sounds`; the folders currently contain no playable assets.
+Each browser stores independent music and sound-effect mute and volume settings. Both channels start muted by default. Story scenes can start or stop looping music and trigger a one-shot sound. Audio assets live under `public/audio/music` and `public/audio/sounds`; the folders currently contain no playable assets.
 
-### Bag, journal, characters, and saves
+### Character, journal, settings, and saves
 
 - The journal displays decisions and transcript entries.
-- The bag displays inventory and known contacts.
-- The character screen reads the server-owned local player record.
+- The character screen displays stats, inventory, installed mods, and known contacts in one scrollable view.
+- Save and load controls live beneath the local audio controls in Settings.
 - Versioned JSON saves are stored by the LAN host in `data/saves/`.
 - Loading a save restores the shared campaign for both clients.
 

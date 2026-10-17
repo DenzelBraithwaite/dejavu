@@ -9,9 +9,9 @@ export type AudioSettings = {
 
 const STORAGE_KEY = 'dejavu-audio-settings';
 const defaultSettings: AudioSettings = {
-  musicEnabled: true,
+  musicEnabled: false,
   musicVolume: 0.6,
-  soundsEnabled: true,
+  soundsEnabled: false,
   soundsVolume: 0.8
 };
 

@@ -160,7 +160,6 @@ export const prologueScenes = [
     type: 'timed-choice',
     audience: 'p1',
     text: 'An explosion shakes the facility. Emergency lights flood the wing in red as the RAID escort reaches for your wheelchair.',
-    durationMs: 12000,
     fallbackChoiceId: 'observe',
     choices: [
       {
@@ -194,7 +193,6 @@ export const prologueScenes = [
     type: 'timed-choice',
     audience: 'p2',
     text: 'An explosion shakes the facility. Emergency lights flood the wing in red as the RAID escort reaches for your wheelchair.',
-    durationMs: 12000,
     fallbackChoiceId: 'observe',
     choices: [
       {

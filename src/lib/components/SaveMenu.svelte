@@ -2,12 +2,14 @@
   import { socket } from '../socket';
   import location from '../stores/location';
 
+  export let embedded = false;
+
   let saveName = 'campaign-01';
   let saves: string[] = [];
   let statusMessage = '';
   let loading = false;
 
-  $: if ($location === 'saves') {
+  $: if ($location === (embedded ? 'settings' : 'saves')) {
     refreshSaves();
   }
 
@@ -60,11 +62,18 @@
   }
 </script>
 
-<section class="saves" class:hide={$location !== 'saves'} aria-labelledby="saves-title">
-  <header>DEJAVU://SAVE ARCHIVE</header>
+<section
+  class="saves"
+  class:embedded
+  class:hide={!embedded && $location !== 'saves'}
+  aria-labelledby="saves-title"
+>
+  {#if !embedded}
+    <header>DEJAVU://SAVE ARCHIVE</header>
+  {/if}
 
   <div class="saves-content">
-    <h1 id="saves-title">Campaign saves</h1>
+    <h2 id="saves-title">Campaign saves</h2>
     <p class="description">
       Saves are versioned JSON files stored by the LAN host. Loading affects both players.
     </p>
@@ -125,9 +134,32 @@
     overflow-y: auto;
   }
 
-  h1 {
+  h2 {
     margin-bottom: 10px;
     font-family: "Orbitron", "Space Mono", sans-serif;
+  }
+
+  .saves.embedded {
+    width: auto;
+    height: auto;
+    margin-top: 44px;
+    overflow: visible;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid #2c3b54;
+    border-radius: 0;
+    box-shadow: none;
+
+    .saves-content {
+      height: auto;
+      padding: 34px 0 0;
+      overflow: visible;
+    }
+
+    h2 {
+      color: #e8edf6;
+      font-size: clamp(1.35rem, 3vw, 2rem);
+    }
   }
 
   .description {
