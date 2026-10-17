@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export type CardColor = ('purple' | 'purple' | 'yellow' | 'cyan' | 'blue' | string);
+export type CardColor = 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue' | string;
 export type NetRunnersGameState = {
   singleplayer: boolean;
   infoVisible: boolean;
@@ -40,7 +40,7 @@ export type NetRunnersGameState = {
     money: number;
     amountBet: number;
     colorBet: string;
-    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    points: number;
     hasLost: boolean;
   },
   p2: {
@@ -48,7 +48,7 @@ export type NetRunnersGameState = {
     money: number;
     amountBet: number;
     colorBet: string;
-    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    points: number;
     hasLost: boolean;
   },
   p3: {
@@ -56,7 +56,7 @@ export type NetRunnersGameState = {
     money: number;
     amountBet: number;
     colorBet: string;
-    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    points: number;
     hasLost: boolean;
   },
   p4: {
@@ -64,7 +64,7 @@ export type NetRunnersGameState = {
     money: number;
     amountBet: number;
     colorBet: string;
-    points: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    points: number;
     hasLost: boolean;
   }
 };
@@ -84,7 +84,7 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
   drawBtnVisible: false,
   gamblingCardsVisible: false,
   lastWinningColor: '',
-  fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('purple'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')],
+  fullDeck: [...Array(15).fill('purple'), ...Array(15).fill('pink'), ...Array(15).fill('yellow'), ...Array(15).fill('cyan'), ...Array(15).fill('blue')],
   trackCards: [],
   odds: {purple: 0, pink: 0, yellow: 0, cyan: 0, blue: 0},
   points: {purple: 0, pink: 0, yellow: 0, cyan: 0, blue: 0},

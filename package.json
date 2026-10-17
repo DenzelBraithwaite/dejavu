@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server.js",
     "build": "rm -rf public/assets/ && vite build && shx cp -r dist/assets public/assets && shx cp dist/index.html public/index.html",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json"
@@ -25,7 +26,6 @@
     "sass": "^1.77.8",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
-    "svelte-routing": "^2.13.0",
-    "typed.js": "^2.1.0"
+    "svelte-routing": "^2.13.0"
   }
 }

@@ -1,94 +1,141 @@
 <script lang="ts">
-  // Hooks
-  import { createEventDispatcher } from 'svelte';
-
-  // Transitions
   import { blur } from 'svelte/transition';
-
-  // stores
-  import { type Writable } from 'svelte/store';
-  import { socket } from '../socket';
-  import { player1, player2, type Player } from '../stores/players';
-  import { type GameState, currentGameState } from '../stores/gameState';
-
-  // Props
-  export let location: Writable<string>;
-
-  const createEvent = createEventDispatcher();
-  const player: Player = returnPlayer();
-
-  function returnPlayer(): Player {
-    return $currentGameState.playingAs === 'male' ? $player1 : $player2;
-  }
+  import { campaignState, localPlayer } from '../stores/campaign';
+  import location from '../stores/location';
+  import { sessionState } from '../stores/session';
 </script>
 
-<div transition:blur={{duration: 1000}} class="terminal" class:hide={$location !== 'character'}>
-  <div class="terminal-screen">
-    <h1>Character Menu</h1>
-    <br>
-    <p><span class="color-cornflower-blue">Association:</span> Solid States</p>
-    <p><span class="color-cornflower-blue">Name:</span> {player.name}</p>
-    <p><span class="color-cornflower-blue">Muscles:</span> {player.stats.muscles}</p>
-    <p><span class="color-cornflower-blue">Toughness:</span> {player.stats.toughness}</p>
-    <p><span class="color-cornflower-blue">Speed:</span> {player.stats.speed}</p>
-    <p><span class="color-cornflower-blue">Stealth:</span> {player.stats.stealth}</p>
-    <p><span class="color-cornflower-blue">Smarts:</span> {player.stats.smarts}</p>
-    <p><span class="color-cornflower-blue">Ocuware:</span> {player.stats.ocuware}</p>
-    <p><span class="color-cornflower-blue">Cred:</span> {player.stats.cred}</p>
-    <p><span class="color-cornflower-blue">Luck:</span> {player.stats.luck}</p>
-    <p><span class="color-cornflower-blue">Hacking:</span> {player.stats.hacking}</p>
+<section
+  class="character-terminal"
+  class:hide={$location !== 'character'}
+  transition:blur={{ duration: 300 }}
+  aria-labelledby="character-title"
+>
+  <header>
+    <span>DEJAVU://IDENTITY</span>
+    <span>{$sessionState.playerId?.toUpperCase()}</span>
+  </header>
+
+  <div class="screen">
+    <p class="eyebrow">SYMBI BIOLINK PROFILE</p>
+    <h1 id="character-title">{$localPlayer?.name ?? 'Unknown player'}</h1>
+
+    {#if $localPlayer}
+      <dl class="stats-grid">
+        {#each Object.entries($localPlayer.stats) as [stat, value]}
+          <div>
+            <dt>{stat}</dt>
+            <dd>{value}</dd>
+          </div>
+        {/each}
+      </dl>
+
+      <div class="profile-summary">
+        <p>
+          <span>STATUS</span>
+          {$localPlayer.statusEffects.length > 0
+            ? $localPlayer.statusEffects.join(', ')
+            : 'STABLE'}
+        </p>
+        <p>
+          <span>CAMPAIGN</span>
+          {$campaignState?.campaignId.slice(0, 8)}
+        </p>
+      </div>
+    {/if}
   </div>
-</div>
+</section>
 
 <style lang="scss">
-  $terminalBg: #041529;
-
-  .terminal {
-    position: relative;
-    background-color: $terminalBg;
-    height: 100%;
-    max-height: 95vh;
+  .character-terminal {
     width: 100%;
-    max-width: 1100px; // 
-    border: 2px solid #063d7a;
-    border-top-width: 24px;
-    border-radius: var(--border-radius-small);
-    padding: 8px;
-    overflow-wrap: break-word;
-    transition: all 0.5s ease-out;
-    margin-bottom: 20px;
+    height: 95vh;
+    max-width: 1100px;
+    overflow: hidden;
+    background: #04101d;
+    border: 1px solid #1472bf;
+    border-radius: 8px;
+    box-shadow: 0 0 34px #1472bf33;
+
+    header {
+      min-height: 38px;
+      padding: 8px 14px;
+      color: #6dc2fb;
+      background: #071d33;
+      border-bottom: 1px solid #1472bf;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  }
+
+  .screen {
+    height: calc(100% - 38px);
+    padding: clamp(24px, 5vw, 64px);
+    overflow-y: auto;
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+    color: #4a98d9;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+  }
+
+  h1 {
+    margin-bottom: 32px;
+    color: #e8edf6;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: clamp(2rem, 5vw, 4rem);
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+
+    div {
+      padding: 16px;
+      background: #071a2c;
+      border: 1px solid #19406c;
+      border-left: 3px solid #02fbfb;
+    }
+
+    dt {
+      margin-bottom: 8px;
+      color: #8893a2;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    dd {
+      color: #02fbfb;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 1.5rem;
+    }
+  }
+
+  .profile-summary {
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px dashed #334155;
 
     display: flex;
-    flex-direction: column;
-  }
-  
-  .terminal-screen {
-    position: relative;
-    height: 100%;
-    width: 100%;
-    border-radius: 24px;
-    padding: 12px;
-    overflow-y: scroll;
-    box-shadow: inset -4px 0 20px #00000086;
+    flex-wrap: wrap;
+    gap: 28px;
 
-    ::-webkit-scrollbar-track {
-      background-color: #111111;
-    }
-  
-    ::-webkit-scrollbar-thumb {
-      background: #ddd;
-      border-radius: 4px;
+    p {
+      color: #e8edf6;
     }
 
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
+    span {
+      margin-right: 8px;
+      color: #4a98d9;
     }
-  }
-
-  #terminal-text {
-    text-wrap: wrap;
-    font-size: 1.25rem;
-    width: 100%;
   }
 </style>

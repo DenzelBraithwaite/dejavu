@@ -1,72 +1,216 @@
 <script lang="ts">
-  // Transitions
+  import { onDestroy, onMount } from 'svelte';
   import { blur } from 'svelte/transition';
-
-  // Pages
-  import { LogPage } from '../../routes/index';
-
-  // Stores
+  import { LogPage } from '../../routes';
+  import { socket, storeSessionToken } from '../socket';
+  import { campaignState, type CampaignState } from '../stores/campaign';
   import location from '../stores/location';
-  import { chapter, chapterPart } from '../stores/terminalMessages';
-
-  // Components
-  import { Sidebar } from './index';
+  import {
+    netRunnersServerState,
+    type NetRunnersServerState
+  } from '../stores/netRunnersSession';
+  import { sessionState, type PlayerId } from '../stores/session';
+  import Sidebar from './Sidebar.svelte';
 
   let sidebarExpanded = false;
-  let background = '';
+  let minigameWasActive = false;
 
-  // The delay because the female player initially has a bag over her head and the male is trying to focus his vision.
-  $: if ($chapter === '1') setTimeout(() => background = 'audience-chamber', 10_000);
+  onMount(() => {
+    socket.on('connect_error', handleConnectionError);
+    socket.on('session:status', handleSessionStatus);
+    socket.on('campaign:state', handleCampaignState);
+    socket.on('netrunners:state', handleNetRunnersState);
+    socket.connect();
+  });
 
-  function changePage(event: CustomEvent) {
-    const newLocation: string = event.detail;
-    location.set(newLocation);
+  onDestroy(() => {
+    socket.off('connect_error', handleConnectionError);
+    socket.off('session:status', handleSessionStatus);
+    socket.off('campaign:state', handleCampaignState);
+    socket.off('netrunners:state', handleNetRunnersState);
+  });
+
+  function handleConnectionError(error: Error): void {
+    sessionState.update((state) => ({
+      ...state,
+      status: 'error',
+      error: error.message
+    }));
   }
 
+  function handleSessionStatus(data: {
+    status: 'joined' | 'full';
+    playerId?: PlayerId;
+    playerCount?: number;
+    bothPlayersConnected?: boolean;
+    sessionToken?: string;
+  }): void {
+    if (data.status === 'full') {
+      sessionState.set({
+        status: 'full',
+        playerId: null,
+        playerCount: 2,
+        bothPlayersConnected: true,
+        error: ''
+      });
+      return;
+    }
+
+    if (data.sessionToken) {
+      storeSessionToken(data.sessionToken);
+    }
+
+    sessionState.set({
+      status: 'joined',
+      playerId: data.playerId ?? null,
+      playerCount: data.playerCount ?? 0,
+      bothPlayersConnected: data.bothPlayersConnected ?? false,
+      error: ''
+    });
+  }
+
+  function handleCampaignState(state: CampaignState): void {
+    campaignState.set(state);
+
+    if (state.activeMinigame) {
+      minigameWasActive = true;
+      location.set(state.activeMinigame.id);
+
+      if (state.activeMinigame.id === 'netrunners') {
+        socket.emit('netrunners:join');
+      }
+    } else if (minigameWasActive) {
+      minigameWasActive = false;
+      location.set('terminal');
+    }
+  }
+
+  function handleNetRunnersState(state: NetRunnersServerState): void {
+    netRunnersServerState.set(state);
+  }
+
+  function changePage(event: CustomEvent<string>): void {
+    location.set(event.detail);
+  }
 </script>
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 
-<div in:blur={{duration: 2000}} class:client-collapsed={!sidebarExpanded} class="client bg-{background}">
-  <Sidebar {sidebarExpanded} on:select={changePage} on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}/>
+{#if $sessionState.status === 'full'}
+  <main class="status-screen" aria-labelledby="full-title">
+    <p class="status-code">CONNECTION REFUSED</p>
+    <h1 id="full-title">Game is full</h1>
+    <p>Déjà Vu requires exactly two players. Both player slots are currently occupied.</p>
+  </main>
+{:else if $sessionState.status === 'error'}
+  <main class="status-screen" aria-labelledby="error-title">
+    <p class="status-code">CONNECTION ERROR</p>
+    <h1 id="error-title">Unable to reach the game server</h1>
+    <p>{$sessionState.error}</p>
+  </main>
+{:else if $sessionState.status === 'connecting'}
+  <main class="status-screen" aria-labelledby="connecting-title">
+    <p class="status-code">INITIALIZING</p>
+    <h1 id="connecting-title">Connecting to Déjà Vu</h1>
+  </main>
+{:else}
+  <div
+    in:blur={{ duration: 600 }}
+    class="client"
+    class:client-collapsed={!sidebarExpanded}
+  >
+    <Sidebar
+      {sidebarExpanded}
+      on:select={changePage}
+      on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}
+    />
 
-  <div class="main-content">
-    <LogPage />
+    <div class="main-content">
+      {#if !$sessionState.bothPlayersConnected}
+        <div class="partner-status" role="status">
+          Waiting for player 2 · {$sessionState.playerCount}/2 connected
+        </div>
+      {/if}
+
+      <LogPage />
+    </div>
   </div>
-</div>
+{/if}
 
 <style lang="scss">
   .client {
     position: relative;
-    height: 100vh;
     width: 100vw;
-    background-color: var(--slate-950);
-    transition: all 0.5s ease-out; // Match this to sidebar transition speed (or don't 😅)
+    height: 100vh;
+    background:
+      radial-gradient(circle at 75% 20%, #09579724, transparent 38%),
+      #020617;
+    transition: grid-template-columns 0.4s ease-out;
 
     display: grid;
-    grid-template-columns: 300px minmax(70%, 1fr); // fixed for transition... doesn't react to % units
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .client-collapsed {
+    grid-template-columns: 70px minmax(0, 1fr);
   }
 
   .main-content {
     position: relative;
+    min-width: 0;
     padding: 24px 40px;
-    grid-column: 2 / span 1;
+    grid-column: 2;
     box-shadow: inset 0 0 12px var(--box-shadow-color);
 
     display: flex;
     justify-content: center;
     align-items: center;
   }
-  
-  .client-collapsed {
-    grid-template-columns: 70px 1fr;
+
+  .partner-status {
+    position: absolute;
+    z-index: 5;
+    top: 10px;
+    left: 50%;
+    padding: 8px 14px;
+    color: #f8e69a;
+    background: #2a260f;
+    border: 1px solid #e0ad03;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    transform: translateX(-50%);
   }
 
-  .bg-audience-chamber {
-    transition: all 1s ease-in-out;
-    background: url('/audience-chamber.png');
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
+  .status-screen {
+    width: min(680px, calc(100vw - 40px));
+    padding: 52px;
+    color: #e8edf6;
+    background: #070b16;
+    border: 1px solid #4a98d9;
+    border-top: 18px solid #19406c;
+    border-radius: 6px;
+    box-shadow: 0 0 60px #1472bf33;
+    text-align: center;
+
+    h1 {
+      margin-bottom: 18px;
+      color: #e8edf6;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    p {
+      line-height: 1.6;
+    }
+  }
+
+  .status-code {
+    margin-bottom: 12px;
+    color: #e58271;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+  }
+
+  @media (max-width: 760px) {
+    .main-content {
+      padding: 14px;
+    }
   }
 </style>

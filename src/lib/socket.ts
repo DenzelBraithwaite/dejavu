@@ -1,14 +1,29 @@
-// Websocket
 import { io } from 'socket.io-client';
 
-// Thanos (Home PC IP)
-// export const socket = io('http://192.168.2.10:6912');
+const SESSION_TOKEN_KEY = 'dejavu-session-token';
 
-// Work Macbook (Home)
-// export const socket = io('http://192.168.2.13:6912');
+function getSessionToken(): string {
+  const existingToken = window.localStorage.getItem(SESSION_TOKEN_KEY);
 
-// Work Macbook (Work IP - Wired) CAN CHANGE, IP LEASED
-export const socket = io('http://10.3.112.82:6912');
+  if (existingToken) {
+    return existingToken;
+  }
 
-// Work Macbook (Work IP - WiFi) CAN CHANGE, IP LEASED
-// export const socket = io('http://10.3.144.82:6912');
+  const newToken = window.crypto.randomUUID();
+  window.localStorage.setItem(SESSION_TOKEN_KEY, newToken);
+  return newToken;
+}
+
+export const socket = io({
+  autoConnect: false,
+  auth: {
+    sessionToken: getSessionToken()
+  }
+});
+
+export function storeSessionToken(sessionToken: string): void {
+  window.localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+  socket.auth = {
+    sessionToken
+  };
+}

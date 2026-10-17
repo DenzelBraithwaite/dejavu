@@ -1,230 +1,572 @@
 <script lang="ts">
-  // Hooks
-  import { onMount } from 'svelte';
-
-  // Transitions
-  import { blur } from 'svelte/transition';
-
-  // Modules/Helpers
-  import Typed from 'typed.js';
-
-  // stores
-  import { type Writable } from 'svelte/store';
+  import { onDestroy, onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
+  import { typewriter, typewriterProfiles } from '../actions/typewriter';
   import { socket } from '../socket';
-  import { getNextDialogue, updateDialogueOptions, type DialogueOptions, chapter, chapterPart } from '../stores/terminalMessages';
-  import { player1, player2, type Player } from '../stores/players';
-  import { PolyhedralDice, d4Dice, d6Dice, d8Dice, d10Dice, d12Dice, d20Dice } from '../stores/dice';
-  import { type GameState, currentGameState } from '../../lib/stores/gameState';
+  import { campaignState } from '../stores/campaign';
+  import location from '../stores/location';
+  import { sessionState } from '../stores/session';
+  import { getScene } from '../story/storyRegistry.js';
+  import { interpolateSceneText } from '../story/sceneTypes.js';
 
-  // Components
-  import { Button, DiceTerminal } from '.';
+  let typedTextElement: HTMLElement;
+  let inputValue = '';
+  let errorMessage = '';
+  let typingComplete = false;
+  let submittedSceneId = '';
+  let now = Date.now();
+  let clock: number;
+  let textValues: Record<string, string | number> = {};
 
-  // Props
-  export let location: Writable<string>;
-  export let dialogueOptions: Writable<DialogueOptions>;
+  $: playerId = $sessionState.playerId;
+  $: sceneId = playerId && $campaignState
+    ? $campaignState.currentScene[playerId]
+    : '';
+  $: scene = sceneId ? getScene(sceneId) : undefined;
+  $: player = playerId && $campaignState
+    ? $campaignState.players[playerId]
+    : null;
+  $: {
+    textValues = {};
 
-  let typed: Typed;
-  let userInput = '';
-  let currentDisplayedMessage = getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer()});
-  let dice: PolyhedralDice = d8Dice;
-  let playerStat: keyof Player['stats'];
-  let statThreshold = 0;
-  $: userInputMaxLength = $chapter === 'lobby' ? 20 : 200;
+    if ($campaignState) {
+      textValues = {
+        PLAYER_1: $campaignState.players.p1.name,
+        PLAYER_2: $campaignState.players.p2.name,
+        PLAYER_NAME: player?.name ?? ''
+      };
+    }
+  }
+  $: sceneText = scene?.text
+    ? interpolateSceneText(scene.text, textValues)
+    : scene?.prompt
+      ? interpolateSceneText(scene.prompt, textValues)
+      : '';
+  $: conversation = scene?.type === 'conversation' && $campaignState
+    ? $campaignState.conversations[scene.id]
+    : null;
+  $: vote = scene?.type === 'vote' && $campaignState
+    ? $campaignState.votes[scene.id]
+    : null;
+  $: remainingMs = playerId && $campaignState?.deadlines[playerId]
+    ? Math.max(0, $campaignState.deadlines[playerId] - now)
+    : 0;
+  $: remainingSeconds = Math.ceil(remainingMs / 1000);
 
-  // Exception that only occurs once, dialogueOptions usually updated by upadteDialogueOptions()
-  $: if ($currentGameState.bothPlayersJoined && $chapter === 'lobby' && $chapterPart === '1') {
-    dialogueOptions.set({...$dialogueOptions, 
-      option1Disabled: false,
-      option1: 'Ready'
-    })
+  $: if (sceneId) {
+    typingComplete = false;
+    inputValue = '';
+    errorMessage = '';
   }
 
-  $: if ($chapter === 'lobby' && $chapterPart === '12') {
-    playerStat = 'toughness';
-    statThreshold = 7;
-  }
-
-  $: if ($chapter === 'lobby' && $chapterPart === '14') {
-    playerStat = 'muscles';
-    statThreshold = 40;
-    dice = d20Dice;
-  }
-
-  $: if ($currentGameState.updateTerminal.prompt1 && $chapter === '1' && ['2', '3', '4', '5', '6'].includes($chapterPart)) {
-    currentGameState.update(store => ({...store, updateTerminal: {...store.updateTerminal, prompt1: false}}))
-    updateTerminal(1);
+  $: if (
+    scene?.type === 'checkpoint'
+    && scene.id !== submittedSceneId
+  ) {
+    submittedSceneId = scene.id;
+    sendAction({
+      type: 'arrive-checkpoint',
+      sceneId: scene.id
+    });
   }
 
   onMount(() => {
-    typed = new Typed('#terminal-text', {
-      strings: currentDisplayedMessage,
-      typeSpeed: 20,
-      // backSpeed: 20,
-      // startDelay: 1000,
-      // backDelay: 3000,
-      // loop: false,
-      // loopCount: Infinity
-    });
+    clock = window.setInterval(() => {
+      now = Date.now();
+    }, 100);
   });
 
-  function updateTerminal(optionSelected: number, destroyLog = false): void {
-    updateDialogueOptions({player: returnPlayer(), chapter: $chapter, part: $chapterPart, optionSelected});
-    // cleans last terminal instance, otherwise they stack.
-    typed.destroy();
-    typed = new Typed('#terminal-text', {
-      strings: getNextDialogue({chapter: $chapter, part: $chapterPart, player: returnPlayer(), optionSelected}),
-      typeSpeed: 20,
-      backSpeed: 10,
-      // startDelay: 1000,
-      backDelay: 2000,
-      // loop: false,
-      // loopCount: Infinity
+  onDestroy(() => {
+    window.clearInterval(clock);
+  });
+
+  function sendAction(action: Record<string, unknown>): void {
+    errorMessage = '';
+
+    socket.emit('campaign:action', action, (result: {
+      ok: boolean;
+      error?: string;
+    }) => {
+      if (!result.ok) {
+        errorMessage = result.error ?? 'The action could not be completed.';
+      }
     });
   }
 
-  function returnPlayer(): Player {
-    return $currentGameState.playingAs === 'male' ? $player1 : $player2;
-  }
-  
-  function handleUserInput(): void {
-    if ($chapter === 'lobby' && $chapterPart === '3' || $chapterPart === '3-again') {
-     $currentGameState.playingAs === 'male' ? socket.emit('set-male-player-name', userInput.trim()) : socket.emit('set-female-player-name', userInput.trim());
+  function advance(): void {
+    if (!scene) {
+      return;
     }
 
-    // Share dialogue with other player/client
-    currentGameState.set({...$currentGameState, userDialogue: userInput.trim()});
-    socket.emit('share-user-dialogue', $currentGameState.userDialogue);
+    sendAction({
+      type: 'advance',
+      sceneId: scene.id
+    });
+  }
+
+  function choose(choiceId: string): void {
+    if (!scene) {
+      return;
+    }
+
+    sendAction({
+      type: scene.type === 'vote' ? 'vote' : 'choose',
+      sceneId: scene.id,
+      choiceId
+    });
+  }
+
+  function submitInput(): void {
+    if (!scene) {
+      return;
+    }
+
+    sendAction({
+      type: 'submit-input',
+      sceneId: scene.id,
+      value: inputValue
+    });
+  }
+
+  function sendMessage(): void {
+    if (!scene) {
+      return;
+    }
+
+    sendAction({
+      type: 'send-message',
+      sceneId: scene.id,
+      value: inputValue
+    });
+    inputValue = '';
+  }
+
+  function rollDice(): void {
+    if (!scene) {
+      return;
+    }
+
+    sendAction({
+      type: 'roll-dice',
+      sceneId: scene.id
+    });
+  }
+
+  function launchMinigame(): void {
+    if (!scene) {
+      return;
+    }
+
+    sendAction({
+      type: 'launch-minigame',
+      sceneId: scene.id
+    });
+  }
+
+  function skipTyping(): void {
+    typedTextElement?.dispatchEvent(new CustomEvent('typewriterskip'));
+  }
+
+  function handleInputKeydown(event: KeyboardEvent, submit: () => void): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submit();
+    }
   }
 </script>
 
-<div transition:blur={{duration: 1000}} class="terminal" class:hide={$location !== 'terminal'}>
+<section
+  class="terminal"
+  class:hide={$location !== 'terminal'}
+  transition:fade={{ duration: 300 }}
+  aria-label="Story terminal"
+>
+  <header class="terminal-header">
+    <span>DEJAVU://CAMPAIGN</span>
+    <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
+  </header>
+
   <div class="terminal-screen">
-    <p>Chapter {$chapter}: part {$chapterPart}</p>
-    <p id="terminal-text"></p>
-    {#if $currentGameState.showDiceTerminal}
-      <DiceTerminal {currentGameState} {dice} {playerStat} {statThreshold}/>
+    {#if !$campaignState || !scene}
+      <p class="system-message">Synchronizing campaign state...</p>
+    {:else}
+      <p class="scene-id">{scene.id}</p>
+
+      {#if scene.speaker}
+        <p class="speaker">{interpolateSceneText(scene.speaker, textValues)}</p>
+      {/if}
+
+      {#if scene.type === 'image' && scene.src}
+        <figure class="scene-image-wrapper">
+          <img class="scene-image" src={scene.src} alt={scene.alt ?? ''}>
+        </figure>
+      {/if}
+
+      <p
+        class="scene-text"
+        class:scene-text-complete={typingComplete}
+        bind:this={typedTextElement}
+        use:typewriter={{
+          text: sceneText,
+          timing: scene.speaker
+            ? typewriterProfiles.dialogue
+            : typewriterProfiles.narration,
+          onComplete: () => typingComplete = true
+        }}
+        aria-live="polite"
+      ></p>
+
+      {#if !typingComplete}
+        <button class="skip-button" type="button" on:click={skipTyping}>
+          Complete text
+        </button>
+      {/if}
+
+      {#if scene.type === 'conversation' && conversation}
+        <div class="conversation-log" aria-label="Current conversation">
+          {#each conversation.messages as message}
+            <p>
+              <strong>{message.playerName}:</strong>
+              {message.text}
+            </p>
+          {/each}
+        </div>
+      {/if}
+
+      {#if errorMessage}
+        <p class="error-message" role="alert">{errorMessage}</p>
+      {/if}
     {/if}
   </div>
-  <div >
-    {#if $dialogueOptions.option1Visible}
-      <Button btnType="terminal-option" disabled={$dialogueOptions.option1Disabled} on:click={() => updateTerminal(1)}>{$dialogueOptions.option1}</Button>
-    {/if}
 
-    {#if $dialogueOptions.option2Visible}
-      <Button btnType="terminal-option" disabled={$dialogueOptions.option2Disabled} on:click={() => updateTerminal(2)}>{$dialogueOptions.option2}</Button>
-    {/if}
+  {#if $campaignState && scene}
+    <div class="terminal-controls">
+      {#if scene.type === 'dialogue' || scene.type === 'image'}
+        <button type="button" disabled={!typingComplete} on:click={advance}>
+          Continue
+        </button>
+      {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
+        {#if scene.type === 'timed-choice'}
+          <p class="timer" aria-live="polite">
+            AUTO-SELECT IN {remainingSeconds}s
+          </p>
+        {/if}
 
-    {#if $dialogueOptions.option3Visible}
-      <Button btnType="terminal-option" disabled={$dialogueOptions.option3Disabled} on:click={() => updateTerminal(3)}>{$dialogueOptions.option3}</Button>
-    {/if}
-
-    {#if $dialogueOptions.inputVisible}
-      <input bind:value={userInput} on:input={handleUserInput} type="text" maxlength={userInputMaxLength} class="terminal-input">
-    {/if}
-  </div>
-</div>
+        {#each scene.choices ?? [] as choice}
+          <button
+            type="button"
+            disabled={!typingComplete}
+            on:click={() => choose(choice.id)}
+          >
+            {choice.label}
+          </button>
+        {/each}
+      {:else if scene.type === 'input'}
+        <label class="input-label" for="scene-input">Terminal input</label>
+        <div class="input-row">
+          <input
+            id="scene-input"
+            bind:value={inputValue}
+            maxlength={scene.maxLength ?? 200}
+            disabled={!typingComplete}
+            on:keydown={(event) => handleInputKeydown(event, submitInput)}
+          >
+          <button
+            type="button"
+            disabled={!typingComplete || !inputValue.trim()}
+            on:click={submitInput}
+          >
+            Submit
+          </button>
+        </div>
+      {:else if scene.type === 'checkpoint'}
+        <button type="button" disabled>
+          Waiting for partner
+        </button>
+      {:else if scene.type === 'conversation'}
+        {#if conversation?.activePlayer === playerId}
+          <label class="input-label" for="conversation-input">Your reply</label>
+          <div class="input-row">
+            <input
+              id="conversation-input"
+              bind:value={inputValue}
+              maxlength="300"
+              on:keydown={(event) => handleInputKeydown(event, sendMessage)}
+            >
+            <button
+              type="button"
+              disabled={!inputValue.trim()}
+              on:click={sendMessage}
+            >
+              Send
+            </button>
+          </div>
+        {:else}
+          <button type="button" disabled>
+            Waiting for response
+          </button>
+        {/if}
+      {:else if scene.type === 'dice-check'}
+        <div class="dice-summary">
+          <span>D{scene.die}</span>
+          <span>{scene.stat?.toUpperCase()}</span>
+          <span>TARGET {scene.threshold}</span>
+        </div>
+        <button type="button" disabled={!typingComplete} on:click={rollDice}>
+          Roll D{scene.die}
+        </button>
+      {:else if scene.type === 'vote'}
+        {#if playerId && vote?.[playerId]}
+          <button type="button" disabled>
+            Vote submitted — waiting for partner
+          </button>
+        {:else}
+          {#each scene.choices ?? [] as choice}
+            <button
+              type="button"
+              disabled={!typingComplete}
+              on:click={() => choose(choice.id)}
+            >
+              Vote: {choice.label}
+            </button>
+          {/each}
+        {/if}
+      {:else if scene.type === 'minigame'}
+        {#if playerId && $campaignState.minigames[scene.id]?.readyPlayers.includes(playerId)}
+          <button type="button" disabled>
+            Waiting for partner to launch {scene.minigameId}
+          </button>
+        {:else}
+          <button type="button" disabled={!typingComplete} on:click={launchMinigame}>
+            Launch {scene.minigameId}
+          </button>
+        {/if}
+      {:else if scene.type === 'ending'}
+        <p class="system-message">END OF AVAILABLE STORY DATA</p>
+      {/if}
+    </div>
+  {/if}
+</section>
 
 <style lang="scss">
-  $terminalBg: #121212;
-
   .terminal {
+    --terminal-accent: #02fbfb;
+
     position: relative;
-    background-color: $terminalBg;
-    height: 95vh;
     width: 100%;
-    max-width: 1100px; // 
-    border: 2px solid var(--white);
-    border-top-width: 24px;
-    border-radius: var(--border-radius-small);
-    padding: 8px;
-    overflow-wrap: break-word;
-    transition: all 0.5s ease-out;
-    margin-bottom: 20px;
+    height: 95vh;
+    max-width: 1100px;
+    padding: 0;
+    overflow: hidden;
+    background: #070b16;
+    border: 1px solid #2c3b54;
+    border-radius: 8px;
+    box-shadow:
+      0 0 35px #02fbfb1f,
+      inset 0 0 60px #000000;
+
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .terminal-header {
+    min-height: 38px;
+    padding: 8px 14px;
+    color: var(--terminal-accent);
+    background: #111a2c;
+    border-bottom: 1px solid #2c3b54;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 2px;
 
     display: flex;
-    flex-direction: column;
-
+    justify-content: space-between;
+    align-items: center;
   }
-  
+
   .terminal-screen {
-    position: relative;
-    height: 90%;
-    width: 100%;
-    border-radius: 24px;
-    padding: 12px;
-    overflow-y: scroll;
-    box-shadow: inset -4px 0 20px #00000086;
-
-    ::-webkit-scrollbar-track {
-      background-color: #111111;
-    }
-  
-    ::-webkit-scrollbar-thumb {
-      background: #ddd;
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
+    padding: clamp(20px, 4vw, 52px);
+    overflow-y: auto;
   }
 
-  #terminal-text {
-    text-wrap: wrap;
-    font-size: 1.25rem;
-    width: 100%;
+  .scene-id {
+    margin-bottom: 28px;
+    color: #64748b;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
   }
 
-  .terminal-input {
-    width: 100%;
-    padding: 0.5rem 1rem;
-    border: 2px solid var(--white);
-    color: var(--white);
-    text-align: center;
-    border-radius: var(--border-radius-small);
-    background-color: $terminalBg;
-    transition: all 0.3s ease-out;
-    font-weight: bold;
-
-    &:hover {
-      border: 2px solid var(--slate-900);
-      color: var(--slate-900);
-      background-color: var(--white);
-      border-style: double;
-      border-width: 4px;
-    }
+  .speaker {
+    margin-bottom: 12px;
+    color: var(--terminal-accent);
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
   }
 
- .dice-screen {
-    background-color: lighten($terminalBg, 10%);
-    height: 80%;
-    width: 80%;
-    border: 2px solid var(--white);
-    border-top-width: 24px;
-    border-radius: var(--border-radius-small);
-    padding: 8px;
-    overflow-wrap: break-word;
-    transition: all 0.5s ease-out;
-    margin-bottom: 20px;
-    
-    position: absolute;
-    top: 10%;
-    right: 50%;
-    transform: translateX(50%);
-    
+  .scene-text {
+    max-width: 78ch;
+    min-height: 4rem;
+    color: #e8edf6;
+    font-size: clamp(1rem, 2vw, 1.28rem);
+    line-height: 1.75;
+    white-space: pre-wrap;
+
     &::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      height: 100%;
-      width: 100%;
-      background-image: url('/dice.png');
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: auto;
-      opacity: 0.15;
+      content: '▋';
+      color: var(--terminal-accent);
+      animation: blink 800ms steps(1) infinite;
     }
- }
+  }
+
+  .scene-text-complete::after {
+    display: none;
+  }
+
+  .skip-button {
+    width: auto;
+    margin-top: 18px;
+    padding: 6px 0;
+    color: #8893a2;
+    background: transparent;
+    border: 0;
+    font-size: 0.8rem;
+    text-decoration: underline;
+  }
+
+  .scene-image-wrapper {
+    max-width: 560px;
+    margin-bottom: 28px;
+    overflow: hidden;
+    border: 1px solid #4a98d9;
+    border-radius: 6px;
+    box-shadow: 0 0 24px #4a98d944;
+  }
+
+  .scene-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    opacity: 0.82;
+  }
+
+  .conversation-log {
+    max-width: 78ch;
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px dashed #334155;
+
+    p {
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    strong {
+      color: #ff75fd;
+    }
+  }
+
+  .error-message {
+    margin-top: 18px;
+    color: #fb716d;
+  }
+
+  .terminal-controls {
+    padding: 16px;
+    background: #0c1322;
+    border-top: 1px solid #2c3b54;
+
+    display: grid;
+    gap: 10px;
+
+    button,
+    input {
+      min-height: 48px;
+      padding: 10px 16px;
+      color: #e8edf6;
+      background: #101a2d;
+      border: 1px solid #4a98d9;
+      border-radius: 4px;
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 700;
+      transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease;
+
+      &:hover:not(:disabled),
+      &:focus-visible {
+        color: #07111d;
+        background: var(--terminal-accent);
+        box-shadow: 0 0 18px #02fbfb55;
+        outline: 2px solid #ffffff;
+        outline-offset: 2px;
+      }
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.48;
+      }
+    }
+
+    input:focus-visible {
+      border-color: var(--terminal-accent);
+      outline: 2px solid var(--terminal-accent);
+      outline-offset: 2px;
+    }
+  }
+
+  .input-label {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .timer {
+    color: #f2d40e;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  .dice-summary {
+    padding: 10px;
+    color: #d6a741;
+    border: 1px dashed #d6a741;
+
+    display: flex;
+    justify-content: space-around;
+    gap: 14px;
+  }
+
+  .system-message {
+    color: #94a3b8;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scene-text::after {
+      animation: none;
+    }
+  }
 </style>

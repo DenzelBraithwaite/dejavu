@@ -29,6 +29,21 @@
     <span slot="description">Check your stats</span>
   </Item>
 
+  <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'purple'} iconType={'journal'}>
+    <span slot="title">Journal</span>
+    <span slot="description">Transcript and decisions</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'bag')} collapsed={!sidebarExpanded} color={'green'} iconType={'bag'}>
+    <span slot="title">Bag</span>
+    <span slot="description">Inventory and contacts</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'grey'} iconType={'save'}>
+    <span slot="title">Saves</span>
+    <span slot="description">Save or restore campaign</span>
+  </Item>
+
   <Item on:click={() => createEvent('select', 'netrunners')} collapsed={!sidebarExpanded} color={'purple'} iconType={'cpu'}>
     <span slot="title">NetRunners</span>
     <span slot="description">Card game, bet on the fastest hacker to win.</span>
@@ -47,6 +62,7 @@
     box-shadow: 4px 0 16px var(--box-shadow-color);
     transition: all 0.5s ease-out; // Match this to .client transition speed (or don't 😅)
     border-radius: 8px 0 0 8px; // left side only, matches .screen right side border-radius
+    overflow-y: auto;
 
     .icon {
       stroke-linecap: round;

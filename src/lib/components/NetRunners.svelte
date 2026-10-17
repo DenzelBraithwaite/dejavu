@@ -1,24 +1,38 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+
   // Transitions
   import { blur, fly } from 'svelte/transition';
 
   // stores
-  import { type Writable } from 'svelte/store';
-  import { player1, player2, type Player } from '../stores/players';
-  import { currentGameState } from '../stores/gameState';
   import { netRunnersGameState, type CardColor } from '../stores/netRunnersGameState';
+  import { netRunnersServerState } from '../stores/netRunnersSession';
+  import location from '../stores/location';
+  import { sessionState } from '../stores/session';
+  import { socket } from '../socket';
 
   // Components
   import { NetRunnersCard, PlayerGamblingCard } from './';
 
-  // Props
-  export let location: Writable<string>;
+  const automaticDrawDelayMs = 3000;
+  let automaticDrawTimer: number | undefined;
+  let lastMultiplayerStatus = '';
 
-  const player: Player = returnPlayer();
+  $: multiplayerPlayer = $sessionState.playerId && $netRunnersServerState
+    ? $netRunnersServerState.players[$sessionState.playerId]
+    : null;
 
-  function returnPlayer(): Player {
-    return $currentGameState.playingAs === 'male' ? $player1 : $player2;
+  $: multiplayerRematchVote = $sessionState.playerId && $netRunnersServerState
+    ? $netRunnersServerState.rematchVotes[$sessionState.playerId]
+    : null;
+
+  $: if (!$netRunnersGameState.singleplayer && $netRunnersServerState) {
+    synchronizeMultiplayerState();
   }
+
+  onDestroy(() => {
+    stopAutomaticDraws();
+  });
 
   // Starts game
   function startGame(): void {
@@ -37,6 +51,7 @@
 
   // Ends game
   function endGame() {
+    stopAutomaticDraws();
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.gameInProgress = false;
       $netRunnersGameState.lastWinningColor = returnWinningColor();
@@ -54,6 +69,7 @@
 
   // Resets game, restoring original deck.
   function resetGame(): void {
+    stopAutomaticDraws();
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.trackCards = [];
       $netRunnersGameState.cardsDrawn = [];
@@ -141,7 +157,6 @@
 
   // event: any bcuz event: customEvent makes normal <button> with on:click complain due to lacking event listeners.
   function selectColor(color: CardColor): void {
-    // TODO: determine if player is  1p or 2p in future if multiplayer.
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.p1.colorBet = color;
       return $netRunnersGameState;
@@ -195,6 +210,11 @@
   }
 
   function placeBet(): void {
+    if (!$netRunnersGameState.singleplayer) {
+      submitMultiplayerBet();
+      return;
+    }
+
     hideBettingScreen();
     startRound();
   }
@@ -207,10 +227,15 @@
     showLanes();
     showAllColorsProgress();
     netRunnersGameState.set({...$netRunnersGameState, roundStarted: true});
+    startAutomaticDraws();
   }
   
   // Flip/Draw a card
   function drawCard() {
+    if (!$netRunnersGameState.gameInProgress) {
+      return;
+    }
+
     if ($netRunnersGameState.cardsDrawn.length === 19)  $netRunnersGameState.cardsDrawn.splice(0, 5);
 
     const fullDeckCopy = [...$netRunnersGameState.fullDeck];
@@ -225,7 +250,9 @@
       return $netRunnersGameState
     });
     
-    if (hasColorFinishedRace()) endGame();
+    if (hasColorFinishedRace()) {
+      endGame();
+    }
   }
   
   // Moves any card if their color matches the flipped card's color.
@@ -254,9 +281,8 @@
 
   function returnWinningColor(): CardColor {
     const winningColor = Object.entries($netRunnersGameState.points).find(([color, points]) => points === 7);
-    
-    // ts complaining, but it won't be undefined so it's ok.
-    return winningColor[0];
+
+    return winningColor?.[0] ?? '';
   }
 
   // Determines how much the player wins based on the odds of their winning bet.
@@ -312,11 +338,151 @@
   
 
   function setSingleplayer(): void {
+    socket.emit('netrunners:leave');
     netRunnersGameState.set({...$netRunnersGameState, singleplayer: true})
   }
 
   function setMultiplayer(): void {
     netRunnersGameState.set({...$netRunnersGameState, singleplayer: false})
+    socket.emit('netrunners:join');
+  }
+
+  function startAutomaticDraws(): void {
+    stopAutomaticDraws();
+
+    automaticDrawTimer = window.setTimeout(() => {
+      drawCard();
+
+      if ($netRunnersGameState.gameInProgress) {
+        startAutomaticDraws();
+      }
+    }, automaticDrawDelayMs);
+  }
+
+  function stopAutomaticDraws(): void {
+    if (automaticDrawTimer !== undefined) {
+      window.clearTimeout(automaticDrawTimer);
+      automaticDrawTimer = undefined;
+    }
+  }
+
+  function submitMultiplayerBet(): void {
+    const bet = {
+      color: $netRunnersGameState.p1.colorBet,
+      amount: $netRunnersGameState.p1.amountBet
+    };
+
+    socket.emit('netrunners:bet', bet, (result: {ok: boolean; error?: string}) => {
+      if (!result.ok) {
+        console.error(result.error);
+      }
+    });
+  }
+
+  function synchronizeMultiplayerState(): void {
+    const serverState = $netRunnersServerState;
+    const playerId = $sessionState.playerId;
+
+    if (!serverState || !playerId) {
+      return;
+    }
+
+    const localServerPlayer = serverState.players[playerId];
+    const statusChanged = serverState.status !== lastMultiplayerStatus;
+    lastMultiplayerStatus = serverState.status;
+
+    if (serverState.status === 'menu' && statusChanged) {
+      resetGame();
+      netRunnersGameState.update((state) => ({
+        ...state,
+        singleplayer: true,
+        menuVisible: true
+      }));
+      return;
+    }
+
+    if (serverState.status === 'waiting') {
+      hideGameMenu();
+      hideColorSelectScreen();
+      hideBettingScreen();
+      return;
+    }
+
+    if (serverState.status === 'betting' && statusChanged) {
+      resetGame();
+      setMultiplayer();
+      hideGameMenu();
+      showColorSelectScreen();
+      showColorOddsCards();
+
+      netRunnersGameState.update((state) => ({
+        ...state,
+        singleplayer: false,
+        gameInProgress: true,
+        trackCards: [...serverState.trackCards],
+        odds: {
+          ...serverState.odds
+        },
+        p1: {
+          ...state.p1,
+          name: localServerPlayer.name,
+          money: localServerPlayer.money,
+          amountBet: 0,
+          colorBet: ''
+        }
+      }));
+      return;
+    }
+
+    if (serverState.status === 'racing' || serverState.status === 'finished') {
+      const isFinished = serverState.status === 'finished';
+
+      netRunnersGameState.update((state) => ({
+        ...state,
+        singleplayer: false,
+        gameInProgress: !isFinished,
+        menuVisible: false,
+        colorSelectVisible: false,
+        betSelectVisible: false,
+        lanesVisible: true,
+        colorOddsVisible: false,
+        colorOddsCardsVisible: false,
+        colorsProgressVisible: true,
+        gameControlsVisible: false,
+        drawBtnVisible: false,
+        gamblingCardsVisible: true,
+        lastWinningColor: serverState.winner,
+        trackCards: [...serverState.trackCards],
+        cardsDrawn: [...serverState.cardsDrawn],
+        odds: {
+          ...serverState.odds
+        },
+        points: {
+          ...serverState.points
+        },
+        roundStarted: true,
+        p1: {
+          ...state.p1,
+          ...serverState.players.p1
+        },
+        p2: {
+          ...state.p2,
+          ...serverState.players.p2
+        },
+        p3: {
+          ...state.p3,
+          ...serverState.players.p3
+        },
+        p4: {
+          ...state.p4,
+          ...serverState.players.p4
+        }
+      }));
+    }
+  }
+
+  function voteForRematch(wantsRematch: boolean): void {
+    socket.emit('netrunners:rematch', wantsRematch);
   }
 
   // Resets deck with all cards
@@ -331,8 +497,6 @@
 
   // Handles user setting their bet amount, +/- amount.
   function updateBetAmount(amount: 1 | 10 | 100 | 1000 | -1 | -10 | -100 | -1000): void {
-    // TODO: handle multiplayer
-
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.p1.amountBet += amount;
       if ($netRunnersGameState.p1.amountBet <= 0) $netRunnersGameState.p1.amountBet = 0;
@@ -377,8 +541,12 @@
   function showBettingScreen(): void {
     hideColorSelectScreen();
     hideColorOddsCards();
-    selectBotColors();
-    selectBotBets();
+
+    if ($netRunnersGameState.singleplayer) {
+      selectBotColors();
+      selectBotBets();
+    }
+
     showGamblingCards();
     netRunnersGameState.set({...$netRunnersGameState, betSelectVisible: true});
   }
@@ -524,9 +692,9 @@
 
       <div class="game-controls">
         <button on:click={toggleInfo} class="menu-btn">INFO</button>
-        <button on:click={resetGame} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible} disabled={!$netRunnersGameState.gameControlsVisible}>RESET</button>
+        <button on:click={resetGame} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible || !$netRunnersGameState.singleplayer} disabled={!$netRunnersGameState.gameControlsVisible || !$netRunnersGameState.singleplayer}>RESET</button>
         {#if $netRunnersGameState.roundStarted}
-          <button on:click={drawCard} class="menu-btn" class:btn-disabled={!$netRunnersGameState.drawBtnVisible} disabled={!$netRunnersGameState.drawBtnVisible}>DRAW</button>
+          <p class="auto-draw-status">AUTO DRAW · 3 SECONDS</p>
         {/if}
 
         {#if $netRunnersGameState.colorSelectVisible}
@@ -543,12 +711,42 @@
         <div class="menu" class:hide={!$netRunnersGameState.menuVisible}>
           <button class="menu-btn" on:click={setSingleplayer} class:selected-btn={$netRunnersGameState.singleplayer}>SINGLEPLAYER</button>
           <button class="menu-btn" on:click={setMultiplayer} class:selected-btn={!$netRunnersGameState.singleplayer}>MULTIPLAYER</button>
-          <button class="start-btn" on:click={startGame}>START</button>
+          {#if $netRunnersGameState.singleplayer}
+            <button class="start-btn" on:click={startGame}>START</button>
+          {/if}
         </div>
+
+        {#if !$netRunnersGameState.singleplayer && $netRunnersServerState?.status === 'waiting'}
+          <div class="multiplayer-message" role="status">
+            <p class="game-message">WAITING FOR PLAYER</p>
+            <p>{$netRunnersServerState.participantCount}/2 PLAYERS</p>
+            <button class="menu-btn" on:click={() => socket.emit('netrunners:leave')}>CANCEL</button>
+          </div>
+        {/if}
+
+        {#if !$netRunnersGameState.singleplayer && $netRunnersServerState?.status === 'betting' && multiplayerPlayer?.ready}
+          <div class="multiplayer-message" role="status">
+            <p class="game-message">BET LOCKED</p>
+            <p>Waiting for the other player to place their bet.</p>
+          </div>
+        {/if}
+
+        {#if !$netRunnersGameState.singleplayer && $netRunnersServerState?.status === 'finished'}
+          <div class="multiplayer-message rematch-message" role="status">
+            <p class="game-message">PLAY ANOTHER ROUND?</p>
+            {#if multiplayerRematchVote === true}
+              <p>1/2 confirmation received. Waiting for your opponent.</p>
+            {:else}
+              <div class="rematch-controls">
+                <button class="confirm-btn" on:click={() => voteForRematch(true)}>PLAY AGAIN</button>
+                <button class="menu-btn" on:click={() => voteForRematch(false)}>MAIN MENU</button>
+              </div>
+            {/if}
+          </div>
+        {/if}
 
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <!-- TODO: should i use {#if} for all these?TODO: instead of hide... -->
         <div class:hide={!$netRunnersGameState.colorSelectVisible}>
           <p class="game-message">SELECT A FACTION</p>
           <div class="color-select-grid">
@@ -1388,6 +1586,48 @@
     border-top: 4px double $blue;
     border-bottom: 4px double $blue;
     text-shadow: 0 0 12px $blue;
+  }
+
+  .auto-draw-status {
+    padding: 0.5rem 1rem;
+    color: $cyan;
+    border: 1px solid $cyan;
+    border-radius: var(--border-radius-small);
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+  }
+
+  .multiplayer-message {
+    position: absolute;
+    z-index: 4;
+    inset: 50% auto auto 50%;
+    width: min(520px, calc(100% - 32px));
+    padding: 32px;
+    color: var(--white);
+    background: #070b16f2;
+    border: 1px solid $cyan;
+    border-top: 8px solid $cyan;
+    border-radius: var(--border-radius-med);
+    box-shadow: 0 0 34px #02fbfb44;
+    text-align: center;
+    transform: translate(-50%, -50%);
+
+    p {
+      margin-bottom: 20px;
+    }
+  }
+
+  .rematch-message {
+    border-color: $purple;
+    border-top-color: $purple;
+    box-shadow: 0 0 34px #9962ff55;
+  }
+
+  .rematch-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   // To move along the track
