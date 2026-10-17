@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { getScene, initialSceneIds } from '../src/lib/story/storyRegistry.js';
 
 const PLAYER_IDS = ['p1', 'p2'];
 const DEFAULT_TIMED_CHOICE_DURATION_MS = 20_000;
@@ -29,12 +28,14 @@ const DEFAULT_STATS = {
   }
 };
 
-export function createCampaignState() {
-  return {
+export function createCampaignState(story = null) {
+  const state = {
     version: 1,
     campaignId: randomUUID(),
+    story: story ? structuredClone(story) : null,
     currentScene: {
-      ...initialSceneIds
+      p1: '',
+      p2: ''
     },
     players: {
       p1: createPlayerState('Nova', DEFAULT_STATS.p1),
@@ -57,6 +58,14 @@ export function createCampaignState() {
     decisions: [],
     updatedAt: new Date().toISOString()
   };
+
+  if (story) {
+    for (const playerId of PLAYER_IDS) {
+      setPlayerScene(state, playerId, story.initialSceneIds[playerId]);
+    }
+  }
+
+  return state;
 }
 
 function createPlayerState(name, stats) {
@@ -80,8 +89,12 @@ export function restoreCampaignState(candidate) {
     throw new Error('Unsupported or invalid save version.');
   }
 
+  if (!candidate.story) {
+    throw new Error('Save does not contain a story cartridge.');
+  }
+
   for (const playerId of PLAYER_IDS) {
-    if (!getScene(candidate.currentScene?.[playerId])) {
+    if (!getScene(candidate, candidate.currentScene?.[playerId])) {
       throw new Error(`Save references an unknown scene for ${playerId}.`);
     }
   }
@@ -105,7 +118,7 @@ export function handleCampaignAction(state, playerId, action) {
   }
 
   const sceneId = state.currentScene[playerId];
-  const scene = getScene(sceneId);
+  const scene = getScene(state, sceneId);
 
   if (!scene) {
     return actionError(`Unknown scene: ${sceneId}`);
@@ -124,6 +137,7 @@ export function handleCampaignAction(state, playerId, action) {
   switch (scene.type) {
     case 'dialogue':
     case 'image':
+    case 'effect':
       result = handleAdvance(state, playerId, scene, action);
       break;
     case 'choice':
@@ -149,6 +163,7 @@ export function handleCampaignAction(state, playerId, action) {
       result = handleMinigameLaunch(state, playerId, scene, action);
       break;
     case 'ending':
+    case 'condition':
       result = actionError('This scene does not accept that action.');
       break;
     default:
@@ -192,7 +207,7 @@ export function completeActiveMinigame(state, resultId) {
     return actionError('No story minigame is active.');
   }
 
-  const scene = getScene(state.activeMinigame.sceneId);
+  const scene = getScene(state, state.activeMinigame.sceneId);
   const nextSceneId = scene?.resultNext?.[resultId];
 
   if (!nextSceneId) {
@@ -473,7 +488,7 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
   let changed = false;
 
   for (const playerId of PLAYER_IDS) {
-    const scene = getScene(state.currentScene[playerId]);
+    const scene = getScene(state, state.currentScene[playerId]);
     const deadline = state.deadlines[playerId];
 
     if (!scene || scene.type !== 'timed-choice' || !deadline || deadline > now) {
@@ -505,7 +520,7 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
 
 export function initializeDeadlines(state) {
   for (const playerId of PLAYER_IDS) {
-    const scene = getScene(state.currentScene[playerId]);
+    const scene = getScene(state, state.currentScene[playerId]);
 
     if (scene?.type !== 'timed-choice') {
       delete state.deadlines[playerId];
@@ -514,7 +529,7 @@ export function initializeDeadlines(state) {
 }
 
 function setPlayerScene(state, playerId, nextSceneId) {
-  const nextScene = getScene(nextSceneId);
+  const nextScene = resolveConditionNodes(state, playerId, nextSceneId);
 
   if (!nextScene) {
     throw new Error(`Cannot advance to unknown scene: ${nextSceneId}`);
@@ -524,11 +539,57 @@ function setPlayerScene(state, playerId, nextSceneId) {
     state.terminalOutput[playerId] = [];
   }
 
-  state.currentScene[playerId] = nextSceneId;
+  state.currentScene[playerId] = nextScene.id;
   delete state.deadlines[playerId];
 
   if (nextScene.type === 'conversation') {
     initializeConversation(state, nextScene);
+  }
+}
+
+function resolveConditionNodes(state, playerId, startingSceneId) {
+  let scene = getScene(state, startingSceneId);
+  let traversedNodes = 0;
+
+  while (scene?.type === 'condition') {
+    traversedNodes += 1;
+
+    if (traversedNodes > 50) {
+      throw new Error('Condition chain exceeded 50 nodes. Check the story for a loop.');
+    }
+
+    const destination = evaluateCondition(state, playerId, scene.condition)
+      ? scene.trueNext
+      : scene.falseNext;
+
+    if (!destination) {
+      throw new Error(`Condition node ${scene.id} has an unconnected branch.`);
+    }
+
+    scene = getScene(state, destination);
+  }
+
+  return scene;
+}
+
+function evaluateCondition(state, playerId, condition = {}) {
+  switch (condition.type) {
+    case 'has-item':
+      return state.players[playerId].inventory.includes(condition.key);
+    case 'flag-equals':
+      return state.flags[condition.key] === condition.value;
+    case 'stat-at-least':
+      return Number(state.players[playerId].stats[condition.key] ?? 0)
+        >= Number(condition.value ?? 0);
+    case 'last-dice-success': {
+      const lastDiceDecision = [...state.decisions].reverse().find(
+        (decision) => decision.type === 'dice-check' && decision.playerId === playerId
+      );
+
+      return Boolean(lastDiceDecision?.successful);
+    }
+    default:
+      return false;
   }
 }
 
@@ -715,6 +776,10 @@ function addUnique(items, value) {
   if (!items.includes(value)) {
     items.push(value);
   }
+}
+
+function getScene(state, sceneId) {
+  return state.story?.nodes.find((scene) => scene.id === sceneId);
 }
 
 function recordTranscript(state, playerId, text, speaker) {

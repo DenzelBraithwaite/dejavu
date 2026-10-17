@@ -1,4 +1,5 @@
 import { derived, writable } from 'svelte/store';
+import type { StoryDocument } from './library';
 import { sessionState, type PlayerId } from './session';
 
 export type CampaignPlayer = {
@@ -32,6 +33,7 @@ export type TerminalOutputEntry = {
 export type CampaignState = {
   version: number;
   campaignId: string;
+  story: StoryDocument | null;
   currentScene: Record<PlayerId, string>;
   players: Record<PlayerId, CampaignPlayer>;
   installedMods: string[];

@@ -7,12 +7,14 @@ import Dice from './Dice.svelte';
 import DiceTerminal from './DiceTerminal.svelte';
 import Item from './Item.svelte';
 import Journal from './Journal.svelte';
+import MinigameLibrary from './MinigameLibrary.svelte';
 import NetRunners from './NetRunners.svelte';
 import NetRunnersCard from './NetRunnersCard.svelte';
 import PlayerGamblingCard from './PlayerGamblingCard.svelte';
 import Sidebar from './Sidebar.svelte';
 import SaveMenu from './SaveMenu.svelte';
 import SettingsMenu from './SettingsMenu.svelte';
+import StoryLibrary from './StoryLibrary.svelte';
 import Terminal from './Terminal.svelte';
 import Toast from './Toast.svelte';
 
@@ -24,6 +26,7 @@ export {
   DiceTerminal,
   Item,
   Journal,
+  MinigameLibrary,
   NetRunners,
   NetRunnersCard,
   PlayerGamblingCard,
@@ -31,6 +34,7 @@ export {
   ChatPanel,
   SaveMenu,
   SettingsMenu,
+  StoryLibrary,
   Sidebar,
   Terminal,
   Toast

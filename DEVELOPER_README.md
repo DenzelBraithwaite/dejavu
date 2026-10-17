@@ -2,7 +2,7 @@
 
 This guide explains how the current two-player terminal-story runtime is structured and how to extend it. The long-term product direction is a visual story builder, so scene data must remain serializable, explicit, and independent from Svelte components.
 
-See [GAME_BUILDER_DIRECTION.md](docs/GAME_BUILDER_DIRECTION.md) for the planned no-code editor.
+See [GAME_BUILDER_DIRECTION.md](docs/GAME_BUILDER_DIRECTION.md) for the broader no-code editor direction.
 
 ## Runtime model
 
@@ -18,16 +18,79 @@ Do not add chapter-specific socket events or progression switches. If an interac
 
 ```text
 src/lib/story/sceneTypes.js          Scene contract and registry helpers
-src/lib/story/storyRegistry.js       All registered story scenes
+src/lib/story/dejaVuStory.js         Built-in Déjà Vu story document
+src/lib/story/storyRegistry.js       Legacy registry compatibility
 src/lib/story/chapters/prologue.js   Current playable story data
 src/lib/actions/typewriter.ts        Custom punctuation-aware typewriter
 src/lib/components/Terminal.svelte   Generic scene renderer
+src/lib/components/StoryLibrary.svelte  Story CRUD and node editor
+src/lib/components/MinigameLibrary.svelte  Registered minigame catalog
+src/lib/stores/library.ts            Browser story metadata and selections
 server/gameSession.js                Authoritative scene execution
 server/netRunnersSession.js          Authoritative multiplayer minigame
-server.js                            Sessions, sockets, saves, and static hosting
+server/storyRepository.js            SQLite story persistence
+server.js                            Sessions, sockets, library, saves, and hosting
 ```
 
-## Adding a chapter
+## Story library and cartridge selection
+
+The host stores stories in `data/dejavu.sqlite` using Node's built-in SQLite support. The database is runtime data and is intentionally ignored by Git. On first launch, `dejaVuStoryDocument` is inserted as the built-in Déjà Vu cartridge.
+
+Each connected player has an in-memory cartridge selection. The server broadcasts both selections in `library:state`. A campaign is playable only when `p1` and `p2` select the same story ID. Matching a new story creates a fresh authoritative campaign from that stored story document; loading a campaign save stages its embedded story for both players.
+
+Library socket operations are:
+
+- `library:get-story`
+- `library:create-story`
+- `library:update-story`
+- `library:duplicate-story`
+- `library:delete-story`
+- `library:select-story`
+
+CRUD operations are server-owned. Do not write stories into browser storage or mutate the campaign directly from the editor.
+
+## Using the visual editor
+
+Open **Library**, then choose **Edit** on an existing cartridge or **Make new story**. A new story begins with separate Player 1 and Player 2 dialogue nodes leading to one shared ending.
+
+The canvas is divided into Player 1, Shared, and Player 2 lanes. Select a node to edit it in the inspector. Routes are currently entered using destination node IDs; the destination fields provide the current story's IDs as suggestions. Saving validates unique node IDs and verifies that both player start nodes exist, then increments the story version.
+
+Available palette nodes are:
+
+- Dialogue, free-form player input, choice, checkpoint, and open-floor conversation.
+- Dice check, shared vote, and timed choice.
+- Item/effect and condition.
+- Image, NetRunners minigame, and ending.
+
+Incomplete destination fields are allowed in drafts so creators can build a graph in any order. Full connection validation belongs to the next graph-editor milestone and must run before publication or playtest.
+
+## Story document shape
+
+Every stored cartridge is a serializable object with metadata and its graph:
+
+```js
+{
+  schemaVersion: 1,
+  id: 'my-story-a1b2c3d4',
+  title: 'My Story',
+  status: 'draft',
+  version: 1,
+  initialSceneIds: {
+    p1: 'my-story.p1.start',
+    p2: 'my-story.p2.start'
+  },
+  nodes: [],
+  theme: {
+    id: 'default-terminal',
+    name: 'Default Terminal'
+  },
+  supportedMinigames: []
+}
+```
+
+Active campaigns embed the exact story document they started with. Editing the library copy does not rewrite a campaign already in progress.
+
+## Adding a chapter in code
 
 Create a JavaScript module under `src/lib/story/chapters/`. Scene files use JSDoc types so the same serializable data can run in both Node and the browser.
 
@@ -46,15 +109,18 @@ export const chapterOneScenes = [
 ];
 ```
 
-Register the array in `storyRegistry.js`:
+Add the array to `dejaVuStoryDocument` through its imported chapter data. `storyRegistry.js` remains only as a compatibility projection for code that needs the built-in node map.
 
 ```js
 import { chapterOneScenes } from './chapters/chapterOne.js';
 
-export const storyRegistry = createSceneRegistry([
-  ...prologueScenes,
-  ...chapterOneScenes
-]);
+export const dejaVuStoryDocument = {
+  // Other story metadata is omitted here.
+  nodes: [
+    ...prologueScenes,
+    ...chapterOneScenes
+  ]
+};
 ```
 
 Every scene ID must be globally unique. Use a predictable prefix such as `chapter-01.`.
@@ -165,6 +231,33 @@ effects: [
 ```
 
 Use namespaced flag keys. Flags should describe a fact that occurred, not a temporary UI state.
+
+An `effect` node exposes these operations in the visual inspector and applies them when the player continues. Choice-level effects remain supported for branches that should change state immediately.
+
+## Conditions
+
+Condition nodes route without rendering a terminal prompt. Supported checks are:
+
+- `has-item`
+- `flag-equals`
+- `stat-at-least`
+- `last-dice-success`
+
+```js
+defineScene({
+  id: 'chapter-01.has-key',
+  type: 'condition',
+  audience: 'p1',
+  condition: {
+    type: 'has-item',
+    key: 'maintenance-key'
+  },
+  trueNext: 'chapter-01.unlock-door',
+  falseNext: 'chapter-01.find-another-way'
+})
+```
+
+The server follows condition routes immediately when entering them and guards against runaway chains.
 
 ## Player input
 
@@ -435,6 +528,8 @@ Save files contain:
 - Transcript and decision history.
 
 When the save schema changes, increment its version and add an explicit migration before accepting older data. Never silently reinterpret an older save.
+
+The Save control is disabled until both players have selected the same cartridge. Loading a save embeds and activates its saved story version for both players.
 
 ## NetRunners
 

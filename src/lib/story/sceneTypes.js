@@ -1,7 +1,7 @@
 /**
  * @typedef {'p1' | 'p2'} PlayerId
  * @typedef {'both' | PlayerId} Audience
- * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'ending'} SceneType
+ * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'condition' | 'ending'} SceneType
  *
  * @typedef SceneEffect
  * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat' | 'install-mod' | 'remove-mod'} type
@@ -43,6 +43,9 @@
  * @property {boolean} [clearTerminal]
  * @property {string} [minigameId]
  * @property {Record<string, string>} [resultNext]
+ * @property {{type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'last-dice-success', key?: string, value?: string | number | boolean}} [condition]
+ * @property {string} [trueNext]
+ * @property {string} [falseNext]
  * @property {SceneEffect[]} [effects]
  * @property {string[]} [tags]
  */

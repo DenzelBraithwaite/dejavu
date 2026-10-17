@@ -5,9 +5,9 @@
   import { applySceneAudio } from '../audio/audioManager';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
+  import { libraryState } from '../stores/library';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
-  import { getScene } from '../story/storyRegistry.js';
   import { interpolateSceneText } from '../story/sceneTypes.js';
   import DiceTerminal from './DiceTerminal.svelte';
 
@@ -28,7 +28,9 @@
   $: sceneId = playerId && $campaignState
     ? $campaignState.currentScene[playerId]
     : '';
-  $: scene = sceneId ? getScene(sceneId) : undefined;
+  $: scene = sceneId
+    ? $campaignState?.story?.nodes.find((candidate) => candidate.id === sceneId)
+    : undefined;
   $: player = playerId && $campaignState
     ? $campaignState.players[playerId]
     : null;
@@ -64,6 +66,14 @@
     ? Math.max(0, $campaignState.deadlines[playerId] - now)
     : 0;
   $: remainingSeconds = Math.ceil(remainingMs / 1000);
+  $: localStoryId = playerId
+    ? $libraryState.selections[playerId]
+    : null;
+  $: partnerStoryId = playerId
+    ? $libraryState.selections[playerId === 'p1' ? 'p2' : 'p1']
+    : null;
+  $: localStoryTitle = getStoryTitle(localStoryId);
+  $: partnerStoryTitle = getStoryTitle(partnerStoryId);
   $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
 
   $: if (terminalScreenElement && scrollKey !== lastScrollKey) {
@@ -235,6 +245,15 @@
       behavior: 'smooth'
     });
   }
+
+  function getStoryTitle(storyId: string | null): string {
+    if (!storyId) {
+      return 'NONE';
+    }
+
+    return $libraryState.stories.find((story) => story.id === storyId)?.title
+      ?? storyId;
+  }
 </script>
 
 <section
@@ -249,7 +268,37 @@
   </header>
 
   <div class="terminal-screen" bind:this={terminalScreenElement}>
-    {#if !$campaignState || !scene}
+    {#if !$libraryState.activeStoryId}
+      <div class="cartridge-status" role="status">
+        <p class="scene-id">STORY CARTRIDGE REQUIRED</p>
+        <h1>Story Mode is offline</h1>
+
+        {#if !localStoryId}
+          <p>Open Library and select a story cartridge to stage it.</p>
+        {:else if !partnerStoryId}
+          <p>
+            You selected <strong>{localStoryTitle}</strong>. Waiting for the
+            other player to select a story.
+          </p>
+        {:else}
+          <p>The inserted cartridges do not match.</p>
+          <dl>
+            <div>
+              <dt>YOUR CARTRIDGE</dt>
+              <dd>{localStoryTitle}</dd>
+            </div>
+            <div>
+              <dt>PARTNER CARTRIDGE</dt>
+              <dd>{partnerStoryTitle}</dd>
+            </div>
+          </dl>
+        {/if}
+
+        <button type="button" on:click={() => location.set('library')}>
+          Open Library
+        </button>
+      </div>
+    {:else if !$campaignState || !scene}
       <p class="system-message">Synchronizing campaign state...</p>
     {:else}
       <div class="terminal-history" aria-label="Previous terminal output">
@@ -314,7 +363,7 @@
 
   {#if $campaignState && scene}
     <div class="terminal-controls">
-      {#if scene.type === 'dialogue' || scene.type === 'image'}
+      {#if scene.type === 'dialogue' || scene.type === 'image' || scene.type === 'effect'}
         <button type="button" disabled={!typingComplete} on:click={advance}>
           Continue
         </button>
@@ -698,6 +747,63 @@
     color: #94a3b8;
     letter-spacing: 1px;
     text-align: center;
+  }
+
+  .cartridge-status {
+    max-width: 680px;
+    margin: 80px auto;
+    padding: 28px;
+    background: #0c1322;
+    border: 1px solid #4a98d9;
+    box-shadow: 0 0 28px #4a98d924;
+
+    h1 {
+      margin: 10px 0 16px;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    p {
+      color: #aeb9c9;
+      line-height: 1.6;
+    }
+
+    strong,
+    dd {
+      color: #02fbfb;
+    }
+
+    dl {
+      margin-top: 22px;
+
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    dl div {
+      padding: 14px;
+      background: #070b16;
+      border: 1px solid #2c3b54;
+    }
+
+    dt {
+      margin-bottom: 8px;
+      color: #8893a2;
+      font-size: 0.7rem;
+    }
+
+    button {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 24px;
+      color: #07111d;
+      background: #02fbfb;
+      border: 1px solid #02fbfb;
+      border-radius: 4px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
   }
 
   @keyframes blink {

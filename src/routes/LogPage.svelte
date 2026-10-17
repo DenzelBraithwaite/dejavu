@@ -2,8 +2,10 @@
   import {
     CharacterMenu,
     Journal,
+    MinigameLibrary,
     NetRunners,
     SettingsMenu,
+    StoryLibrary,
     Terminal
   } from '../lib/components';
 </script>
@@ -12,15 +14,20 @@
   <Terminal />
   <CharacterMenu />
   <Journal />
+  <MinigameLibrary />
   <NetRunners />
   <SettingsMenu />
+  <StoryLibrary />
 </div>
 
 <style lang="scss">
   .page-stack {
-    width: 100%;
+    width: auto;
     height: 100%;
+    min-width: 0;
     max-width: 1100px;
     margin: 0 auto;
+
+    flex: 1 1 0;
   }
 </style>

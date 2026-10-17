@@ -23,12 +23,14 @@ import {
   updateNetRunners,
   voteNetRunnersRematch
 } from './server/netRunnersSession.js';
+import { createStoryRepository } from './server/storyRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const port = Number(process.env.PORT ?? 6912);
 const host = process.env.HOST ?? '0.0.0.0';
 const savesDirectory = join(__dirname, 'data', 'saves');
+const storyDatabasePath = join(__dirname, 'data', 'dejavu.sqlite');
 const reconnectGraceMs = 60_000;
 
 const app = express();
@@ -45,6 +47,12 @@ const playerSlots = {
   p2: createEmptySlot()
 };
 
+const storyRepository = createStoryRepository(storyDatabasePath);
+const storySelections = {
+  p1: null,
+  p2: null
+};
+let activeStoryId = null;
 let campaignState = createCampaignState();
 let netRunnersState = createNetRunnersState();
 const chatMessages = [];
@@ -76,11 +84,122 @@ io.on('connection', (socket) => {
 
   socket.emit('session:status', createSessionStatus(playerId));
   socket.emit('campaign:state', getCampaignSnapshot(campaignState));
+  socket.emit('library:state', createLibraryState());
   socket.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
   if (hasInstalledMod('neuro-link-chat')) {
     socket.emit('chat:history', chatMessages);
   }
   broadcastSessionStatus();
+
+  socket.on('library:get-story', (storyId, acknowledge = () => {}) => {
+    const story = storyRepository.getStory(String(storyId ?? ''));
+
+    acknowledge(story
+      ? {
+          ok: true,
+          story
+        }
+      : {
+          ok: false,
+          error: 'Story not found.'
+        });
+  });
+
+  socket.on('library:create-story', (input, acknowledge = () => {}) => {
+    try {
+      const story = storyRepository.createStory(input ?? {});
+      acknowledge({
+        ok: true,
+        story
+      });
+      broadcastLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not create the story.'
+      });
+    }
+  });
+
+  socket.on('library:update-story', (request, acknowledge = () => {}) => {
+    try {
+      const story = storyRepository.updateStory(
+        String(request?.storyId ?? ''),
+        request?.story
+      );
+      acknowledge({
+        ok: true,
+        story
+      });
+      broadcastLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not update the story.'
+      });
+    }
+  });
+
+  socket.on('library:duplicate-story', (storyId, acknowledge = () => {}) => {
+    try {
+      const story = storyRepository.duplicateStory(String(storyId ?? ''));
+      acknowledge({
+        ok: true,
+        story
+      });
+      broadcastLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not duplicate the story.'
+      });
+    }
+  });
+
+  socket.on('library:delete-story', (storyId, acknowledge = () => {}) => {
+    try {
+      const normalizedStoryId = String(storyId ?? '');
+      storyRepository.deleteStory(normalizedStoryId);
+
+      for (const participantId of ['p1', 'p2']) {
+        if (storySelections[participantId] === normalizedStoryId) {
+          storySelections[participantId] = null;
+        }
+      }
+
+      synchronizeActiveStory();
+      acknowledge({
+        ok: true
+      });
+      broadcastLibraryState();
+      io.emit('campaign:state', getCampaignSnapshot(campaignState));
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not delete the story.'
+      });
+    }
+  });
+
+  socket.on('library:select-story', (storyId, acknowledge = () => {}) => {
+    const normalizedStoryId = storyId === null ? null : String(storyId ?? '');
+
+    if (normalizedStoryId && !storyRepository.getStory(normalizedStoryId)) {
+      acknowledge({
+        ok: false,
+        error: 'Story not found.'
+      });
+      return;
+    }
+
+    storySelections[playerId] = normalizedStoryId;
+    synchronizeActiveStory();
+    acknowledge({
+      ok: true
+    });
+    broadcastLibraryState();
+    io.emit('campaign:state', getCampaignSnapshot(campaignState));
+  });
 
   socket.on('chat:send', (value, acknowledge = () => {}) => {
     if (!hasInstalledMod('neuro-link-chat')) {
@@ -123,6 +242,14 @@ io.on('connection', (socket) => {
 
   socket.on('campaign:action', (action, acknowledge = () => {}) => {
     try {
+      if (!activeStoryId || campaignState.story?.id !== activeStoryId) {
+        acknowledge({
+          ok: false,
+          error: 'Both players must insert the same story cartridge first.'
+        });
+        return;
+      }
+
       const result = handleCampaignAction(campaignState, playerId, action);
       acknowledge(result);
 
@@ -139,6 +266,10 @@ io.on('connection', (socket) => {
 
   socket.on('campaign:save', async (saveName, acknowledge = () => {}) => {
     try {
+      if (!activeStoryId || campaignState.story?.id !== activeStoryId) {
+        throw new Error('Both players must stage the same story before saving.');
+      }
+
       const fileName = createSaveFileName(saveName);
       await mkdir(savesDirectory, {
         recursive: true
@@ -185,8 +316,12 @@ io.on('connection', (socket) => {
       const safeFileName = createSaveFileName(fileName);
       const contents = await readFile(join(savesDirectory, safeFileName), 'utf8');
       campaignState = restoreCampaignState(JSON.parse(contents));
+      activeStoryId = campaignState.story.id;
+      storySelections.p1 = activeStoryId;
+      storySelections.p2 = activeStoryId;
       initializeDeadlines(campaignState);
       io.emit('campaign:state', getCampaignSnapshot(campaignState));
+      broadcastLibraryState();
       acknowledge({
         ok: true
       });
@@ -392,8 +527,45 @@ function scheduleSlotRelease(playerId, expectedToken) {
     }
 
     playerSlots[playerId] = createEmptySlot();
+    storySelections[playerId] = null;
+    synchronizeActiveStory();
     broadcastSessionStatus();
+    broadcastLibraryState();
   }, reconnectGraceMs);
+}
+
+function createLibraryState() {
+  return {
+    stories: storyRepository.listStories(),
+    selections: {
+      ...storySelections
+    },
+    activeStoryId
+  };
+}
+
+function broadcastLibraryState() {
+  io.emit('library:state', createLibraryState());
+}
+
+function synchronizeActiveStory() {
+  const matchingStoryId = storySelections.p1
+    && storySelections.p1 === storySelections.p2
+    ? storySelections.p1
+    : null;
+
+  activeStoryId = matchingStoryId;
+
+  if (!matchingStoryId || campaignState.story?.id === matchingStoryId) {
+    return;
+  }
+
+  const story = storyRepository.getStory(matchingStoryId);
+
+  if (story) {
+    campaignState = createCampaignState(story);
+    initializeDeadlines(campaignState);
+  }
 }
 
 function createSaveFileName(value) {

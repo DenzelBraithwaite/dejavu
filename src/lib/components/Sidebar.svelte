@@ -22,8 +22,13 @@
   </svg>
   
   <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
-    <span slot="title">Terminal</span>
-    <span slot="description">Main Game</span>
+    <span slot="title">Story Mode</span>
+    <span slot="description">Play the inserted story</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'cpu'}>
+    <span slot="title">Minigames</span>
+    <span slot="description">Browse coded game modules</span>
   </Item>
 
   <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
@@ -49,14 +54,14 @@
     </Item>
   {/if}
 
-  <Item on:click={() => createEvent('select', 'netrunners')} collapsed={!sidebarExpanded} color={'purple'} iconType={'cpu'}>
-    <span slot="title">NetRunners</span>
-    <span slot="description">Card game, bet on the fastest hacker to win.</span>
-  </Item>
-
   <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'}>
     <span slot="title">Settings</span>
     <span slot="description">Music and sound controls</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'blue'} iconType={'library'}>
+    <span slot="title">Library</span>
+    <span slot="description">Select or create stories</span>
   </Item>
 </div>
 

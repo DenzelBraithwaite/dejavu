@@ -1,6 +1,7 @@
 <script lang="ts">
   import { socket } from '../socket';
   import location from '../stores/location';
+  import { libraryState } from '../stores/library';
 
   export let embedded = false;
 
@@ -35,6 +36,11 @@
   }
 
   function saveCampaign(): void {
+    if (!$libraryState.activeStoryId) {
+      statusMessage = 'Both players must stage the same story before saving.';
+      return;
+    }
+
     socket.emit('campaign:save', saveName, (result: {
       ok: boolean;
       fileName?: string;
@@ -76,13 +82,20 @@
     <h2 id="saves-title">Campaign saves</h2>
     <p class="description">
       Saves are versioned JSON files stored by the LAN host. Loading affects both players.
+      A matching story cartridge must be active before saving.
     </p>
 
     <div class="save-form">
       <label for="save-name">Save name</label>
       <div>
         <input id="save-name" bind:value={saveName} maxlength="64">
-        <button type="button" on:click={saveCampaign}>Save campaign</button>
+        <button
+          type="button"
+          disabled={!$libraryState.activeStoryId}
+          on:click={saveCampaign}
+        >
+          Save campaign
+        </button>
       </div>
     </div>
 
@@ -201,8 +214,13 @@
   button {
     cursor: pointer;
 
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
     &:hover,
-    &:focus-visible {
+    &:focus-visible:not(:disabled) {
       color: #17130a;
       background: #d6a741;
       outline: 2px solid #ffffff;

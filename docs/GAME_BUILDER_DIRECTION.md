@@ -221,19 +221,33 @@ This boundary allows the current scene engine to become the execution layer for 
 - Rate-limit public publishing, chat, and asset upload operations.
 - Store moderation and ownership metadata for shared stories.
 
+## Current implementation snapshot
+
+The first local builder foundation is now implemented:
+
+- A SQLite-backed story library with create, read, update, duplicate, and delete operations.
+- A seeded built-in Déjà Vu story document.
+- Per-player cartridge selection with a two-player matching requirement.
+- A three-lane node editor and type-specific inspector.
+- Effect and condition nodes for inventory, flags, stats, characters, mods, and dice outcomes.
+- A separate Minigames catalog with NetRunners registered.
+- Server-owned campaigns that execute the selected story document.
+
+The current canvas uses destination-ID fields rather than drawn edges. Direct graph connections, full validation, side-by-side playtesting, themes, assets, and publishing remain future milestones.
+
 ## Suggested delivery sequence
 
 ### Phase 1 Runtime contract
 
 - Finalize serializable node schemas.
 - Finish the minigame launch/result bridge.
-- Add story-document loading instead of a compiled registry.
+- Add story-document loading instead of a compiled registry. **Implemented.**
 - Add full graph validation.
 
 ### Phase 2 Local visual editor
 
-- Story library backed by local storage or local files.
-- Flowchart canvas and node inspector.
+- Story library backed by local storage or local files. **Implemented with SQLite.**
+- Flowchart canvas and node inspector. **Inspector and lane canvas implemented; drawn connections remain.**
 - Dialogue, choice, checkpoint, conversation, dice, vote, timer, and image nodes.
 - Side-by-side playtest mode.
 - JSON import and export.

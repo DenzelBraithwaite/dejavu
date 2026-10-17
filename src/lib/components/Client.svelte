@@ -6,6 +6,7 @@
   import { campaignState, type CampaignState } from '../stores/campaign';
   import { chatMessages, type ChatMessage } from '../stores/chat';
   import location from '../stores/location';
+  import { libraryState, type LibraryState } from '../stores/library';
   import {
     netRunnersServerState,
     type NetRunnersServerState
@@ -35,6 +36,7 @@
     socket.on('connect_error', handleConnectionError);
     socket.on('session:status', handleSessionStatus);
     socket.on('campaign:state', handleCampaignState);
+    socket.on('library:state', handleLibraryState);
     socket.on('netrunners:state', handleNetRunnersState);
     socket.on('chat:history', handleChatHistory);
     socket.on('chat:message', handleChatMessage);
@@ -45,6 +47,7 @@
     socket.off('connect_error', handleConnectionError);
     socket.off('session:status', handleSessionStatus);
     socket.off('campaign:state', handleCampaignState);
+    socket.off('library:state', handleLibraryState);
     socket.off('netrunners:state', handleNetRunnersState);
     socket.off('chat:history', handleChatHistory);
     socket.off('chat:message', handleChatMessage);
@@ -104,6 +107,10 @@
       minigameWasActive = false;
       location.set('terminal');
     }
+  }
+
+  function handleLibraryState(state: LibraryState): void {
+    libraryState.set(state);
   }
 
   function handleNetRunnersState(state: NetRunnersServerState): void {
@@ -206,8 +213,8 @@
 <style lang="scss">
   .client {
     position: relative;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     background:
       radial-gradient(circle at 75% 20%, #09579724, transparent 38%),
       #020617;
@@ -223,6 +230,7 @@
 
   .main-content {
     position: relative;
+    width: 100%;
     min-width: 0;
     padding: 24px 40px;
     grid-column: 2;

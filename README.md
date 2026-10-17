@@ -11,7 +11,7 @@ The long-term product has two connected modes:
 - Build mode lets creators make stories as flowcharts without writing code.
 - Play mode runs those story graphs as synchronized two-player terminal games.
 
-Stories will live in a story library. Coded minigames will live in a minigame library and can be launched from story nodes. NetRunners is the first registered minigame concept.
+Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. NetRunners is the first registered minigame.
 
 Read the complete product direction in [Visual Story Builder Product Direction](docs/GAME_BUILDER_DIRECTION.md).
 
@@ -27,6 +27,17 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - A short reconnect grace period before an abandoned slot becomes available.
 - Same-origin Socket.IO in production and a Vite development proxy.
 - An optional Neuro-Link Chat mod that can enable long-distance player messaging across story scenes and minigames.
+
+### Story cartridges and local builder
+
+- Story Mode starts without a cartridge selected.
+- The Library lists persistent story documents and shows each player's current cartridge.
+- Story Mode unlocks only when both players select the same story.
+- Selecting a different matching story starts a fresh shared campaign for that story.
+- Stories are stored in `data/dejavu.sqlite`, so created stories survive server restarts.
+- Déjà Vu is seeded as the first built-in story and can be edited or duplicated.
+- Creators can create, read, edit, duplicate, and delete custom story drafts.
+- The first visual editor separates Player 1, shared, and Player 2 nodes and provides a reusable node palette plus type-specific inspector.
 
 ### Server-authoritative campaign
 
@@ -55,8 +66,10 @@ The current scene contract supports:
 - Cooperative votes with random disagreement resolution.
 - Server-owned timed choices.
 - Story images.
+- State effects for inventory, flags, stats, characters, and installed mods.
+- Conditional branches based on inventory, flags, stats, and the previous dice result.
 - Ending nodes.
-- A reserved minigame-node contract.
+- A NetRunners minigame-node contract with completed and cancelled routes.
 
 The Notes prologue has been converted into scene data with separate player perspectives, character naming, a dice check, timed choice, checkpoint, conversation, shared vote, and image scene. Chapter 1 currently ends at a placeholder because the notes contain its outline but not complete scene-level dialogue.
 
@@ -85,6 +98,11 @@ Each browser stores independent music and sound-effect mute and volume settings.
 - Save and load controls live beneath the local audio controls in Settings.
 - Versioned JSON saves are stored by the LAN host in `data/saves/`.
 - Loading a save restores the shared campaign for both clients.
+- Saving is available only while both players have a matching active story.
+
+### Minigame library
+
+The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners can be launched directly from this catalog or through a story minigame node.
 
 ### NetRunners
 
@@ -128,6 +146,7 @@ The ignored `Notes/character_images/` directory contains additional character re
 - SCSS
 - Express 5
 - Socket.IO
+- SQLite through Node's built-in `node:sqlite` module
 - pnpm
 
 ## Project structure
@@ -139,7 +158,8 @@ The ignored `Notes/character_images/` directory contains additional character re
 ├── public/                         Built client and tracked artwork
 ├── server/
 │   ├── gameSession.js              Campaign rules and scene execution
-│   └── netRunnersSession.js        Multiplayer NetRunners authority
+│   ├── netRunnersSession.js        Multiplayer NetRunners authority
+│   └── storyRepository.js          Persistent SQLite story CRUD
 ├── src/
 │   ├── lib/
 │   │   ├── actions/typewriter.ts
@@ -147,6 +167,7 @@ The ignored `Notes/character_images/` directory contains additional character re
 │   │   ├── stores/                 Browser projections of server state
 │   │   └── story/
 │   │       ├── chapters/           Serializable story data
+│   │       ├── dejaVuStory.js       Seeded built-in story document
 │   │       ├── sceneTypes.js
 │   │       └── storyRegistry.js
 │   ├── routes/LogPage.svelte
@@ -158,6 +179,8 @@ The ignored `Notes/character_images/` directory contains additional character re
 ```
 
 ## Development
+
+Use Node.js 22.5 or newer. Story persistence uses the built-in `node:sqlite` module, so no external database package or service is required for local/LAN play.
 
 Install dependencies:
 
@@ -224,14 +247,13 @@ Sass still prints deprecation notices for legacy APIs and older global colour he
 
 ## Next product milestone
 
-The next major milestone is not more code-authored story content. It is a local visual editor that can create the same serializable nodes the runtime already executes.
+The local Library, persistent story documents, and first node editor are now in place. The next builder milestone is turning the current lane view into a fully connected graph authoring experience.
 
 The first builder milestone should let a non-developer:
 
-1. Create a story.
-2. Add separate Player 1 and Player 2 dialogue.
-3. Connect nodes on a flowchart.
-4. Add a checkpoint, choice, and dice check.
-5. Configure terminal appearance.
-6. Playtest both perspectives.
-7. Export and run the story through the authoritative two-player runtime.
+1. Draw and reconnect routes directly on the canvas.
+2. Validate missing destinations and unreachable nodes visually.
+3. Configure terminal appearance per story and node.
+4. Playtest both perspectives beside the graph.
+5. Add asset import and selection.
+6. Export and import portable story cartridges.

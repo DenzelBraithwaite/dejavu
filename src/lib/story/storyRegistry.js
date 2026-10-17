@@ -1,13 +1,10 @@
 import { createSceneRegistry } from './sceneTypes.js';
-import { prologueScenes } from './chapters/prologue.js';
+import { dejaVuStoryDocument } from './dejaVuStory.js';
 
-export const initialSceneIds = {
-  p1: 'prologue.p1.wake',
-  p2: 'prologue.p2.wake'
-};
+export const initialSceneIds = dejaVuStoryDocument.initialSceneIds;
 
 export const storyRegistry = createSceneRegistry([
-  ...prologueScenes
+  ...dejaVuStoryDocument.nodes
 ]);
 
 /**
