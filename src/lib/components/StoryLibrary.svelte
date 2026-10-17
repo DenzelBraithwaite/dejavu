@@ -9,6 +9,18 @@
   import { sessionState, type PlayerId } from '../stores/session';
 
   type EditorMode = 'library' | 'create' | 'editor';
+  type LaneId = 'p1' | 'both' | 'p2';
+  type LinkSelection = {
+    sourceId: string;
+    field: string;
+    label: string;
+  };
+  type InsertionTarget = {
+    lane: LaneId;
+    sourceId?: string;
+    field?: string;
+    insertAfterId?: string;
+  };
 
   const nodeTypes = [
     { type: 'dialogue', label: 'Dialogue' },
@@ -23,7 +35,14 @@
     { type: 'condition', label: 'Condition' },
     { type: 'image', label: 'Image' },
     { type: 'minigame', label: 'Minigame' },
+    { type: 'label', label: 'Visual label' },
     { type: 'ending', label: 'Ending' }
+  ];
+
+  const lanes: Array<{ id: LaneId; label: string }> = [
+    { id: 'p1', label: 'PLAYER 1' },
+    { id: 'both', label: 'SHARED' },
+    { id: 'p2', label: 'PLAYER 2' }
   ];
 
   let mode: EditorMode = 'library';
@@ -36,6 +55,12 @@
   let statusMessage = '';
   let errorMessage = '';
   let deleteArmedId = '';
+  let activeLane: LaneId = 'p1';
+  let insertionTarget: InsertionTarget | null = null;
+  let linkSelection: LinkSelection | null = null;
+  let copiedNode: StoryNode | null = null;
+  let draggedNodeId = '';
+  let storyRevision = 0;
 
   $: playerId = $sessionState.playerId;
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
@@ -166,20 +191,144 @@
     });
   }
 
+  function openNodePicker(target: InsertionTarget): void {
+    activeLane = target.lane;
+    insertionTarget = target;
+    linkSelection = null;
+  }
+
+  function closeNodePicker(): void {
+    insertionTarget = null;
+  }
+
   function addNode(type: string): void {
+    if (!editingStory || !insertionTarget) {
+      return;
+    }
+
+    const nodeId = createUniqueNodeId(type);
+    const node = createNode(type, nodeId);
+    node.audience = insertionTarget.lane;
+
+    insertNode(node, insertionTarget);
+    connectInsertionTarget(node.id, insertionTarget);
+    selectedNodeId = nodeId;
+    insertionTarget = null;
+    refreshStory();
+  }
+
+  function pasteNode(): void {
+    if (!copiedNode || !editingStory || !insertionTarget) {
+      return;
+    }
+
+    const node = structuredClone(copiedNode);
+    node.id = createUniqueNodeId(node.type);
+    node.audience = insertionTarget.lane;
+    clearNodeRoutes(node);
+    insertNode(node, insertionTarget);
+    connectInsertionTarget(node.id, insertionTarget);
+    selectedNodeId = node.id;
+    insertionTarget = null;
+    refreshStory();
+  }
+
+  function duplicateSelectedNode(): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    copiedNode = structuredClone(selectedNode);
+    openNodePicker({
+      lane: (selectedNode.audience ?? 'both') as LaneId,
+      insertAfterId: selectedNode.id
+    });
+    pasteNode();
+  }
+
+  function copySelectedNode(): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    copiedNode = structuredClone(selectedNode);
+    statusMessage = `${displayNodeName(selectedNode)} copied.`;
+  }
+
+  function insertNode(node: StoryNode, target: InsertionTarget): void {
     if (!editingStory) {
       return;
     }
 
-    const nodeNumber = editingStory.nodes.length + 1;
-    const nodeId = `${editingStory.id}.${type}.${nodeNumber}`;
-    const node = createNode(type, nodeId);
+    const insertAfterIndex = target.insertAfterId
+      ? editingStory.nodes.findIndex((candidate) => candidate.id === target.insertAfterId)
+      : findLastLaneNodeIndex(target.lane);
+    const insertionIndex = insertAfterIndex >= 0
+      ? insertAfterIndex + 1
+      : editingStory.nodes.length;
 
-    editingStory.nodes = [...editingStory.nodes, node];
-    selectedNodeId = nodeId;
-    editingStory = {
-      ...editingStory
-    };
+    editingStory.nodes.splice(insertionIndex, 0, node);
+  }
+
+  function connectInsertionTarget(nodeId: string, target: InsertionTarget): void {
+    if (!editingStory) {
+      return;
+    }
+
+    if (target.sourceId && target.field) {
+      const source = editingStory.nodes.find((node) => node.id === target.sourceId);
+
+      if (source) {
+        setRouteValue(source, target.field, nodeId);
+      }
+
+      return;
+    }
+
+    const precedingNode = target.insertAfterId
+      ? editingStory.nodes.find((node) => node.id === target.insertAfterId)
+      : getLaneNodes(target.lane).filter((node) => node.id !== nodeId).at(-1);
+
+    if (precedingNode && supportsSimpleNext(precedingNode) && !precedingNode.next) {
+      precedingNode.next = nodeId;
+    }
+  }
+
+  function createUniqueNodeId(type: string): string {
+    if (!editingStory) {
+      return type;
+    }
+
+    let nodeNumber = editingStory.nodes.length + 1;
+    let nodeId = `${editingStory.id}.${type}.${nodeNumber}`;
+
+    while (editingStory.nodes.some((node) => node.id === nodeId)) {
+      nodeNumber += 1;
+      nodeId = `${editingStory.id}.${type}.${nodeNumber}`;
+    }
+
+    return nodeId;
+  }
+
+  function findLastLaneNodeIndex(lane: LaneId): number {
+    if (!editingStory) {
+      return -1;
+    }
+
+    return editingStory.nodes.reduce(
+      (lastIndex, node, index) => (node.audience ?? 'both') === lane ? index : lastIndex,
+      -1
+    );
+  }
+
+  function refreshStory(): void {
+    if (editingStory) {
+      editingStory = {
+        ...editingStory,
+        nodes: structuredClone(editingStory.nodes)
+      };
+      storyRevision += 1;
+    }
   }
 
   function deleteSelectedNode(): void {
@@ -221,6 +370,346 @@
     selectedNode.choices = selectedNode.choices.filter(
       (_choice: unknown, choiceIndex: number) => choiceIndex !== index
     );
+  }
+
+  function getLaneNodes(lane: LaneId): StoryNode[] {
+    return editingStory?.nodes.filter(
+      (node) => (node.audience ?? 'both') === lane
+    ) ?? [];
+  }
+
+  function nodeOrdinal(node: StoryNode): string {
+    const nodesOfType = getLaneNodes((node.audience ?? 'both') as LaneId)
+      .filter((candidate) => candidate.type === node.type);
+    const ordinal = nodesOfType.findIndex((candidate) => candidate.id === node.id) + 1;
+
+    return `${ordinal}${ordinalSuffix(ordinal)} ${nodeTypeName(node.type)} node`;
+  }
+
+  function ordinalSuffix(value: number): string {
+    const tens = value % 100;
+
+    if (tens >= 11 && tens <= 13) {
+      return 'th';
+    }
+
+    if (value % 10 === 1) {
+      return 'st';
+    }
+
+    if (value % 10 === 2) {
+      return 'nd';
+    }
+
+    if (value % 10 === 3) {
+      return 'rd';
+    }
+
+    return 'th';
+  }
+
+  function nodeTypeName(type: string): string {
+    if (type === 'condition') {
+      return 'if';
+    }
+
+    return nodeTypes.find((nodeType) => nodeType.type === type)?.label.toLowerCase()
+      ?? type;
+  }
+
+  function displayNodeName(node: StoryNode): string {
+    if (node.type === 'label') {
+      return String(node.text || 'Untitled label');
+    }
+
+    return String(
+      node.text
+      || node.prompt
+      || node.speaker
+      || nodeTypeName(node.type)
+    ).slice(0, 52);
+  }
+
+  function selectNode(node: StoryNode): void {
+    if (linkSelection) {
+      if (!canLinkToNode(linkSelection.sourceId, node)) {
+        errorMessage = 'Choose a node in the same player lane or the Shared lane.';
+        return;
+      }
+
+      const source = editingStory?.nodes.find(
+        (candidate) => candidate.id === linkSelection?.sourceId
+      );
+
+      if (source) {
+        setRouteValue(source, linkSelection.field, node.id);
+        statusMessage = `${linkSelection.label} now leads to ${displayNodeName(node)}.`;
+        linkSelection = null;
+        selectedNodeId = source.id;
+        refreshStory();
+      }
+
+      return;
+    }
+
+    selectedNodeId = node.id;
+    activeLane = (node.audience ?? 'both') as LaneId;
+    errorMessage = '';
+  }
+
+  function startLinkSelection(field: string, label: string): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    linkSelection = {
+      sourceId: selectedNode.id,
+      field,
+      label
+    };
+    statusMessage = `Select a destination node for ${label.toLowerCase()}.`;
+  }
+
+  function cancelLinkSelection(): void {
+    linkSelection = null;
+    statusMessage = '';
+  }
+
+  function clearRoute(node: StoryNode, field: string): void {
+    setRouteValue(node, field, '');
+    refreshStory();
+  }
+
+  function routeLabel(node: StoryNode, field: string): string {
+    const destinationId = getRouteValue(node, field);
+    const destination = editingStory?.nodes.find((candidate) => candidate.id === destinationId);
+
+    return destination ? displayNodeName(destination) : 'Not connected';
+  }
+
+  function routeFieldLabel(node: StoryNode, field: string): string {
+    if (field === 'success' || field === 'trueNext') {
+      return 'YES';
+    }
+
+    if (field === 'failure' || field === 'falseNext') {
+      return 'NO';
+    }
+
+    if (field.startsWith('choices.')) {
+      const choiceIndex = Number(field.split('.')[1]);
+
+      return String(node.choices?.[choiceIndex]?.label ?? `OPTION ${choiceIndex + 1}`)
+        .toUpperCase()
+        .slice(0, 18);
+    }
+
+    if (field === 'resultNext.completed') {
+      return 'COMPLETE';
+    }
+
+    if (field === 'resultNext.cancelled') {
+      return 'CANCEL';
+    }
+
+    return 'NEXT';
+  }
+
+  function getRouteValue(node: StoryNode, field: string): string {
+    const parts = field.split('.');
+    let value: any = node;
+
+    for (const part of parts) {
+      value = value?.[Number.isNaN(Number(part)) ? part : Number(part)];
+    }
+
+    return typeof value === 'string' ? value : '';
+  }
+
+  function setRouteValue(node: StoryNode, field: string, value: string): void {
+    const parts = field.split('.');
+    let target: any = node;
+
+    for (const part of parts.slice(0, -1)) {
+      target = target[Number.isNaN(Number(part)) ? part : Number(part)];
+    }
+
+    const finalPart = parts.at(-1) ?? '';
+    target[Number.isNaN(Number(finalPart)) ? finalPart : Number(finalPart)] = value;
+  }
+
+  function canLinkToNode(sourceId: string, destination: StoryNode): boolean {
+    if (destination.type === 'label' || destination.id === sourceId) {
+      return false;
+    }
+
+    const source = editingStory?.nodes.find((node) => node.id === sourceId);
+    const sourceLane = source?.audience ?? 'both';
+    const destinationLane = destination.audience ?? 'both';
+
+    return sourceLane === 'both'
+      ? destinationLane === 'both'
+      : destinationLane === sourceLane || destinationLane === 'both';
+  }
+
+  function isValidLinkTarget(node: StoryNode): boolean {
+    return linkSelection
+      ? canLinkToNode(linkSelection.sourceId, node)
+      : false;
+  }
+
+  function routeFields(node: StoryNode): string[] {
+    if (supportsSimpleNext(node)) {
+      return ['next'];
+    }
+
+    if (node.type === 'dice-check') {
+      return ['success', 'failure'];
+    }
+
+    if (node.type === 'condition') {
+      return ['trueNext', 'falseNext'];
+    }
+
+    if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+      return (node.choices ?? []).map((_choice, index) => `choices.${index}.next`);
+    }
+
+    if (node.type === 'minigame') {
+      return ['resultNext.completed', 'resultNext.cancelled'];
+    }
+
+    return [];
+  }
+
+  function supportsSimpleNext(node: StoryNode): boolean {
+    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'effect']
+      .includes(node.type);
+  }
+
+  function nodeIsInvalid(node: StoryNode): boolean {
+    if (!editingStory || node.type === 'label') {
+      return false;
+    }
+
+    const isStartNode = Object.values(editingStory.initialSceneIds).includes(node.id);
+    const hasIncomingRoute = editingStory.nodes.some(
+      (candidate) => routeFields(candidate).some(
+        (field) => getRouteValue(candidate, field) === node.id
+      )
+    );
+    const routes = routeFields(node);
+    const hasMissingRoute = node.type !== 'ending'
+      && (routes.length === 0 || routes.some((field) => !getRouteValue(node, field)));
+    const hasBrokenRoute = routes.some((field) => {
+      const destinationId = getRouteValue(node, field);
+      const destination = editingStory?.nodes.find(
+        (candidate) => candidate.id === destinationId
+      );
+
+      return Boolean(destinationId)
+        && (!destination
+          || destination.type === 'label'
+          || !canLinkToNode(node.id, destination));
+    });
+
+    return (!isStartNode && !hasIncomingRoute) || hasMissingRoute || hasBrokenRoute;
+  }
+
+  function nodeHasBranches(node: StoryNode): boolean {
+    return ['choice', 'vote', 'timed-choice', 'dice-check', 'condition', 'minigame']
+      .includes(node.type);
+  }
+
+  function clearNodeRoutes(node: StoryNode): void {
+    for (const field of routeFields(node)) {
+      setRouteValue(node, field, '');
+    }
+  }
+
+  function startDragging(nodeId: string): void {
+    draggedNodeId = nodeId;
+  }
+
+  function dropOnNode(targetNode: StoryNode): void {
+    if (!editingStory || !draggedNodeId || draggedNodeId === targetNode.id) {
+      draggedNodeId = '';
+      return;
+    }
+
+    const draggedNode = editingStory.nodes.find((node) => node.id === draggedNodeId);
+
+    if (!draggedNode || draggedNode.audience !== targetNode.audience) {
+      errorMessage = 'Drop onto a node in the same lane, or drop onto a lane to move it.';
+      draggedNodeId = '';
+      return;
+    }
+
+    moveNodeBefore(draggedNode.id, targetNode.id);
+    draggedNodeId = '';
+  }
+
+  function dropOnLane(lane: LaneId): void {
+    if (!editingStory || !draggedNodeId) {
+      return;
+    }
+
+    const draggedNode = editingStory.nodes.find((node) => node.id === draggedNodeId);
+
+    if (!draggedNode) {
+      return;
+    }
+
+    draggedNode.audience = lane;
+    const remainingNodes = editingStory.nodes.filter((node) => node.id !== draggedNode.id);
+    const lastLaneIndex = remainingNodes.reduce(
+      (lastIndex, node, index) => (node.audience ?? 'both') === lane ? index : lastIndex,
+      -1
+    );
+
+    remainingNodes.splice(lastLaneIndex + 1, 0, draggedNode);
+    editingStory.nodes = remainingNodes;
+    activeLane = lane;
+    draggedNodeId = '';
+    refreshStory();
+  }
+
+  function moveNodeBefore(nodeId: string, targetId: string): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const node = editingStory.nodes.find((candidate) => candidate.id === nodeId);
+    const remainingNodes = editingStory.nodes.filter((candidate) => candidate.id !== nodeId);
+    const targetIndex = remainingNodes.findIndex((candidate) => candidate.id === targetId);
+
+    if (!node || targetIndex < 0) {
+      return;
+    }
+
+    remainingNodes.splice(targetIndex, 0, node);
+    editingStory.nodes = remainingNodes;
+    refreshStory();
+  }
+
+  function moveSelectedNode(direction: -1 | 1): void {
+    if (!editingStory || !selectedNode) {
+      return;
+    }
+
+    const laneNodes = getLaneNodes((selectedNode.audience ?? 'both') as LaneId);
+    const currentIndex = laneNodes.findIndex((node) => node.id === selectedNode.id);
+    const targetNode = laneNodes[currentIndex + direction];
+
+    if (!targetNode) {
+      return;
+    }
+
+    if (direction < 0) {
+      moveNodeBefore(selectedNode.id, targetNode.id);
+    } else {
+      moveNodeBefore(targetNode.id, selectedNode.id);
+    }
   }
 
   function handleSimpleResult(successMessage: string) {
@@ -328,6 +817,13 @@
             completed: '',
             cancelled: ''
           }
+        };
+      case 'label':
+        return {
+          id,
+          type,
+          audience: 'both',
+          text: 'NEW SECTION'
         };
       case 'ending':
         return {
@@ -478,33 +974,109 @@
       </div>
 
       <div class="editor-workspace">
-        <aside class="node-palette" aria-label="Node palette">
-          <h2>Add node</h2>
-          {#each nodeTypes as nodeType}
-            <button type="button" on:click={() => addNode(nodeType.type)}>
-              + {nodeType.label}
-            </button>
-          {/each}
-        </aside>
+        <div
+          class="flow-canvas"
+          class:selecting-route={Boolean(linkSelection)}
+          aria-label="Story flow"
+        >
+          {#if linkSelection}
+            <div class="link-mode-banner" role="status">
+              <span>Select a destination for {linkSelection.label.toLowerCase()}.</span>
+              <button type="button" on:click={cancelLinkSelection}>Cancel</button>
+            </div>
+          {/if}
 
-        <div class="flow-canvas" aria-label="Story flow">
-          {#each ['p1', 'both', 'p2'] as lane}
-            <section class="flow-lane">
-              <h2>{lane === 'both' ? 'SHARED' : `PLAYER ${lane === 'p1' ? '1' : '2'}`}</h2>
-              {#each editingStory.nodes.filter((node) => (node.audience ?? 'both') === lane) as node}
+          <div class="flow-lanes">
+            {#each lanes as lane (`${lane.id}:${storyRevision}`)}
+              <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+              <section
+                class="flow-lane"
+                class:active={activeLane === lane.id}
+                class:has-branches={getLaneNodes(lane.id).some((node) => node.type === 'condition')}
+                role="group"
+                aria-label={`${lane.label} lane`}
+                on:dragover|preventDefault
+                on:drop|preventDefault={() => dropOnLane(lane.id)}
+              >
                 <button
-                  class="flow-node"
-                  class:selected={selectedNodeId === node.id}
+                  class="lane-heading"
                   type="button"
-                  on:click={() => selectedNodeId = node.id}
+                  on:click|stopPropagation={() => activeLane = lane.id}
                 >
-                  <span>{node.type}</span>
-                  <strong>{node.id}</strong>
-                  <small>{node.text || node.prompt || 'No display text'}</small>
+                  <span>{lane.label}</span>
+                  <strong>{getLaneNodes(lane.id).filter((node) => node.type !== 'label').length} NODES</strong>
                 </button>
-              {/each}
-            </section>
-          {/each}
+
+                <div class="lane-node-grid">
+                  {#each getLaneNodes(lane.id) as node (`${node.id}:${storyRevision}`)}
+                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                    <div
+                      role="listitem"
+                      class="node-wrapper"
+                      data-revision={storyRevision}
+                      class:branch-node={nodeHasBranches(node)}
+                      class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
+                      draggable="true"
+                      on:dragstart={() => startDragging(node.id)}
+                      on:dragover|preventDefault
+                      on:drop|stopPropagation|preventDefault={() => dropOnNode(node)}
+                    >
+                      <button
+                        class="flow-node"
+                        class:selected={selectedNodeId === node.id}
+                        class:invalid={nodeIsInvalid(node)}
+                        class:label-node={node.type === 'label'}
+                        class:valid-link-target={Boolean(linkSelection) && isValidLinkTarget(node)}
+                        class:invalid-link-target={Boolean(linkSelection) && !isValidLinkTarget(node)}
+                        type="button"
+                        on:click|stopPropagation={() => selectNode(node)}
+                      >
+                        <span>{nodeOrdinal(node)}</span>
+                        <strong>{displayNodeName(node)}</strong>
+                        {#if node.type !== 'label'}
+                          <small>{nodeIsInvalid(node) ? 'INCOMPLETE ROUTE' : node.id}</small>
+                          <span class="node-route-list">
+                            {#each routeFields(node).filter((field) => getRouteValue(node, field)) as field}
+                              <span>
+                                {routeFieldLabel(node, field)} → {routeLabel(node, field)}
+                              </span>
+                            {/each}
+                          </span>
+                        {/if}
+                      </button>
+
+                      {#each routeFields(node).filter((field) => !getRouteValue(node, field)) as field}
+                        <button
+                          class="branch-add-button"
+                          type="button"
+                          on:click|stopPropagation={() => openNodePicker({
+                            lane: lane.id,
+                            sourceId: node.id,
+                            field,
+                            insertAfterId: node.id
+                          })}
+                        >
+                          + {field.replace('trueNext', 'true').replace('falseNext', 'false').replace('resultNext.', '').replace(/choices\.\d+\.next/, 'option')}
+                        </button>
+                      {/each}
+                    </div>
+                  {/each}
+                </div>
+
+                <button
+                  class="lane-add-button"
+                  type="button"
+                  on:click|stopPropagation={() => openNodePicker({
+                    lane: lane.id,
+                    insertAfterId: getLaneNodes(lane.id).at(-1)?.id
+                  })}
+                >
+                  <span>＋</span>
+                  Add to {lane.label.toLowerCase()}
+                </button>
+              </section>
+            {/each}
+          </div>
         </div>
 
         <aside class="node-inspector" aria-label="Node inspector">
@@ -514,23 +1086,38 @@
                 <p>NODE INSPECTOR</p>
                 <h2>{selectedNode.type}</h2>
               </div>
-              <button class="danger-button" type="button" on:click={deleteSelectedNode}>
-                Delete
-              </button>
+              <div class="inspector-actions">
+                <button type="button" aria-label="Move node up" on:click={() => moveSelectedNode(-1)}>↑</button>
+                <button type="button" aria-label="Move node down" on:click={() => moveSelectedNode(1)}>↓</button>
+                <button type="button" on:click={copySelectedNode}>Copy</button>
+                <button type="button" on:click={duplicateSelectedNode}>Duplicate</button>
+                <button class="danger-button" type="button" on:click={deleteSelectedNode}>
+                  Delete
+                </button>
+              </div>
             </div>
 
             <label for="node-id">Node ID</label>
             <input id="node-id" value={selectedNode.id} disabled>
 
             <label for="node-audience">Audience</label>
-            <select id="node-audience" bind:value={selectedNode.audience}>
+            <select
+              id="node-audience"
+              bind:value={selectedNode.audience}
+              on:change={() => {
+                activeLane = selectedNode.audience;
+                refreshStory();
+              }}
+            >
               <option value="p1">Player 1</option>
               <option value="both">Both players</option>
               <option value="p2">Player 2</option>
             </select>
 
             {#if selectedNode.type !== 'condition' && selectedNode.type !== 'input'}
-              <label for="node-text">Terminal text</label>
+              <label for="node-text">
+                {selectedNode.type === 'label' ? 'Label title' : 'Terminal text'}
+              </label>
               <textarea id="node-text" bind:value={selectedNode.text} rows="5"></textarea>
             {/if}
 
@@ -553,8 +1140,16 @@
             {/if}
 
             {#if ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'effect'].includes(selectedNode.type)}
-              <label for="node-next">Next node ID</label>
-              <input id="node-next" bind:value={selectedNode.next} list="story-node-ids">
+              <div class="route-label">Next node</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.next}>{routeLabel(selectedNode, 'next')}</span>
+                <button type="button" on:click={() => startLinkSelection('next', 'Next node')}>
+                  Select next node
+                </button>
+                {#if selectedNode.next}
+                  <button type="button" aria-label="Clear next node" on:click={() => clearRoute(selectedNode, 'next')}>×</button>
+                {/if}
+              </div>
             {/if}
 
             {#if selectedNode.type === 'dice-check'}
@@ -576,10 +1171,22 @@
                   <input id="dice-target" type="number" bind:value={selectedNode.threshold}>
                 </div>
               </div>
-              <label for="dice-success">Success node</label>
-              <input id="dice-success" bind:value={selectedNode.success} list="story-node-ids">
-              <label for="dice-failure">Failure node</label>
-              <input id="dice-failure" bind:value={selectedNode.failure} list="story-node-ids">
+              <div class="route-label">Success node</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.success}>{routeLabel(selectedNode, 'success')}</span>
+                <button type="button" on:click={() => startLinkSelection('success', 'Success node')}>Select node</button>
+                {#if selectedNode.success}
+                  <button type="button" aria-label="Clear success node" on:click={() => clearRoute(selectedNode, 'success')}>×</button>
+                {/if}
+              </div>
+              <div class="route-label">Failure node</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.failure}>{routeLabel(selectedNode, 'failure')}</span>
+                <button type="button" on:click={() => startLinkSelection('failure', 'Failure node')}>Select node</button>
+                {#if selectedNode.failure}
+                  <button type="button" aria-label="Clear failure node" on:click={() => clearRoute(selectedNode, 'failure')}>×</button>
+                {/if}
+              </div>
             {/if}
 
             {#if selectedNode.type === 'checkpoint'}
@@ -620,7 +1227,10 @@
                   <div class="choice-row">
                     <input aria-label="Option ID" bind:value={choice.id} placeholder="option-id">
                     <input aria-label="Option label" bind:value={choice.label} placeholder="Player-facing label">
-                    <input aria-label="Option destination" bind:value={choice.next} list="story-node-ids" placeholder="destination node">
+                    <div class="choice-route">
+                      <span class:missing={!choice.next}>{routeLabel(selectedNode, `choices.${index}.next`)}</span>
+                      <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
+                    </div>
                     <button type="button" on:click={() => removeChoice(index)}>×</button>
                   </div>
                 {/each}
@@ -660,10 +1270,22 @@
                 <label for="condition-value">Comparison value</label>
                 <input id="condition-value" bind:value={selectedNode.condition.value}>
               {/if}
-              <label for="condition-true">When true</label>
-              <input id="condition-true" bind:value={selectedNode.trueNext} list="story-node-ids">
-              <label for="condition-false">When false</label>
-              <input id="condition-false" bind:value={selectedNode.falseNext} list="story-node-ids">
+              <div class="route-label">When true</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.trueNext}>{routeLabel(selectedNode, 'trueNext')}</span>
+                <button type="button" on:click={() => startLinkSelection('trueNext', 'True branch')}>Select node</button>
+                {#if selectedNode.trueNext}
+                  <button type="button" aria-label="Clear true branch" on:click={() => clearRoute(selectedNode, 'trueNext')}>×</button>
+                {/if}
+              </div>
+              <div class="route-label">When false</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.falseNext}>{routeLabel(selectedNode, 'falseNext')}</span>
+                <button type="button" on:click={() => startLinkSelection('falseNext', 'False branch')}>Select node</button>
+                {#if selectedNode.falseNext}
+                  <button type="button" aria-label="Clear false branch" on:click={() => clearRoute(selectedNode, 'falseNext')}>×</button>
+                {/if}
+              </div>
             {/if}
 
             {#if selectedNode.type === 'image'}
@@ -678,21 +1300,67 @@
               <select id="minigame-id" bind:value={selectedNode.minigameId}>
                 <option value="netrunners">NetRunners</option>
               </select>
-              <label for="minigame-complete">Completed destination</label>
-              <input id="minigame-complete" bind:value={selectedNode.resultNext.completed} list="story-node-ids">
-              <label for="minigame-cancel">Cancelled destination</label>
-              <input id="minigame-cancel" bind:value={selectedNode.resultNext.cancelled} list="story-node-ids">
+              <div class="route-label">Completed destination</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.resultNext.completed}>{routeLabel(selectedNode, 'resultNext.completed')}</span>
+                <button type="button" on:click={() => startLinkSelection('resultNext.completed', 'Completed destination')}>Select node</button>
+              </div>
+              <div class="route-label">Cancelled destination</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.resultNext.cancelled}>{routeLabel(selectedNode, 'resultNext.cancelled')}</span>
+                <button type="button" on:click={() => startLinkSelection('resultNext.cancelled', 'Cancelled destination')}>Select node</button>
+              </div>
             {/if}
 
-            <label class="checkbox-row">
-              <input type="checkbox" bind:checked={selectedNode.clearTerminal}>
-              Clear terminal when this node begins
-            </label>
+            {#if selectedNode.type !== 'label' && selectedNode.type !== 'condition'}
+              <label class="checkbox-row">
+                <input type="checkbox" bind:checked={selectedNode.clearTerminal}>
+                Clear terminal when this node begins
+              </label>
+            {/if}
           {:else}
             <p class="empty-inspector">Select a node from the flow canvas.</p>
           {/if}
         </aside>
       </div>
+
+      {#if insertionTarget}
+        <div
+          class="node-picker-backdrop"
+          role="presentation"
+        >
+          <section
+            class="node-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="node-picker-title"
+          >
+            <header>
+              <div>
+                <p>ADD TO {lanes.find((lane) => lane.id === insertionTarget?.lane)?.label}</p>
+                <h2 id="node-picker-title">Choose a node</h2>
+              </div>
+              <button type="button" aria-label="Close node picker" on:click={closeNodePicker}>×</button>
+            </header>
+
+            {#if copiedNode}
+              <button class="paste-node-button" type="button" on:click={pasteNode}>
+                <span>PASTE COPIED NODE</span>
+                <strong>{displayNodeName(copiedNode)}</strong>
+              </button>
+            {/if}
+
+            <div class="node-type-grid">
+              {#each nodeTypes as nodeType}
+                <button type="button" on:click={() => addNode(nodeType.type)}>
+                  <span>＋</span>
+                  <strong>{nodeType.label}</strong>
+                </button>
+              {/each}
+            </div>
+          </section>
+        </div>
+      {/if}
 
       <datalist id="story-node-ids">
         {#each editingStory.nodes as node}
@@ -716,7 +1384,7 @@
     width: 100%;
     height: 95vh;
     min-width: 0;
-    max-width: 1320px;
+    max-width: 1600px;
     overflow: hidden;
     background: #060b14;
     border: 1px solid #4a98d9;
@@ -951,6 +1619,10 @@
       font-size: 0.72rem;
       text-transform: uppercase;
     }
+
+    textarea {
+      resize: none;
+    }
   }
 
   .editor-shell {
@@ -989,10 +1661,9 @@
     min-height: 0;
 
     display: grid;
-    grid-template-columns: 170px minmax(420px, 1fr) 330px;
+    grid-template-columns: minmax(0, 1fr) 340px;
   }
 
-  .node-palette,
   .node-inspector {
     padding: 14px;
     overflow-y: auto;
@@ -1005,17 +1676,8 @@
     }
   }
 
-  .node-palette {
-    border-right: 1px solid #2c3b54;
-
-    button {
-      width: 100%;
-      margin-bottom: 7px;
-      text-align: left;
-    }
-  }
-
   .flow-canvas {
+    position: relative;
     padding: 18px;
     overflow: auto;
     background-color: #050912;
@@ -1024,23 +1686,120 @@
       linear-gradient(90deg, #1472bf18 1px, transparent 1px);
     background-size: 24px 24px;
 
-    display: grid;
-    grid-template-columns: repeat(3, minmax(210px, 1fr));
-    gap: 14px;
-    align-items: start;
+  }
+
+  .flow-lanes {
+    min-width: max-content;
+
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .link-mode-banner {
+    position: sticky;
+    z-index: 6;
+    top: 0;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    color: #07111d;
+    background: #02fbfb;
+    border: 1px solid #ffffff;
+    box-shadow: 0 0 22px #02fbfb55;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+
+    span {
+      color: #07111d;
+      font-weight: 800;
+    }
+
+    button {
+      color: #07111d;
+      background: #ffffffaa;
+      border-color: #07111d;
+    }
   }
 
   .flow-lane {
+    width: 270px;
     min-height: 100%;
     padding: 10px;
     border: 1px dashed #2c3b54;
+    transition: width 0.25s ease, border-color 0.2s ease;
 
-    > h2 {
-      margin-bottom: 12px;
-      color: #4a98d9;
-      font-size: 0.68rem;
-      letter-spacing: 1px;
-      text-align: center;
+    &.active {
+      border-color: #02fbfb;
+      box-shadow: inset 0 0 20px #02fbfb12;
+    }
+
+    &.has-branches {
+      width: 554px;
+
+      .lane-node-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  }
+
+  .lane-heading {
+    width: 100%;
+    margin-bottom: 12px;
+    color: #4a98d9;
+    background: #0b1423cc;
+    border-color: transparent;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    span {
+      color: #6dc2fb;
+    }
+
+    strong {
+      color: #8893a2;
+      font-size: 0.6rem;
+    }
+  }
+
+  .flow-lane.active .lane-heading {
+    border-color: #02fbfb;
+
+    strong {
+      color: #02fbfb;
+    }
+  }
+
+  .lane-node-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px 12px;
+    align-items: start;
+  }
+
+  .node-wrapper {
+    position: relative;
+    min-width: 0;
+
+    display: grid;
+    gap: 5px;
+
+    &.has-route::after {
+      content: '';
+      position: absolute;
+      z-index: 0;
+      bottom: -20px;
+      left: 50%;
+      width: 1px;
+      height: 20px;
+      background: linear-gradient(#02fbfb, #1472bf55);
+      box-shadow: 0 0 7px #02fbfb;
     }
   }
 
@@ -1048,7 +1807,7 @@
     width: 100%;
     height: auto;
     min-height: 94px;
-    margin-bottom: 10px;
+    margin: 0;
     text-align: left;
 
     display: grid;
@@ -1074,6 +1833,23 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    .node-route-list {
+      margin-top: 3px;
+      padding-top: 6px;
+      border-top: 1px dashed #334155;
+
+      display: grid;
+      gap: 3px;
+
+      span {
+        overflow: hidden;
+        color: #9dffa6;
+        font-size: 0.55rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
   }
 
   .flow-node.selected {
@@ -1082,10 +1858,63 @@
     box-shadow: 0 0 15px #02fbfb24;
   }
 
+  .flow-node.invalid {
+    border-color: #cb381f;
+    box-shadow: inset 0 0 18px #cb381f26;
+
+    small {
+      color: #e58271;
+    }
+  }
+
+  .flow-node.label-node {
+    min-height: 64px;
+    background: linear-gradient(90deg, #19406c55, #111827);
+    border-color: #4a98d9;
+
+    strong {
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      letter-spacing: 1px;
+    }
+  }
+
+  .selecting-route .flow-node.invalid-link-target {
+    cursor: not-allowed;
+    opacity: 0.3;
+  }
+
+  .selecting-route .flow-node.valid-link-target {
+    border-color: #9dffa6;
+    box-shadow: 0 0 18px #9dffa644;
+  }
+
+  .branch-add-button,
+  .lane-add-button {
+    width: 100%;
+    min-height: 34px;
+    color: #6dc2fb;
+    background: #07111dcc;
+    border: 1px dashed #4a98d9;
+    font-size: 0.65rem;
+  }
+
+  .lane-add-button {
+    min-height: 48px;
+    margin-top: 20px;
+
+    span {
+      margin-right: 5px;
+      color: #02fbfb;
+      font-size: 1rem;
+    }
+  }
+
   .node-inspector {
     border-left: 1px solid #2c3b54;
 
     > label,
+    > .route-label,
     .field-grid label {
       display: block;
       margin: 13px 0 6px;
@@ -1107,6 +1936,30 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
+  }
+
+  .inspector-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .inspector-actions {
+    width: 100%;
+
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px;
+
+    button {
+      min-width: 0;
+      min-height: 34px;
+      padding: 5px;
+      font-size: 0.64rem;
+    }
+
+    .danger-button {
+      grid-column: 1 / -1;
+    }
   }
 
   .inspector-heading p {
@@ -1141,11 +1994,135 @@
     margin-top: 8px;
 
     display: grid;
-    grid-template-columns: 0.8fr 1fr 1fr auto;
+    grid-template-columns: 0.8fr 1fr;
     gap: 5px;
 
     input {
       min-width: 0;
+    }
+  }
+
+  .choice-route {
+    grid-column: 1 / -1;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px;
+
+    span {
+      padding: 9px;
+      overflow: hidden;
+      color: #9dffa6;
+      background: #07111d;
+      border: 1px solid #334155;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span.missing {
+      color: #e58271;
+    }
+  }
+
+  .route-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 5px;
+
+    span {
+      min-width: 0;
+      padding: 10px;
+      overflow: hidden;
+      color: #9dffa6;
+      background: #07111d;
+      border: 1px solid #334155;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span.missing {
+      color: #e58271;
+    }
+  }
+
+  .node-picker-backdrop {
+    position: absolute;
+    z-index: 20;
+    inset: 38px 0 0;
+    padding: 28px;
+    background: #020617dd;
+    backdrop-filter: blur(5px);
+
+    display: grid;
+    place-items: center;
+  }
+
+  .node-picker {
+    width: min(760px, 100%);
+    max-height: 85%;
+    padding: 22px;
+    overflow-y: auto;
+    background: #09111e;
+    border: 1px solid #02fbfb;
+    box-shadow: 0 0 48px #02fbfb33;
+
+    > header {
+      margin-bottom: 20px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+
+      p {
+        color: #4a98d9;
+        font-size: 0.65rem;
+        letter-spacing: 1px;
+      }
+
+      h2 {
+        margin-top: 5px;
+        font-family: "Orbitron", "Space Mono", sans-serif;
+      }
+    }
+  }
+
+  .paste-node-button {
+    width: 100%;
+    margin-bottom: 15px;
+    color: #07111d;
+    background: #9dffa6;
+    border-color: #9dffa6;
+    text-align: left;
+
+    display: grid;
+    gap: 3px;
+
+    span,
+    strong {
+      color: #07111d;
+    }
+
+    span {
+      font-size: 0.6rem;
+    }
+  }
+
+  .node-type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+
+    button {
+      min-height: 72px;
+      text-align: left;
+
+      display: grid;
+      align-content: center;
+      gap: 4px;
+
+      span {
+        color: #02fbfb;
+      }
     }
   }
 
@@ -1190,7 +2167,7 @@
 
   @media (max-width: 1050px) {
     .editor-workspace {
-      grid-template-columns: 145px minmax(330px, 1fr) 270px;
+      grid-template-columns: minmax(0, 1fr) 290px;
     }
   }
 
@@ -1210,7 +2187,11 @@
 
     .editor-workspace {
       overflow-x: auto;
-      grid-template-columns: 140px 640px 270px;
+      grid-template-columns: 760px 280px;
+    }
+
+    .node-type-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

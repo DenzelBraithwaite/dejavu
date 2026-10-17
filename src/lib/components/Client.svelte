@@ -232,7 +232,7 @@
     position: relative;
     width: 100%;
     min-width: 0;
-    padding: 24px 40px;
+    padding: 18px;
     grid-column: 2;
     box-shadow: inset 0 0 12px var(--box-shadow-color);
 

@@ -25,7 +25,7 @@
     width: auto;
     height: 100%;
     min-width: 0;
-    max-width: 1100px;
+    max-width: 1600px;
     margin: 0 auto;
 
     flex: 1 1 0;

@@ -37,7 +37,7 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - Stories are stored in `data/dejavu.sqlite`, so created stories survive server restarts.
 - Déjà Vu is seeded as the first built-in story and can be edited or duplicated.
 - Creators can create, read, edit, duplicate, and delete custom story drafts.
-- The first visual editor separates Player 1, shared, and Player 2 nodes and provides a reusable node palette plus type-specific inspector.
+- The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, click-to-connect routes, drag-and-drop organization, labels, validation, and a type-specific inspector.
 
 ### Server-authoritative campaign
 
@@ -247,11 +247,11 @@ Sass still prints deprecation notices for legacy APIs and older global colour he
 
 ## Next product milestone
 
-The local Library, persistent story documents, and first node editor are now in place. The next builder milestone is turning the current lane view into a fully connected graph authoring experience.
+The local Library, persistent story documents, and interactive lane editor are now in place. The next builder milestone is deeper graph visualization and playtesting.
 
 The first builder milestone should let a non-developer:
 
-1. Draw and reconnect routes directly on the canvas.
+1. Draw curved route edges across distant nodes and add canvas zoom controls.
 2. Validate missing destinations and unreachable nodes visually.
 3. Configure terminal appearance per story and node.
 4. Playtest both perspectives beside the graph.

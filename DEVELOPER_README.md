@@ -53,7 +53,15 @@ CRUD operations are server-owned. Do not write stories into browser storage or m
 
 Open **Library**, then choose **Edit** on an existing cartridge or **Make new story**. A new story begins with separate Player 1 and Player 2 dialogue nodes leading to one shared ending.
 
-The canvas is divided into Player 1, Shared, and Player 2 lanes. Select a node to edit it in the inspector. Routes are currently entered using destination node IDs; the destination fields provide the current story's IDs as suggestions. Saving validates unique node IDs and verifies that both player start nodes exist, then increments the story version.
+The canvas is divided into Player 1, Shared, and Player 2 lanes. Select a node to edit it in the inspector. Route controls enter a temporary selection mode so the creator can click a destination node instead of handling internal IDs. Player routes can target their own lane or Shared; Shared routes stay in Shared.
+
+Use the plus control at the bottom of a lane to append a node. Empty normal and branch routes expose their own plus controls, which insert and connect a new node at that exact route. Appending after a node with an empty normal route connects it automatically. Nodes can be dragged within a lane to reorder them or dropped onto another lane to change their audience. The inspector also provides keyboard-accessible move, copy, duplicate, and delete controls.
+
+Node cards show their type ordinal, such as `3rd dialogue node`, plus readable route destinations. Missing incoming routes, missing outgoing routes, broken destinations, and illegal cross-player links receive a red invalid border. Start nodes, endings, and visual labels have the expected validation exceptions.
+
+Visual labels are editor-only organizers such as `CHAPTER 2` or `SCENE CHANGE`. They do not execute and cannot be selected as route destinations. A lane containing a condition expands to a two-column branch layout.
+
+Saving validates unique node IDs and verifies that both player start nodes exist, then increments the story version.
 
 Available palette nodes are:
 
@@ -61,6 +69,7 @@ Available palette nodes are:
 - Dice check, shared vote, and timed choice.
 - Item/effect and condition.
 - Image, NetRunners minigame, and ending.
+- Visual labels for chapters, locations, and other editor-only organization.
 
 Incomplete destination fields are allowed in drafts so creators can build a graph in any order. Full connection validation belongs to the next graph-editor milestone and must run before publication or playtest.
 

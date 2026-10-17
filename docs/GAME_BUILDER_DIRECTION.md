@@ -228,12 +228,12 @@ The first local builder foundation is now implemented:
 - A SQLite-backed story library with create, read, update, duplicate, and delete operations.
 - A seeded built-in Déjà Vu story document.
 - Per-player cartridge selection with a two-player matching requirement.
-- A three-lane node editor and type-specific inspector.
+- A wide three-lane node editor with type-specific inspector, branch-aware insertion, click-to-connect routes, reordering, copy/paste, labels, node counts, and visual validation.
 - Effect and condition nodes for inventory, flags, stats, characters, mods, and dice outcomes.
 - A separate Minigames catalog with NetRunners registered.
 - Server-owned campaigns that execute the selected story document.
 
-The current canvas uses destination-ID fields rather than drawn edges. Direct graph connections, full validation, side-by-side playtesting, themes, assets, and publishing remain future milestones.
+The current canvas uses readable route chips, connector lines, and click-to-select destinations. Curved cross-node edges, full publication validation, side-by-side playtesting, themes, assets, and publishing remain future milestones.
 
 ## Suggested delivery sequence
 
