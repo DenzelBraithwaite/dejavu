@@ -52,6 +52,7 @@ The editor is a directed graph.
 
 - The canvas displays nodes and their connections.
 - A palette creates dialogue, choice, checkpoint, conversation, dice, vote, timer, image, and minigame nodes.
+- Every node can deliberately clear accumulated terminal output; otherwise previous output remains visible.
 - An inspector edits the selected node.
 - Player 1 and Player 2 lanes make private scenes easy to distinguish.
 - Shared nodes occupy the centre lane.

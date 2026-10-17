@@ -37,6 +37,7 @@
  * @property {string} [src]
  * @property {string} [alt]
  * @property {string} [background]
+ * @property {boolean} [clearTerminal]
  * @property {string} [minigameId]
  * @property {Record<string, string>} [resultNext]
  * @property {SceneEffect[]} [effects]

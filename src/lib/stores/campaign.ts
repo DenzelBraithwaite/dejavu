@@ -9,6 +9,26 @@ export type CampaignPlayer = {
   statusEffects: string[];
 };
 
+export type DiceRollResult = {
+  sceneId: string;
+  nextSceneId: string;
+  die: 4 | 6 | 8 | 10 | 12 | 20;
+  roll: number;
+  stat: string;
+  base: number;
+  luck: number;
+  total: number;
+  threshold: number;
+  successful: boolean;
+};
+
+export type TerminalOutputEntry = {
+  sceneId: string;
+  speaker: string;
+  text: string;
+  createdAt: string;
+};
+
 export type CampaignState = {
   version: number;
   campaignId: string;
@@ -34,6 +54,8 @@ export type CampaignState = {
     sceneId: string;
     startedAt: string;
   } | null;
+  pendingDice: Partial<Record<PlayerId, DiceRollResult>>;
+  terminalOutput: Record<PlayerId, TerminalOutputEntry[]>;
   deadlines: Partial<Record<PlayerId, number>>;
   transcript: Array<Record<string, unknown>>;
   decisions: Array<Record<string, unknown>>;

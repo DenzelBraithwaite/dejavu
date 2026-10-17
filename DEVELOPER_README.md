@@ -86,6 +86,25 @@ defineScene({
 
 Use `audience: 'p1'` or `audience: 'p2'` for a private perspective. Use `both` when both players can receive the scene.
 
+## Terminal history and clearing
+
+Completed scene output accumulates in each player's terminal by default. This lets dialogue, prompts, and responses remain readable after the next node starts.
+
+Set `clearTerminal: true` on a destination node when entering that node should represent a new terminal context, location, chapter, or deliberate screen clear:
+
+```js
+defineScene({
+  id: 'chapter-02.safehouse-arrival',
+  type: 'dialogue',
+  audience: 'both',
+  clearTerminal: true,
+  text: 'The safehouse terminal flickers online.',
+  next: 'chapter-02.briefing'
+})
+```
+
+The clear belongs to the scene being entered, not the scene being left. The visual builder should expose this as a clear-terminal toggle on every node.
+
 ## Choices
 
 Each choice has a stable ID, a player-facing label, and a destination.
@@ -228,6 +247,12 @@ defineScene({
 ```
 
 Supported dice are D4, D6, D8, D10, D12, and D20. A dice outcome is stored in the decision log.
+
+Rolling opens the dedicated dice terminal. It animates the configured die and types the die, base stat, luck, threshold, total, and outcome calculation. The campaign remains on the dice node until the player presses **Close terminal**, so a result cannot be skipped accidentally.
+
+## Out-of-character player chat
+
+The sidebar chat is separate from story `conversation` nodes. It is always available, including while players are in different scenes or minigames. The server keeps the most recent 200 messages in memory and broadcasts them only to the two active player clients. Incoming messages show an unread badge and a short toast when chat is closed.
 
 ## Shared votes
 

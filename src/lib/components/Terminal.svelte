@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
   import { socket } from '../socket';
@@ -8,8 +8,10 @@
   import { sessionState } from '../stores/session';
   import { getScene } from '../story/storyRegistry.js';
   import { interpolateSceneText } from '../story/sceneTypes.js';
+  import DiceTerminal from './DiceTerminal.svelte';
 
   let typedTextElement: HTMLElement;
+  let terminalScreenElement: HTMLElement;
   let inputValue = '';
   let errorMessage = '';
   let typingComplete = false;
@@ -17,6 +19,7 @@
   let now = Date.now();
   let clock: number;
   let textValues: Record<string, string | number> = {};
+  let lastScrollKey = '';
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -26,6 +29,12 @@
   $: player = playerId && $campaignState
     ? $campaignState.players[playerId]
     : null;
+  $: terminalEntries = playerId && $campaignState
+    ? $campaignState.terminalOutput[playerId]
+    : [];
+  $: pendingDice = playerId && $campaignState
+    ? $campaignState.pendingDice[playerId]
+    : undefined;
   $: {
     textValues = {};
 
@@ -52,6 +61,12 @@
     ? Math.max(0, $campaignState.deadlines[playerId] - now)
     : 0;
   $: remainingSeconds = Math.ceil(remainingMs / 1000);
+  $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
+
+  $: if (terminalScreenElement && scrollKey !== lastScrollKey) {
+    lastScrollKey = scrollKey;
+    void scrollTerminalToBottom();
+  }
 
   $: if (sceneId) {
     typingComplete = false;
@@ -152,6 +167,17 @@
     });
   }
 
+  function closeDiceTerminal(): void {
+    if (!scene) {
+      return;
+    }
+
+    sendAction({
+      type: 'close-dice',
+      sceneId: scene.id
+    });
+  }
+
   function launchMinigame(): void {
     if (!scene) {
       return;
@@ -173,6 +199,14 @@
       submit();
     }
   }
+
+  async function scrollTerminalToBottom(): Promise<void> {
+    await tick();
+    terminalScreenElement.scrollTo({
+      top: terminalScreenElement.scrollHeight,
+      behavior: 'smooth'
+    });
+  }
 </script>
 
 <section
@@ -186,10 +220,20 @@
     <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
   </header>
 
-  <div class="terminal-screen">
+  <div class="terminal-screen" bind:this={terminalScreenElement}>
     {#if !$campaignState || !scene}
       <p class="system-message">Synchronizing campaign state...</p>
     {:else}
+      <div class="terminal-history" aria-label="Previous terminal output">
+        {#each terminalEntries as entry}
+          <article class="terminal-history-entry">
+            <p class="history-scene-id">{entry.sceneId}</p>
+            <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
+            <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+          </article>
+        {/each}
+      </div>
+
       <p class="scene-id">{scene.id}</p>
 
       {#if scene.speaker}
@@ -346,6 +390,10 @@
       {/if}
     </div>
   {/if}
+
+  {#if pendingDice}
+    <DiceTerminal result={pendingDice} on:close={closeDiceTerminal} />
+  {/if}
 </section>
 
 <style lang="scss">
@@ -395,6 +443,35 @@
     font-size: 0.75rem;
     letter-spacing: 1px;
     text-transform: uppercase;
+  }
+
+  .terminal-history-entry {
+    max-width: 78ch;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px dashed #1e293b;
+  }
+
+  .history-scene-id {
+    margin-bottom: 8px;
+    color: #475569;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .history-speaker {
+    margin-bottom: 8px;
+    color: #02bcbc;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .history-text {
+    color: #aeb9c9;
+    line-height: 1.65;
+    white-space: pre-wrap;
   }
 
   .speaker {

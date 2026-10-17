@@ -22,10 +22,11 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 ### Two-player LAN sessions
 
 - Exactly two gameplay slots.
-- Stable browser session tokens for reconnecting to the same player slot.
+- Per-tab session tokens for reconnecting to the same player slot while allowing two tabs to test both players.
 - A dedicated Game is full screen for additional clients.
 - A short reconnect grace period before an abandoned slot becomes available.
 - Same-origin Socket.IO in production and a Vite development proxy.
+- An always-available out-of-character player chat across story scenes and minigames.
 
 ### Server-authoritative campaign
 
@@ -58,6 +59,8 @@ The current scene contract supports:
 - A reserved minigame-node contract.
 
 The Notes prologue has been converted into scene data with separate player perspectives, character naming, a dice check, timed choice, checkpoint, conversation, shared vote, and image scene. Chapter 1 currently ends at a placeholder because the notes contain its outline but not complete scene-level dialogue.
+
+Completed output remains visible as the story advances. Scene authors explicitly choose when a destination clears the terminal by setting `clearTerminal: true`.
 
 ### Custom typewriter
 

@@ -6,6 +6,7 @@
   export let iconType = 'unkown';
   export let color = 'grey';
   export let collapsed = false;
+  export let badge = 0;
 </script>
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -20,6 +21,31 @@
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
       <circle cx="12" cy="7" r="4"/>
+    </svg>
+  {:else if iconType === 'journal'}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      <path d="M8 7h8"/>
+      <path d="M8 11h6"/>
+    </svg>
+  {:else if iconType === 'bag'}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
+      <path d="M6 8h12l2 13H4L6 8z"/>
+      <path d="M9 8V6a3 3 0 0 1 6 0v2"/>
+      <path d="M9 12h6"/>
+    </svg>
+  {:else if iconType === 'save'}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
+      <path d="M4 3h14l2 2v16H4V3z"/>
+      <path d="M8 3v6h8V3"/>
+      <path d="M8 21v-7h8v7"/>
+    </svg>
+  {:else if iconType === 'chat'}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
+      <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z"/>
+      <path d="M8 9h8"/>
+      <path d="M8 13h5"/>
     </svg>
   {:else if iconType === 'cpu'}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
@@ -45,6 +71,12 @@
       <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
       <path d="M12 17h.01"/>
     </svg>
+  {/if}
+
+  {#if badge > 0}
+    <span class="item-badge" aria-label="{badge} unread messages">
+      {badge > 9 ? '9+' : badge}
+    </span>
   {/if}
   
   {#if !collapsed}
@@ -133,5 +165,23 @@
     stroke-width: 2.75;
     stroke: #111;
     fill: none;
+  }
+
+  .item-badge {
+    position: absolute;
+    z-index: 2;
+    top: 5px;
+    left: 26px;
+    min-width: 21px;
+    height: 21px;
+    padding: 0 5px;
+    color: #070b16;
+    background: #ff75fd;
+    border: 2px solid #111111;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    line-height: 17px;
+    text-align: center;
   }
 </style>

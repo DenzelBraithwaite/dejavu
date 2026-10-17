@@ -4,22 +4,30 @@
   import { LogPage } from '../../routes';
   import { socket, storeSessionToken } from '../socket';
   import { campaignState, type CampaignState } from '../stores/campaign';
+  import { chatMessages, type ChatMessage } from '../stores/chat';
   import location from '../stores/location';
   import {
     netRunnersServerState,
     type NetRunnersServerState
   } from '../stores/netRunnersSession';
   import { sessionState, type PlayerId } from '../stores/session';
+  import ChatPanel from './ChatPanel.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let sidebarExpanded = false;
   let minigameWasActive = false;
+  let chatOpen = false;
+  let unreadChatCount = 0;
+  let showChatToast = false;
+  let chatToastTimer: number;
 
   onMount(() => {
     socket.on('connect_error', handleConnectionError);
     socket.on('session:status', handleSessionStatus);
     socket.on('campaign:state', handleCampaignState);
     socket.on('netrunners:state', handleNetRunnersState);
+    socket.on('chat:history', handleChatHistory);
+    socket.on('chat:message', handleChatMessage);
     socket.connect();
   });
 
@@ -28,6 +36,9 @@
     socket.off('session:status', handleSessionStatus);
     socket.off('campaign:state', handleCampaignState);
     socket.off('netrunners:state', handleNetRunnersState);
+    socket.off('chat:history', handleChatHistory);
+    socket.off('chat:message', handleChatMessage);
+    window.clearTimeout(chatToastTimer);
   });
 
   function handleConnectionError(error: Error): void {
@@ -89,6 +100,35 @@
     netRunnersServerState.set(state);
   }
 
+  function handleChatHistory(messages: ChatMessage[]): void {
+    chatMessages.set(messages);
+  }
+
+  function handleChatMessage(message: ChatMessage): void {
+    chatMessages.update((messages) => [...messages, message]);
+
+    if (message.playerId === $sessionState.playerId || chatOpen) {
+      return;
+    }
+
+    unreadChatCount += 1;
+    showChatToast = true;
+    window.clearTimeout(chatToastTimer);
+    chatToastTimer = window.setTimeout(() => {
+      showChatToast = false;
+    }, 3200);
+  }
+
+  function toggleChat(): void {
+    chatOpen = !chatOpen;
+
+    if (chatOpen) {
+      unreadChatCount = 0;
+      showChatToast = false;
+      window.clearTimeout(chatToastTimer);
+    }
+  }
+
   function changePage(event: CustomEvent<string>): void {
     location.set(event.detail);
   }
@@ -119,7 +159,9 @@
   >
     <Sidebar
       {sidebarExpanded}
+      chatUnreadCount={unreadChatCount}
       on:select={changePage}
+      on:toggle-chat={toggleChat}
       on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}
     />
 
@@ -131,6 +173,17 @@
       {/if}
 
       <LogPage />
+
+      {#if chatOpen}
+        <ChatPanel on:close={toggleChat} />
+      {/if}
+
+      {#if showChatToast}
+        <button class="chat-toast" type="button" on:click={toggleChat}>
+          <strong>NEW MESSAGE</strong>
+          <span>Open player chat</span>
+        </button>
+      {/if}
     </div>
   </div>
 {/if}
@@ -177,6 +230,35 @@
     border-radius: 4px;
     font-size: 0.75rem;
     transform: translateX(-50%);
+  }
+
+  .chat-toast {
+    position: absolute;
+    z-index: 40;
+    right: 24px;
+    top: 24px;
+    padding: 12px 16px;
+    color: #e8edf6;
+    background: #171329;
+    border: 1px solid #ff75fd;
+    border-radius: 4px;
+    box-shadow: 0 0 22px #ff75fd44;
+    cursor: pointer;
+    text-align: left;
+
+    display: grid;
+    gap: 3px;
+
+    strong {
+      color: #ff75fd;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 1px;
+    }
+
+    span {
+      font-size: 0.8rem;
+    }
   }
 
   .status-screen {

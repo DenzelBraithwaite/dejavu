@@ -7,6 +7,7 @@
 
   // props
   export let sidebarExpanded = true;
+  export let chatUnreadCount = 0;
 
   const createEvent = createEventDispatcher();
 </script>
@@ -42,6 +43,17 @@
   <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'grey'} iconType={'save'}>
     <span slot="title">Saves</span>
     <span slot="description">Save or restore campaign</span>
+  </Item>
+
+  <Item
+    on:click={() => createEvent('toggle-chat')}
+    collapsed={!sidebarExpanded}
+    color={'blue'}
+    iconType={'chat'}
+    badge={chatUnreadCount}
+  >
+    <span slot="title">Chat</span>
+    <span slot="description">Message the other player</span>
   </Item>
 
   <Item on:click={() => createEvent('select', 'netrunners')} collapsed={!sidebarExpanded} color={'purple'} iconType={'cpu'}>

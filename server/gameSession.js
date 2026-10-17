@@ -45,6 +45,11 @@ export function createCampaignState() {
     votes: {},
     minigames: {},
     activeMinigame: null,
+    pendingDice: {},
+    terminalOutput: {
+      p1: [],
+      p2: []
+    },
     deadlines: {},
     transcript: [],
     decisions: [],
@@ -82,7 +87,12 @@ export function restoreCampaignState(candidate) {
   return structuredClone({
     ...candidate,
     minigames: candidate.minigames ?? {},
-    activeMinigame: candidate.activeMinigame ?? null
+    activeMinigame: candidate.activeMinigame ?? null,
+    pendingDice: candidate.pendingDice ?? {},
+    terminalOutput: candidate.terminalOutput ?? {
+      p1: [],
+      p2: []
+    }
   });
 }
 
@@ -207,6 +217,7 @@ function handleAdvance(state, playerId, scene, action) {
 
   recordTranscript(state, playerId, scene.text ?? '', scene.speaker ?? 'Narrator');
   applyEffects(state, playerId, scene.effects ?? []);
+  archiveSceneForPlayer(state, playerId, scene);
   setPlayerScene(state, playerId, scene.next);
 
   return actionSuccess();
@@ -225,6 +236,7 @@ function handleChoice(state, playerId, scene, action) {
 
   applyEffects(state, playerId, choice.effects ?? []);
   recordDecision(state, playerId, scene.id, choice.id, choice.label);
+  archiveSceneForPlayer(state, playerId, scene, `> ${choice.label}`);
   setPlayerScene(state, playerId, choice.next);
 
   return actionSuccess();
@@ -243,6 +255,7 @@ function handleInput(state, playerId, scene, action) {
 
   state.players[playerId].name = value;
   recordDecision(state, playerId, scene.id, 'input', value);
+  archiveSceneForPlayer(state, playerId, scene, `> ${value}`);
   setPlayerScene(state, playerId, scene.next);
 
   return actionSuccess();
@@ -255,6 +268,11 @@ function handleCheckpoint(state, playerId, scene, action) {
 
   const checkpointId = scene.checkpointId ?? scene.id;
   const arrivals = new Set(state.checkpoints[checkpointId] ?? []);
+
+  if (!arrivals.has(playerId)) {
+    archiveSceneForPlayer(state, playerId, scene);
+  }
+
   arrivals.add(playerId);
   state.checkpoints[checkpointId] = [...arrivals];
 
@@ -297,6 +315,18 @@ function handleConversation(state, playerId, scene, action) {
   state.conversations[scene.id] = conversation;
 
   if (conversation.messages.length >= (scene.messageCount ?? 2)) {
+    for (const participantId of PLAYER_IDS) {
+      archiveSceneForPlayer(state, participantId, scene);
+
+      for (const conversationMessage of conversation.messages) {
+        appendTerminalEntry(state, participantId, {
+          sceneId: scene.id,
+          speaker: conversationMessage.playerName,
+          text: conversationMessage.text
+        });
+      }
+    }
+
     setSharedScene(state, scene.next);
   }
 
@@ -304,8 +334,34 @@ function handleConversation(state, playerId, scene, action) {
 }
 
 function handleDiceCheck(state, playerId, scene, action) {
+  const pendingRoll = state.pendingDice[playerId];
+
+  if (action.type === 'close-dice') {
+    if (!pendingRoll || pendingRoll.sceneId !== scene.id) {
+      return actionError('Roll the dice before closing the dice terminal.');
+    }
+
+    archiveSceneForPlayer(
+      state,
+      playerId,
+      scene,
+      formatDiceResult(pendingRoll)
+    );
+    setPlayerScene(state, playerId, pendingRoll.nextSceneId);
+    delete state.pendingDice[playerId];
+
+    return actionSuccess();
+  }
+
   if (action.type !== 'roll-dice') {
     return actionError('This scene requires a dice roll.');
+  }
+
+  if (pendingRoll) {
+    return {
+      ok: true,
+      result: pendingRoll
+    };
   }
 
   const die = scene.die ?? 20;
@@ -330,19 +386,24 @@ function handleDiceCheck(state, playerId, scene, action) {
     createdAt: new Date().toISOString()
   });
 
-  setPlayerScene(state, playerId, successful ? scene.success : scene.failure);
+  const result = {
+    sceneId: scene.id,
+    nextSceneId: successful ? scene.success : scene.failure,
+    die,
+    roll,
+    stat: scene.stat,
+    base,
+    luck,
+    total,
+    threshold: scene.threshold,
+    successful
+  };
+
+  state.pendingDice[playerId] = result;
 
   return {
     ok: true,
-    result: {
-      die,
-      roll,
-      base,
-      luck,
-      total,
-      threshold: scene.threshold,
-      successful
-    }
+    result
   };
 }
 
@@ -379,6 +440,16 @@ function handleVote(state, playerId, scene, action) {
     selectedChoice.label,
     votes.p1 !== votes.p2
   );
+
+  for (const participantId of PLAYER_IDS) {
+    archiveSceneForPlayer(
+      state,
+      participantId,
+      scene,
+      `> ${selectedChoice.label}${votes.p1 !== votes.p2 ? ' (randomly resolved)' : ''}`
+    );
+  }
+
   setSharedScene(state, selectedChoice.next);
 
   return actionSuccess();
@@ -405,6 +476,7 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
 
     applyEffects(state, playerId, fallback.effects ?? []);
     recordDecision(state, playerId, scene.id, fallback.id, fallback.label, true);
+    archiveSceneForPlayer(state, playerId, scene, `> ${fallback.label} (auto-selected)`);
     setPlayerScene(state, playerId, fallback.next);
     changed = true;
   }
@@ -432,12 +504,51 @@ export function initializeDeadlines(state) {
 }
 
 function setPlayerScene(state, playerId, nextSceneId) {
-  if (!getScene(nextSceneId)) {
+  const nextScene = getScene(nextSceneId);
+
+  if (!nextScene) {
     throw new Error(`Cannot advance to unknown scene: ${nextSceneId}`);
+  }
+
+  if (nextScene.clearTerminal) {
+    state.terminalOutput[playerId] = [];
   }
 
   state.currentScene[playerId] = nextSceneId;
   delete state.deadlines[playerId];
+}
+
+function archiveSceneForPlayer(state, playerId, scene, response = '') {
+  const text = scene.text ?? scene.prompt ?? '';
+
+  if (text) {
+    appendTerminalEntry(state, playerId, {
+      sceneId: scene.id,
+      speaker: scene.speaker ?? 'SYSTEM',
+      text
+    });
+  }
+
+  if (response) {
+    appendTerminalEntry(state, playerId, {
+      sceneId: scene.id,
+      speaker: state.players[playerId].name,
+      text: response
+    });
+  }
+}
+
+function appendTerminalEntry(state, playerId, entry) {
+  state.terminalOutput[playerId].push({
+    ...entry,
+    createdAt: new Date().toISOString()
+  });
+}
+
+function formatDiceResult(result) {
+  const outcome = result.successful ? 'SUCCESS' : 'FAILURE';
+
+  return `> D${result.die}: ${result.roll} + ${result.base} ${result.stat} + ${result.luck} luck = ${result.total} / ${result.threshold} — ${outcome}`;
 }
 
 function setSharedScene(state, nextSceneId) {

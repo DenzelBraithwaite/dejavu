@@ -47,6 +47,7 @@ const playerSlots = {
 
 let campaignState = createCampaignState();
 let netRunnersState = createNetRunnersState();
+const chatMessages = [];
 
 initializeDeadlines(campaignState);
 
@@ -59,7 +60,8 @@ app.get('/', (_request, response) => {
 });
 
 io.on('connection', (socket) => {
-  const sessionToken = normalizeSessionToken(socket.handshake.auth?.sessionToken);
+  const requestedToken = normalizeSessionToken(socket.handshake.auth?.sessionToken);
+  const sessionToken = ensureAvailableSessionToken(requestedToken);
   const playerId = assignPlayerSlot(sessionToken, socket.id);
 
   if (!playerId) {
@@ -75,7 +77,39 @@ io.on('connection', (socket) => {
   socket.emit('session:status', createSessionStatus(playerId));
   socket.emit('campaign:state', getCampaignSnapshot(campaignState));
   socket.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
+  socket.emit('chat:history', chatMessages);
   broadcastSessionStatus();
+
+  socket.on('chat:send', (value, acknowledge = () => {}) => {
+    const text = String(value ?? '').trim().slice(0, 500);
+
+    if (!text) {
+      acknowledge({
+        ok: false,
+        error: 'Enter a message before sending.'
+      });
+      return;
+    }
+
+    const message = {
+      id: randomUUID(),
+      playerId,
+      playerName: campaignState.players[playerId].name,
+      text,
+      createdAt: new Date().toISOString()
+    };
+
+    chatMessages.push(message);
+
+    if (chatMessages.length > 200) {
+      chatMessages.shift();
+    }
+
+    io.emit('chat:message', message);
+    acknowledge({
+      ok: true
+    });
+  });
 
   socket.on('campaign:action', (action, acknowledge = () => {}) => {
     try {
@@ -250,6 +284,14 @@ function createEmptySlot() {
 function normalizeSessionToken(value) {
   const token = String(value ?? '').trim();
   return token || randomUUID();
+}
+
+function ensureAvailableSessionToken(sessionToken) {
+  const activeSlot = Object.values(playerSlots).find(
+    (slot) => slot.sessionToken === sessionToken && slot.connected
+  );
+
+  return activeSlot ? randomUUID() : sessionToken;
 }
 
 function assignPlayerSlot(sessionToken, socketId) {
