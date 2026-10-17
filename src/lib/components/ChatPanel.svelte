@@ -58,8 +58,8 @@
 >
   <header class="chat-header">
     <div>
-      <p class="chat-protocol">DEJAVU://PLAYER_LINK</p>
-      <h2>Out-of-character chat</h2>
+      <p class="chat-protocol">DEJAVU://NEURO_LINK</p>
+      <h2>Neuro-Link Chat</h2>
     </div>
 
     <button
@@ -74,7 +74,7 @@
 
   <div class="message-list" bind:this={messageList} aria-live="polite">
     {#if $chatMessages.length === 0}
-      <p class="empty-message">The private player link is quiet.</p>
+      <p class="empty-message">No thoughts are crossing the link.</p>
     {/if}
 
     {#each $chatMessages as chatMessage (chatMessage.id)}
@@ -97,7 +97,7 @@
   </div>
 
   <div class="chat-controls">
-    <label for="player-chat-input">Message the other player</label>
+    <label for="player-chat-input">Transmit a thought</label>
     <div class="input-row">
       <textarea
         id="player-chat-input"

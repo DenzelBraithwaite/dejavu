@@ -64,11 +64,6 @@
         ></p>
       </div>
 
-      {#if !typingComplete}
-        <button class="skip-button" type="button" on:click={skipTyping}>
-          Complete result
-        </button>
-      {/if}
     </div>
 
     <footer class="dice-terminal-controls">
@@ -79,6 +74,12 @@
       >
         Close terminal
       </button>
+
+      {#if !typingComplete}
+        <button class="skip-button" type="button" on:click={skipTyping}>
+          Skip typing
+        </button>
+      {/if}
     </footer>
   </section>
 </div>
@@ -170,19 +171,13 @@
     }
   }
 
-  .skip-button {
-    margin-top: 12px;
-    padding: 4px 0;
-    color: #94a3b8;
-    background: transparent;
-    border: 0;
-    text-decoration: underline;
-  }
-
   .dice-terminal-controls {
     padding: 14px;
     background: #0c1322;
     border-top: 1px solid #334155;
+
+    display: grid;
+    gap: 6px;
 
     button {
       width: 100%;
@@ -207,6 +202,19 @@
         cursor: not-allowed;
         opacity: 0.48;
       }
+    }
+
+    button.skip-button {
+      justify-self: center;
+      width: auto;
+      min-height: auto;
+      padding: 3px 8px;
+      color: #94a3b8;
+      background: transparent;
+      border: 0;
+      font-size: 0.72rem;
+      font-weight: 400;
+      text-decoration: underline;
     }
   }
 

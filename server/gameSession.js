@@ -39,6 +39,7 @@ export function createCampaignState() {
       p1: createPlayerState('Nova', DEFAULT_STATS.p1),
       p2: createPlayerState('Avona', DEFAULT_STATS.p2)
     },
+    installedMods: [],
     flags: {},
     checkpoints: {},
     conversations: {},
@@ -86,6 +87,7 @@ export function restoreCampaignState(candidate) {
 
   return structuredClone({
     ...candidate,
+    installedMods: candidate.installedMods ?? [],
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
     pendingDice: candidate.pendingDice ?? {},
@@ -288,10 +290,7 @@ function handleConversation(state, playerId, scene, action) {
     return actionError('This scene requires a conversation message.');
   }
 
-  const conversation = state.conversations[scene.id] ?? {
-    activePlayer: scene.firstPlayer ?? 'p1',
-    messages: []
-  };
+  const conversation = initializeConversation(state, scene);
 
   if (conversation.activePlayer !== playerId) {
     return actionError('Wait for the other player to reply.');
@@ -309,12 +308,12 @@ function handleConversation(state, playerId, scene, action) {
     text: message,
     createdAt: new Date().toISOString()
   });
+  conversation.messageCounts[playerId] += 1;
 
   recordTranscript(state, playerId, message, state.players[playerId].name);
-  conversation.activePlayer = playerId === 'p1' ? 'p2' : 'p1';
   state.conversations[scene.id] = conversation;
 
-  if (conversation.messages.length >= (scene.messageCount ?? 2)) {
+  if (hasConversationFinished(conversation)) {
     for (const participantId of PLAYER_IDS) {
       archiveSceneForPlayer(state, participantId, scene);
 
@@ -328,6 +327,11 @@ function handleConversation(state, playerId, scene, action) {
     }
 
     setSharedScene(state, scene.next);
+  } else {
+    conversation.activePlayer = getNextConversationSpeaker(
+      playerId,
+      conversation
+    );
   }
 
   return actionSuccess();
@@ -516,6 +520,10 @@ function setPlayerScene(state, playerId, nextSceneId) {
 
   state.currentScene[playerId] = nextSceneId;
   delete state.deadlines[playerId];
+
+  if (nextScene.type === 'conversation') {
+    initializeConversation(state, nextScene);
+  }
 }
 
 function archiveSceneForPlayer(state, playerId, scene, response = '') {
@@ -579,10 +587,112 @@ function applyEffects(state, playerId, effects) {
           state.players[playerId].stats[effect.key] ?? 0
         ) + Number(effect.value ?? 0);
         break;
+      case 'install-mod':
+        addUnique(state.installedMods, effect.key);
+        break;
+      case 'remove-mod':
+        state.installedMods = state.installedMods.filter(
+          (modId) => modId !== effect.key
+        );
+        break;
       default:
         throw new Error(`Unsupported scene effect: ${effect.type}`);
     }
   }
+}
+
+function initializeConversation(state, scene) {
+  if (state.conversations[scene.id]) {
+    const conversation = state.conversations[scene.id];
+
+    conversation.requiredMessages ??= getRequiredMessageCounts(
+      scene,
+      conversation.activePlayer
+    );
+    conversation.messageCounts ??= countConversationMessages(conversation.messages);
+
+    return conversation;
+  }
+
+  let activePlayer = scene.firstPlayer === 'p1' || scene.firstPlayer === 'p2'
+    ? scene.firstPlayer
+    : PLAYER_IDS[Math.floor(Math.random() * PLAYER_IDS.length)];
+  const requiredMessages = getRequiredMessageCounts(scene, activePlayer);
+  const otherPlayer = activePlayer === 'p1' ? 'p2' : 'p1';
+
+  if (requiredMessages[activePlayer] === 0 && requiredMessages[otherPlayer] > 0) {
+    activePlayer = otherPlayer;
+  }
+
+  const conversation = {
+    activePlayer,
+    messages: [],
+    messageCounts: {
+      p1: 0,
+      p2: 0
+    },
+    requiredMessages
+  };
+
+  state.conversations[scene.id] = conversation;
+  return conversation;
+}
+
+function getRequiredMessageCounts(scene, firstPlayer) {
+  if (scene.messagesPerPlayer) {
+    return {
+      p1: normalizeMessageCount(scene.messagesPerPlayer.p1),
+      p2: normalizeMessageCount(scene.messagesPerPlayer.p2)
+    };
+  }
+
+  const totalMessages = Math.max(1, Math.floor(scene.messageCount ?? 2));
+  const otherPlayer = firstPlayer === 'p1' ? 'p2' : 'p1';
+  const requiredMessages = {
+    p1: 0,
+    p2: 0
+  };
+
+  requiredMessages[firstPlayer] = Math.ceil(totalMessages / 2);
+  requiredMessages[otherPlayer] = Math.floor(totalMessages / 2);
+  return requiredMessages;
+}
+
+function normalizeMessageCount(value) {
+  return Math.max(0, Math.floor(Number(value ?? 0)));
+}
+
+function countConversationMessages(messages) {
+  return messages.reduce(
+    (counts, message) => {
+      counts[message.playerId] += 1;
+      return counts;
+    },
+    {
+      p1: 0,
+      p2: 0
+    }
+  );
+}
+
+function hasConversationFinished(conversation) {
+  return PLAYER_IDS.every(
+    (playerId) => conversation.messageCounts[playerId]
+      >= conversation.requiredMessages[playerId]
+  );
+}
+
+function getNextConversationSpeaker(currentPlayer, conversation) {
+  const otherPlayer = currentPlayer === 'p1' ? 'p2' : 'p1';
+
+  if (
+    conversation.messageCounts[otherPlayer]
+    < conversation.requiredMessages[otherPlayer]
+  ) {
+    return otherPlayer;
+  }
+
+  return currentPlayer;
 }
 
 function addUnique(items, value) {

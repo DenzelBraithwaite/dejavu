@@ -26,7 +26,7 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - A dedicated Game is full screen for additional clients.
 - A short reconnect grace period before an abandoned slot becomes available.
 - Same-origin Socket.IO in production and a Vite development proxy.
-- An always-available out-of-character player chat across story scenes and minigames.
+- An optional Neuro-Link Chat mod that can enable long-distance player messaging across story scenes and minigames.
 
 ### Server-authoritative campaign
 
@@ -50,7 +50,7 @@ The current scene contract supports:
 - Choices.
 - Player text input.
 - Two-player checkpoints.
-- Fixed-length alternating conversations.
+- Face-to-face conversations with a server-selected first speaker and per-player message quotas.
 - D4, D6, D8, D10, D12, and D20 checks.
 - Cooperative votes with random disagreement resolution.
 - Server-owned timed choices.

@@ -34,10 +34,13 @@ export type CampaignState = {
   campaignId: string;
   currentScene: Record<PlayerId, string>;
   players: Record<PlayerId, CampaignPlayer>;
+  installedMods: string[];
   flags: Record<string, string | number | boolean>;
   checkpoints: Record<string, PlayerId[]>;
   conversations: Record<string, {
     activePlayer: PlayerId;
+    messageCounts: Record<PlayerId, number>;
+    requiredMessages: Record<PlayerId, number>;
     messages: Array<{
       playerId: PlayerId;
       playerName: string;

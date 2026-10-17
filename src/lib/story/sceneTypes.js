@@ -4,7 +4,7 @@
  * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'ending'} SceneType
  *
  * @typedef SceneEffect
- * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat'} type
+ * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat' | 'install-mod' | 'remove-mod'} type
  * @property {string} key
  * @property {string | number | boolean} [value]
  *
@@ -26,7 +26,8 @@
  * @property {number} [maxLength]
  * @property {string} [checkpointId]
  * @property {number} [messageCount]
- * @property {PlayerId} [firstPlayer]
+ * @property {Partial<Record<PlayerId, number>>} [messagesPerPlayer]
+ * @property {PlayerId | 'random'} [firstPlayer]
  * @property {4 | 6 | 8 | 10 | 12 | 20} [die]
  * @property {string} [stat]
  * @property {number} [threshold]

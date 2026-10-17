@@ -143,6 +143,8 @@ Supported effects are:
 - `remove-item`
 - `discover-character`
 - `adjust-stat`
+- `install-mod`
+- `remove-mod`
 
 ```js
 effects: [
@@ -208,7 +210,7 @@ Both nodes must use the same `checkpointId` and destination.
 
 ## Fixed-length player conversations
 
-Conversation nodes alternate between players. The server prevents the waiting player from sending and advances both players after the configured number of messages.
+Conversation nodes represent characters speaking while they are physically together. The server selects who has the floor, prevents the waiting player from sending, tracks each player's quota, and advances both players as soon as both quotas are complete.
 
 ```js
 defineScene({
@@ -216,13 +218,18 @@ defineScene({
   type: 'conversation',
   audience: 'both',
   text: 'You have a moment to speak privately.',
-  messageCount: 6,
-  firstPlayer: 'p2',
+  messagesPerPlayer: {
+    p1: 3,
+    p2: 2
+  },
+  firstPlayer: 'random',
   next: 'chapter-01.chat-finished'
 })
 ```
 
-`messageCount` counts individual messages, not pairs of replies.
+Use `firstPlayer: 'p1'`, `firstPlayer: 'p2'`, or `firstPlayer: 'random'`. Omitting `firstPlayer` also lets the server choose randomly. `messagesPerPlayer` supports equal conversations such as three messages each or intentionally uneven conversations such as three from Player 1 and two from Player 2.
+
+The older `messageCount` field remains supported. Its total is divided across alternating turns, with the first speaker receiving the extra message when the total is odd.
 
 ## Dice checks
 
@@ -250,9 +257,22 @@ Supported dice are D4, D6, D8, D10, D12, and D20. A dice outcome is stored in th
 
 Rolling opens the dedicated dice terminal. It animates the configured die and types the die, base stat, luck, threshold, total, and outcome calculation. The campaign remains on the dice node until the player presses **Close terminal**, so a result cannot be skipped accidentally.
 
-## Out-of-character player chat
+## Neuro-Link Chat mod
 
-The sidebar chat is separate from story `conversation` nodes. It is always available, including while players are in different scenes or minigames. The server keeps the most recent 200 messages in memory and broadcasts them only to the two active player clients. Incoming messages show an unread badge and a short toast when chat is closed.
+The sidebar messenger is separate from face-to-face story `conversation` nodes. It represents a fictional neuro mod that lets players transmit messages over distance. It is not installed in a new campaign, so its sidebar control is hidden and the server rejects chat messages by default.
+
+Install it through a story effect when the players acquire the mod:
+
+```js
+effects: [
+  {
+    type: 'install-mod',
+    key: 'neuro-link-chat'
+  }
+]
+```
+
+Once installed, it remains available across separate scenes and minigames. The server keeps the most recent 200 messages in memory. Incoming messages show an unread badge and a short toast when the Neuro-Link panel is closed. Use a `remove-mod` effect with the same key to disable it again.
 
 ## Shared votes
 

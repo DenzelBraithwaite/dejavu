@@ -21,6 +21,16 @@
   let showChatToast = false;
   let chatToastTimer: number;
 
+  $: neuroChatInstalled = Boolean(
+    $campaignState?.installedMods.includes('neuro-link-chat')
+  );
+
+  $: if (!neuroChatInstalled && chatOpen) {
+    chatOpen = false;
+    unreadChatCount = 0;
+    showChatToast = false;
+  }
+
   onMount(() => {
     socket.on('connect_error', handleConnectionError);
     socket.on('session:status', handleSessionStatus);
@@ -105,6 +115,10 @@
   }
 
   function handleChatMessage(message: ChatMessage): void {
+    if (!neuroChatInstalled) {
+      return;
+    }
+
     chatMessages.update((messages) => [...messages, message]);
 
     if (message.playerId === $sessionState.playerId || chatOpen) {
@@ -159,6 +173,7 @@
   >
     <Sidebar
       {sidebarExpanded}
+      chatAvailable={neuroChatInstalled}
       chatUnreadCount={unreadChatCount}
       on:select={changePage}
       on:toggle-chat={toggleChat}

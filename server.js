@@ -77,10 +77,20 @@ io.on('connection', (socket) => {
   socket.emit('session:status', createSessionStatus(playerId));
   socket.emit('campaign:state', getCampaignSnapshot(campaignState));
   socket.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
-  socket.emit('chat:history', chatMessages);
+  if (hasInstalledMod('neuro-link-chat')) {
+    socket.emit('chat:history', chatMessages);
+  }
   broadcastSessionStatus();
 
   socket.on('chat:send', (value, acknowledge = () => {}) => {
+    if (!hasInstalledMod('neuro-link-chat')) {
+      acknowledge({
+        ok: false,
+        error: 'The Neuro-Link Chat mod is not installed.'
+      });
+      return;
+    }
+
     const text = String(value ?? '').trim().slice(0, 500);
 
     if (!text) {
@@ -290,8 +300,11 @@ function ensureAvailableSessionToken(sessionToken) {
   const activeSlot = Object.values(playerSlots).find(
     (slot) => slot.sessionToken === sessionToken && slot.connected
   );
+  const hasUnassignedSlot = Object.values(playerSlots).some(
+    (slot) => slot.sessionToken === null
+  );
 
-  return activeSlot ? randomUUID() : sessionToken;
+  return activeSlot && hasUnassignedSlot ? randomUUID() : sessionToken;
 }
 
 function assignPlayerSlot(sessionToken, socketId) {
@@ -301,15 +314,21 @@ function assignPlayerSlot(sessionToken, socketId) {
 
   if (returningPlayer) {
     const [playerId, slot] = returningPlayer;
+    const previousSocketId = slot.socketId;
     clearTimeout(slot.releaseTimer);
     slot.releaseTimer = null;
     slot.socketId = socketId;
     slot.connected = true;
+
+    if (previousSocketId && previousSocketId !== socketId) {
+      io.sockets.sockets.get(previousSocketId)?.disconnect(true);
+    }
+
     return playerId;
   }
 
   const availablePlayer = Object.entries(playerSlots).find(
-    ([, slot]) => slot.sessionToken === null
+    ([, slot]) => slot.sessionToken === null || !slot.connected
   );
 
   if (!availablePlayer) {
@@ -317,9 +336,11 @@ function assignPlayerSlot(sessionToken, socketId) {
   }
 
   const [playerId, slot] = availablePlayer;
+  clearTimeout(slot.releaseTimer);
   slot.sessionToken = sessionToken;
   slot.socketId = socketId;
   slot.connected = true;
+  slot.releaseTimer = null;
   return playerId;
 }
 
@@ -355,6 +376,10 @@ function broadcastSessionStatus() {
 
 function countConnectedPlayers() {
   return Object.values(playerSlots).filter((slot) => slot.connected).length;
+}
+
+function hasInstalledMod(modId) {
+  return campaignState.installedMods.includes(modId);
 }
 
 function scheduleSlotRelease(playerId, expectedToken) {

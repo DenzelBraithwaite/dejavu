@@ -93,14 +93,64 @@ export function typewriter(node: HTMLElement, options: TypewriterOptions) {
 
   return {
     update(nextOptions: TypewriterOptions): void {
+      const restartRequired = hasTypewriterContentChanged(
+        currentOptions,
+        nextOptions
+      );
+
       currentOptions = nextOptions;
-      void run();
+
+      if (restartRequired) {
+        void run();
+      }
     },
     destroy(): void {
       runId += 1;
       node.removeEventListener('typewriterskip', handleSkip);
     }
   };
+}
+
+function hasTypewriterContentChanged(
+  previous: TypewriterOptions,
+  next: TypewriterOptions
+): boolean {
+  if (previous.text !== next.text) {
+    return true;
+  }
+
+  if ((previous.enabled !== false) !== (next.enabled !== false)) {
+    return true;
+  }
+
+  const previousTiming = {
+    ...defaultTiming,
+    ...previous.timing
+  };
+  const nextTiming = {
+    ...defaultTiming,
+    ...next.timing
+  };
+
+  return previousTiming.characterMs !== nextTiming.characterMs
+    || previousTiming.commaMs !== nextTiming.commaMs
+    || previousTiming.sentenceMs !== nextTiming.sentenceMs
+    || previousTiming.paragraphMs !== nextTiming.paragraphMs
+    || !haveMatchingOverrides(previousTiming.overrides, nextTiming.overrides);
+}
+
+function haveMatchingOverrides(
+  previous: Record<string, number> | undefined,
+  next: Record<string, number> | undefined
+): boolean {
+  const previousEntries = Object.entries(previous ?? {});
+  const nextEntries = Object.entries(next ?? {});
+
+  if (previousEntries.length !== nextEntries.length) {
+    return false;
+  }
+
+  return previousEntries.every(([character, delay]) => next?.[character] === delay);
 }
 
 function getCharacterDelay(character: string, timing: TypewriterTiming): number {

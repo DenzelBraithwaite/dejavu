@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { localPlayer } from '../stores/campaign';
+  import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
   import { characterRegistry } from '../story/characters';
 </script>
@@ -21,6 +21,17 @@
           </ul>
         {:else}
           <p class="empty-state">Your bag is empty.</p>
+        {/if}
+
+        <h2 class="mods-heading">Installed neuro mods</h2>
+        {#if $campaignState?.installedMods.length}
+          <ul class="inventory-list">
+            {#each $campaignState.installedMods as modId}
+              <li>{modId === 'neuro-link-chat' ? 'Neuro-Link Chat' : modId}</li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="empty-state">No neuro mods installed.</p>
         {/if}
       </article>
 
@@ -113,6 +124,10 @@
       color: #e8edf6;
       border-bottom: 1px dashed #2c4024;
     }
+  }
+
+  .mods-heading {
+    margin-top: 30px;
   }
 
   .contact-list {

@@ -260,13 +260,21 @@
         aria-live="polite"
       ></p>
 
-      {#if !typingComplete}
-        <button class="skip-button" type="button" on:click={skipTyping}>
-          Complete text
-        </button>
-      {/if}
-
       {#if scene.type === 'conversation' && conversation}
+        <div class="conversation-status" aria-live="polite">
+          <p>
+            <strong>{$campaignState.players[conversation.activePlayer].name}</strong>
+            has the floor
+          </p>
+          <p>
+            {$campaignState.players.p1.name}
+            {conversation.messageCounts.p1}/{conversation.requiredMessages.p1}
+            ·
+            {$campaignState.players.p2.name}
+            {conversation.messageCounts.p2}/{conversation.requiredMessages.p2}
+          </p>
+        </div>
+
         <div class="conversation-log" aria-label="Current conversation">
           {#each conversation.messages as message}
             <p>
@@ -335,11 +343,12 @@
               id="conversation-input"
               bind:value={inputValue}
               maxlength="300"
+              disabled={!typingComplete}
               on:keydown={(event) => handleInputKeydown(event, sendMessage)}
             >
             <button
               type="button"
-              disabled={!inputValue.trim()}
+              disabled={!typingComplete || !inputValue.trim()}
               on:click={sendMessage}
             >
               Send
@@ -387,6 +396,12 @@
         {/if}
       {:else if scene.type === 'ending'}
         <p class="system-message">END OF AVAILABLE STORY DATA</p>
+      {/if}
+
+      {#if !typingComplete}
+        <button class="typing-skip" type="button" on:click={skipTyping}>
+          Skip typing
+        </button>
       {/if}
     </div>
   {/if}
@@ -502,17 +517,6 @@
     display: none;
   }
 
-  .skip-button {
-    width: auto;
-    margin-top: 18px;
-    padding: 6px 0;
-    color: #8893a2;
-    background: transparent;
-    border: 0;
-    font-size: 0.8rem;
-    text-decoration: underline;
-  }
-
   .scene-image-wrapper {
     max-width: 560px;
     margin-bottom: 28px;
@@ -539,6 +543,24 @@
       margin-bottom: 10px;
       line-height: 1.5;
     }
+
+    strong {
+      color: #ff75fd;
+    }
+  }
+
+  .conversation-status {
+    max-width: 78ch;
+    margin-top: 24px;
+    padding: 10px 12px;
+    color: #94a3b8;
+    background: #0c1322;
+    border-left: 3px solid #ff75fd;
+    font-size: 0.76rem;
+
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
 
     strong {
       color: #ff75fd;
@@ -596,6 +618,19 @@
       border-color: var(--terminal-accent);
       outline: 2px solid var(--terminal-accent);
       outline-offset: 2px;
+    }
+
+    button.typing-skip {
+      justify-self: center;
+      width: auto;
+      min-height: auto;
+      padding: 3px 8px;
+      color: #8893a2;
+      background: transparent;
+      border: 0;
+      font-size: 0.72rem;
+      font-weight: 400;
+      text-decoration: underline;
     }
   }
 

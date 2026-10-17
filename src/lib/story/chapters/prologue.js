@@ -259,8 +259,11 @@ export const prologueScenes = [
     audience: 'both',
     clearTerminal: true,
     text: 'The tinted windows hide the facility as the car pulls away. Neither of you trusts your escorts. You have a few moments to speak privately.',
-    messageCount: 4,
-    firstPlayer: 'p1',
+    messagesPerPlayer: {
+      p1: 3,
+      p2: 2
+    },
+    firstPlayer: 'random',
     next: 'prologue.trust-vote'
   }),
   defineScene({
