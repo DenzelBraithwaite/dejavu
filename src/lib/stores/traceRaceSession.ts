@@ -5,7 +5,12 @@ export type TraceRacePlayer = {
   name: string;
   position: number | null;
   exposure: number;
-  lastTraceRange: number | null;
+  exposureRevealNodes: number[];
+  tracker: {
+    node: number;
+    turnsRemaining: number;
+    alertedNodes: number[];
+  } | null;
   intel: string[];
 };
 

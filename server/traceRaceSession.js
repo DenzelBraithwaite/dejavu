@@ -36,7 +36,8 @@ function createPlayer(name) {
     name,
     position: null,
     exposure: 0,
-    lastTraceRange: null,
+    exposureRevealNodes: [],
+    tracker: null,
     intel: []
   };
 }
@@ -70,10 +71,6 @@ export function performTraceRaceAction(state, playerId, action) {
   const opponent = state.players[opponentId];
   const target = Number(action?.target);
 
-  if (action?.type !== 'trace') {
-    player.lastTraceRange = null;
-  }
-
   switch (action?.type) {
     case 'move': {
       if (!neighborsOf(player.position).includes(target)) {
@@ -87,18 +84,21 @@ export function performTraceRaceAction(state, playerId, action) {
       break;
     }
     case 'trace': {
-      const distance = shortestDistance(player.position, opponent.position);
-      const range = distance + randomInteger(1, 2);
-      player.exposure = Math.min(9, player.exposure + 2);
-      player.lastTraceRange = range;
-      addIntel(player, `TURN ${state.turn}: TRACE reports the rival is fewer than ${range} hops away. Candidate nodes highlighted; your action window remains open.`);
-      addIntel(opponent, `TURN ${state.turn}: Hostile TRACE detected. Rival exposure increased, but their turn continues.`);
+      const targets = Array.isArray(action?.targets)
+        ? action.targets.map(Number)
+        : [];
 
-      if (player.exposure >= 7) {
-        addIntel(opponent, `EXPOSURE LOCK: Rival is currently at NODE ${formatNode(player.position)}.`);
+      if (!isConnectedNodeGroup(targets, 5)) {
+        return errorResult('Trace requires exactly 5 unique connected nodes.');
       }
 
-      return successResult();
+      player.exposure = Math.min(9, player.exposure + 2);
+      const foundSignal = targets.includes(opponent.position);
+      addIntel(player, foundSignal
+        ? `TURN ${state.turn}: TRACE POSITIVE. Rival signal is inside nodes ${formatNodeList(targets)}.`
+        : `TURN ${state.turn}: TRACE CLEAR. Rival signal is not inside nodes ${formatNodeList(targets)}.`);
+      addIntel(opponent, `TURN ${state.turn}: Hostile TRACE swept 5 connected nodes.`);
+      break;
     }
     case 'ping': {
       if (!Number.isInteger(target) || target < 0 || target >= NODE_COUNT) {
@@ -119,12 +119,34 @@ export function performTraceRaceAction(state, playerId, action) {
       break;
     }
     case 'scan': {
-      const nearby = shortestDistance(player.position, opponent.position) <= 2;
+      if (!isValidNode(target)) {
+        return errorResult('Select a valid node as the center of your scan.');
+      }
+
+      const nearby = shortestDistance(target, opponent.position) <= 2;
       player.exposure = Math.min(9, player.exposure + 1);
       addIntel(player, nearby
-        ? `TURN ${state.turn}: SCAN POSITIVE. Rival signal detected within 2 hops.`
-        : `TURN ${state.turn}: SCAN CLEAR. No rival signal within 2 hops.`);
+        ? `TURN ${state.turn}: SCAN POSITIVE. Rival signal detected within 2 hops of NODE ${formatNode(target)}.`
+        : `TURN ${state.turn}: SCAN CLEAR. No rival signal within 2 hops of NODE ${formatNode(target)}.`);
       addIntel(opponent, `TURN ${state.turn}: Proximity scan swept the network. Rival exposure increased.`);
+      break;
+    }
+    case 'tracker': {
+      if (!isValidNode(target)) {
+        return errorResult('Select a valid node for the tracker.');
+      }
+
+      player.tracker = {
+        node: target,
+        turnsRemaining: 3,
+        alertedNodes: []
+      };
+      addIntel(player, `TURN ${state.turn}: TRACKER armed at NODE ${formatNode(target)} for 3 rival turns.`);
+
+      if (shortestDistance(target, opponent.position) <= 1) {
+        alertTracker(player, target);
+      }
+
       break;
     }
     case 'scramble': {
@@ -137,9 +159,8 @@ export function performTraceRaceAction(state, playerId, action) {
       return errorResult('Choose a valid trace action.');
   }
 
-  if (opponent.exposure >= 7) {
-    addIntel(player, `EXPOSURE LOCK: Rival is currently at NODE ${formatNode(opponent.position)}.`);
-  }
+  updateExposureReveals(state);
+  updateOpponentTracker(state, playerId);
 
   state.activePlayer = opponentId;
   state.turn += 1;
@@ -206,7 +227,8 @@ function resetRound(state) {
   for (const player of Object.values(state.players)) {
     player.position = null;
     player.exposure = 0;
-    player.lastTraceRange = null;
+    player.exposureRevealNodes = [];
+    player.tracker = null;
     player.intel = [];
   }
 }
@@ -245,6 +267,129 @@ function shortestDistance(start, destination) {
   }
 
   return NODE_COUNT;
+}
+
+function isValidNode(node) {
+  return Number.isInteger(node) && node >= 0 && node < NODE_COUNT;
+}
+
+function isConnectedNodeGroup(nodes, requiredCount) {
+  if (nodes.length !== requiredCount || new Set(nodes).size !== requiredCount) {
+    return false;
+  }
+
+  if (nodes.some((node) => !isValidNode(node))) {
+    return false;
+  }
+
+  const allowed = new Set(nodes);
+  const visited = new Set([nodes[0]]);
+  const queue = [nodes[0]];
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+
+    for (const neighbor of neighborsOf(node)) {
+      if (allowed.has(neighbor) && !visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return visited.size === requiredCount;
+}
+
+function updateExposureReveals(state) {
+  for (const observerId of ['p1', 'p2']) {
+    const observer = state.players[observerId];
+    const target = state.players[otherPlayer(observerId)];
+
+    if (target.exposure < 7) {
+      observer.exposureRevealNodes = [];
+      continue;
+    }
+
+    const revealNodes = createExposureCluster(target.position);
+
+    if (!sameNodes(observer.exposureRevealNodes, revealNodes)) {
+      observer.exposureRevealNodes = revealNodes;
+      addIntel(observer, `EXPOSURE LEAK: Rival occupies one of these 3 nodes: ${formatNodeList(revealNodes)}.`);
+    }
+  }
+}
+
+function createExposureCluster(position) {
+  const cluster = [position];
+  const firstNeighbors = shuffle(neighborsOf(position));
+
+  for (const neighbor of firstNeighbors) {
+    if (cluster.length >= 3) {
+      break;
+    }
+
+    cluster.push(neighbor);
+  }
+
+  if (cluster.length < 3) {
+    for (const node of shuffle(neighborsOf(cluster[1] ?? position))) {
+      if (!cluster.includes(node)) {
+        cluster.push(node);
+      }
+
+      if (cluster.length >= 3) {
+        break;
+      }
+    }
+  }
+
+  return shuffle(cluster);
+}
+
+function updateOpponentTracker(state, actingPlayerId) {
+  const trackerOwner = state.players[otherPlayer(actingPlayerId)];
+  const tracker = trackerOwner.tracker;
+
+  if (!tracker) {
+    return;
+  }
+
+  if (shortestDistance(tracker.node, state.players[actingPlayerId].position) <= 1) {
+    alertTracker(trackerOwner, tracker.node);
+  }
+
+  tracker.turnsRemaining -= 1;
+
+  if (tracker.turnsRemaining <= 0) {
+    addIntel(trackerOwner, `TRACKER EXPIRED: NODE ${formatNode(tracker.node)} returned to idle.`);
+    trackerOwner.tracker = null;
+  }
+}
+
+function alertTracker(player, trackerNode) {
+  const possibleNodes = [trackerNode, ...neighborsOf(trackerNode)];
+  player.tracker.alertedNodes = possibleNodes;
+  addIntel(player, `TRACKER ALERT: Rival entered the orange radius around NODE ${formatNode(trackerNode)}.`);
+}
+
+function sameNodes(left, right) {
+  return left.length === right.length
+    && left.every((node) => right.includes(node));
+}
+
+function formatNodeList(nodes) {
+  return nodes.map(formatNode).join(', ');
+}
+
+function shuffle(items) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInteger(0, index);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
 }
 
 function addIntel(player, message) {

@@ -8,7 +8,12 @@
   import { traceRaceServerState } from '../stores/traceRaceSession';
 
   type Mode = 'menu' | 'singleplayer' | 'multiplayer';
-  type ActionType = 'move' | 'trace' | 'ping' | 'scan' | 'scramble';
+  type ActionType = 'move' | 'trace' | 'ping' | 'scan' | 'tracker' | 'scramble';
+  type Tracker = {
+    node: number;
+    turnsRemaining: number;
+    alertedNodes: number[];
+  };
 
   const positions = [
     { x: 6, y: 12 }, { x: 24, y: 8 }, { x: 43, y: 15 },
@@ -28,8 +33,10 @@
   ];
 
   let mode: Mode = 'menu';
+  let pendingMode: Exclude<Mode, 'menu'> | null = null;
   let joined = false;
-  let selectedNode: number | null = null;
+  let selectedAction: ActionType | null = null;
+  let traceSelection: number[] = [];
   let errorMessage = '';
   let showInstructions = false;
   let waitingForStoryPartner = false;
@@ -40,7 +47,8 @@
   let localCpuPosition = 11;
   let localPlayerExposure = 0;
   let localCpuExposure = 0;
-  let localTraceRange: number | null = null;
+  let localExposureRevealNodes: number[] = [];
+  let localTracker: Tracker | null = null;
   let localTurn = 1;
   let localIntel: string[] = [];
   let cpuTimer: number | undefined;
@@ -56,9 +64,12 @@
   $: displayedExposure = mode === 'singleplayer'
     ? localPlayerExposure
     : serverPlayer?.exposure ?? 0;
-  $: displayedTraceRange = mode === 'singleplayer'
-    ? localTraceRange
-    : serverPlayer?.lastTraceRange ?? null;
+  $: displayedExposureRevealNodes = mode === 'singleplayer'
+    ? localExposureRevealNodes
+    : serverPlayer?.exposureRevealNodes ?? [];
+  $: displayedTracker = mode === 'singleplayer'
+    ? localTracker
+    : serverPlayer?.tracker ?? null;
   $: displayedIntel = mode === 'singleplayer'
     ? localIntel
     : serverPlayer?.intel ?? [];
@@ -87,23 +98,46 @@
   });
 
   function startSingleplayer(): void {
-    leaveMultiplayer(false);
-    mode = 'singleplayer';
-    resetLocalGame();
+    pendingMode = 'singleplayer';
     showInstructions = true;
   }
 
   function selectMultiplayer(): void {
-    mode = 'multiplayer';
-    selectedNode = null;
+    pendingMode = 'multiplayer';
     errorMessage = '';
     waitingForStoryPartner = false;
     showInstructions = true;
+  }
+
+  function beginTraceRace(): void {
+    showInstructions = false;
+
+    if (!pendingMode) {
+      return;
+    }
+
+    const nextMode = pendingMode;
+    pendingMode = null;
+
+    if (nextMode === 'singleplayer') {
+      leaveMultiplayer(false);
+      mode = 'singleplayer';
+      resetLocalGame();
+      return;
+    }
+
+    mode = 'multiplayer';
+    resetTargeting();
 
     if (!joined) {
       joined = true;
       socket.emit('trace-race:join');
     }
+  }
+
+  function closeInstructions(): void {
+    showInstructions = false;
+    pendingMode = null;
   }
 
   function resetLocalGame(): void {
@@ -114,68 +148,117 @@
     [localPlayerPosition, localCpuPosition] = randomDistinctPositions();
     localPlayerExposure = 0;
     localCpuExposure = 0;
-    localTraceRange = null;
+    localExposureRevealNodes = [];
+    localTracker = null;
     localTurn = 1;
-    selectedNode = null;
+    resetTargeting();
     errorMessage = '';
     localIntel = [`LINK ESTABLISHED: Your signal entered at NODE ${formatNode(localPlayerPosition)}.`];
   }
 
-  function performAction(type: ActionType): void {
+  function chooseAction(type: ActionType): void {
     errorMessage = '';
 
     if (!isMyTurn) {
       return;
     }
 
-    if ((type === 'move' || type === 'ping') && selectedNode === null) {
-      errorMessage = 'Select a network node first.';
+    if (type === 'scramble') {
+      submitAction(type);
       return;
     }
+
+    selectedAction = type;
+    traceSelection = [];
+  }
+
+  function selectActionNode(node: number): void {
+    if (!isMyTurn || !selectedAction) {
+      return;
+    }
+
+    if (selectedAction === 'move' && !neighborsOf(displayedPosition as number).includes(node)) {
+      errorMessage = 'Move must target a node directly connected to your current position.';
+      return;
+    }
+
+    if (selectedAction === 'trace') {
+      selectTraceNode(node);
+      return;
+    }
+
+    submitAction(selectedAction, node);
+  }
+
+  function selectTraceNode(node: number): void {
+    if (traceSelection.includes(node)) {
+      const nextSelection = traceSelection.filter((candidate) => candidate !== node);
+
+      if (!isConnectedSelection(nextSelection)) {
+        errorMessage = 'Remove an outside Trace node first so the group stays connected.';
+        return;
+      }
+
+      traceSelection = nextSelection;
+      errorMessage = '';
+      return;
+    }
+
+    if (traceSelection.length > 0
+      && !traceSelection.some((candidate) => neighborsOf(candidate).includes(node))) {
+      errorMessage = 'Each Trace node must connect to the selected group.';
+      return;
+    }
+
+    traceSelection = [...traceSelection, node];
+    errorMessage = '';
+
+    if (traceSelection.length === 5) {
+      submitAction('trace', undefined, traceSelection);
+    }
+  }
+
+  function submitAction(type: ActionType, target?: number, targets?: number[]): void {
+    errorMessage = '';
 
     if (mode === 'multiplayer') {
       socket.emit(
         'trace-race:action',
         {
           type,
-          target: selectedNode
+          target,
+          targets
         },
         handleActionResult
       );
-      selectedNode = null;
+      resetTargeting();
       return;
     }
 
-    performLocalAction(type);
+    performLocalAction(type, target, targets);
   }
 
-  function performLocalAction(type: ActionType): void {
-    if (type !== 'trace') {
-      localTraceRange = null;
-    }
-
+  function performLocalAction(type: ActionType, target?: number, targets: number[] = []): void {
     if (type === 'move') {
-      if (!neighborsOf(localPlayerPosition).includes(selectedNode as number)) {
+      if (!neighborsOf(localPlayerPosition).includes(target as number)) {
         errorMessage = 'Choose a node directly linked to your current position.';
         return;
       }
 
-      localPlayerPosition = selectedNode as number;
+      localPlayerPosition = target as number;
       localPlayerExposure = Math.max(0, localPlayerExposure - 1);
       addLocalIntel(`TURN ${localTurn}: Relocated to NODE ${formatNode(localPlayerPosition)}.`);
     }
 
     if (type === 'trace') {
-      const distance = shortestDistance(localPlayerPosition, localCpuPosition);
-      const range = distance + randomInteger(1, 2);
       localPlayerExposure = Math.min(9, localPlayerExposure + 2);
-      localTraceRange = range;
-      addLocalIntel(`TURN ${localTurn}: TRACE reports the rival is fewer than ${range} hops away. Candidate nodes highlighted; your action window remains open.`);
-      return;
+      addLocalIntel(targets.includes(localCpuPosition)
+        ? `TURN ${localTurn}: TRACE POSITIVE. Rival signal is inside nodes ${formatNodeList(targets)}.`
+        : `TURN ${localTurn}: TRACE CLEAR. Rival signal is not inside nodes ${formatNodeList(targets)}.`);
     }
 
     if (type === 'ping') {
-      if (selectedNode === localCpuPosition) {
+      if (target === localCpuPosition) {
         localStatus = 'finished';
         localWinner = 'player';
         addLocalIntel(`PING LOCKED: Rival found at NODE ${formatNode(localCpuPosition)}.`);
@@ -183,15 +266,25 @@
       }
 
       localPlayerExposure = Math.min(9, localPlayerExposure + 3);
-      addLocalIntel(`TURN ${localTurn}: NODE ${formatNode(selectedNode as number)} was empty.`);
+      addLocalIntel(`TURN ${localTurn}: NODE ${formatNode(target as number)} was empty.`);
     }
 
     if (type === 'scan') {
-      const nearby = shortestDistance(localPlayerPosition, localCpuPosition) <= 2;
+      const nearby = shortestDistance(target as number, localCpuPosition) <= 2;
       localPlayerExposure = Math.min(9, localPlayerExposure + 1);
       addLocalIntel(nearby
-        ? `TURN ${localTurn}: SCAN POSITIVE. Rival signal detected within 2 hops.`
-        : `TURN ${localTurn}: SCAN CLEAR. No rival signal within 2 hops.`);
+        ? `TURN ${localTurn}: SCAN POSITIVE. Rival signal detected within 2 hops of NODE ${formatNode(target as number)}.`
+        : `TURN ${localTurn}: SCAN CLEAR. No rival signal within 2 hops of NODE ${formatNode(target as number)}.`);
+    }
+
+    if (type === 'tracker') {
+      localTracker = {
+        node: target as number,
+        turnsRemaining: 3,
+        alertedNodes: []
+      };
+      addLocalIntel(`TURN ${localTurn}: TRACKER armed at NODE ${formatNode(target as number)} for 3 rival turns.`);
+      updateLocalTracker(false);
     }
 
     if (type === 'scramble') {
@@ -199,7 +292,8 @@
       addLocalIntel(`TURN ${localTurn}: Signal signature scrambled.`);
     }
 
-    selectedNode = null;
+    updateLocalExposureReveal();
+    resetTargeting();
     localActivePlayer = 'cpu';
     localTurn += 1;
     cpuTimer = window.setTimeout(runCpuTurn, 700);
@@ -232,9 +326,8 @@
       addLocalIntel('SIGNAL SHIFT: The CPU moved through the network.');
     }
 
-    if (localCpuExposure >= 7) {
-      addLocalIntel(`EXPOSURE LOCK: Rival is currently at NODE ${formatNode(localCpuPosition)}.`);
-    }
+    updateLocalExposureReveal();
+    updateLocalTracker(true);
 
     localActivePlayer = 'player';
     localTurn += 1;
@@ -276,13 +369,109 @@
     return positions.length;
   }
 
+  function isConnectedSelection(nodes: number[]): boolean {
+    if (nodes.length < 2) {
+      return true;
+    }
+
+    const allowed = new Set(nodes);
+    const visited = new Set([nodes[0]]);
+    const queue = [nodes[0]];
+
+    while (queue.length > 0) {
+      const currentNode = queue.shift() as number;
+
+      for (const neighbor of neighborsOf(currentNode)) {
+        if (allowed.has(neighbor) && !visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    return visited.size === nodes.length;
+  }
+
   function addLocalIntel(message: string): void {
     localIntel = [...localIntel, message];
   }
 
+  function updateLocalExposureReveal(): void {
+    if (localCpuExposure < 7) {
+      localExposureRevealNodes = [];
+      return;
+    }
+
+    const nextReveal = createExposureCluster(localCpuPosition);
+
+    if (!sameNodes(localExposureRevealNodes, nextReveal)) {
+      localExposureRevealNodes = nextReveal;
+      addLocalIntel(`EXPOSURE LEAK: Rival occupies one of these 3 nodes: ${formatNodeList(nextReveal)}.`);
+    }
+  }
+
+  function updateLocalTracker(advanceTurn: boolean): void {
+    if (!localTracker) {
+      return;
+    }
+
+    if (shortestDistance(localTracker.node, localCpuPosition) <= 1) {
+      localTracker.alertedNodes = [localTracker.node, ...neighborsOf(localTracker.node)];
+      localTracker = { ...localTracker };
+      addLocalIntel(`TRACKER ALERT: Rival entered the orange radius around NODE ${formatNode(localTracker.node)}.`);
+    }
+
+    if (!advanceTurn) {
+      return;
+    }
+
+    localTracker.turnsRemaining -= 1;
+
+    if (localTracker.turnsRemaining <= 0) {
+      addLocalIntel(`TRACKER EXPIRED: NODE ${formatNode(localTracker.node)} returned to idle.`);
+      localTracker = null;
+    } else {
+      localTracker = { ...localTracker };
+    }
+  }
+
+  function createExposureCluster(position: number): number[] {
+    const cluster = [position];
+
+    for (const neighbor of shuffle(neighborsOf(position))) {
+      if (cluster.length >= 3) {
+        break;
+      }
+
+      cluster.push(neighbor);
+    }
+
+    return shuffle(cluster);
+  }
+
+  function shuffle<T>(items: T[]): T[] {
+    const shuffled = [...items];
+
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const swapIndex = randomInteger(0, index);
+      [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+
+    return shuffled;
+  }
+
+  function sameNodes(left: number[], right: number[]): boolean {
+    return left.length === right.length
+      && left.every((node) => right.includes(node));
+  }
+
   function intelClass(message: string): string {
-    if (message.includes('PING LOCKED') || message.includes('EXPOSURE LOCK') || message.includes('SCAN POSITIVE')) {
+    if (message.includes('PING LOCKED') || message.includes('EXPOSURE LEAK') || message.includes('SCAN POSITIVE')) {
       return 'success';
+    }
+
+    if (message.includes('TRACKER')) {
+      return 'tracker';
     }
 
     if (message.includes('PING BREACH') || message.includes('HOSTILE')) {
@@ -296,10 +485,34 @@
     return 'standard';
   }
 
-  function isTraceCandidate(node: number): boolean {
-    return displayedPosition !== null
-      && displayedTraceRange !== null
-      && shortestDistance(displayedPosition, node) < displayedTraceRange;
+  function resetTargeting(): void {
+    selectedAction = null;
+    traceSelection = [];
+  }
+
+  function nodeIsTrackerCandidate(node: number): boolean {
+    return Boolean(displayedTracker?.alertedNodes.includes(node));
+  }
+
+  function nodeIsExposureCandidate(node: number): boolean {
+    return displayedExposureRevealNodes.includes(node);
+  }
+
+  function nodeCanBeTargeted(node: number): boolean {
+    if (!selectedAction || !isMyTurn) {
+      return false;
+    }
+
+    if (selectedAction === 'move') {
+      return displayedPosition !== null && neighborsOf(displayedPosition).includes(node);
+    }
+
+    if (selectedAction === 'trace' && traceSelection.length > 0) {
+      return traceSelection.includes(node)
+        || traceSelection.some((candidate) => neighborsOf(candidate).includes(node));
+    }
+
+    return selectedAction !== 'scramble';
   }
 
   function handleActionResult(result: { ok: boolean; error?: string }): void {
@@ -315,6 +528,8 @@
     }
 
     mode = 'menu';
+    pendingMode = null;
+    resetTargeting();
 
     if (returnToLibrary) {
       location.set('minigames');
@@ -365,6 +580,10 @@
     return String(node + 1).padStart(2, '0');
   }
 
+  function formatNodeList(nodes: number[]): string {
+    return nodes.map(formatNode).join(', ');
+  }
+
   function randomDistinctPositions(): [number, number] {
     const firstPosition = randomInteger(0, positions.length - 1);
     let secondPosition = randomInteger(0, positions.length - 1);
@@ -382,7 +601,7 @@
 
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
-      showInstructions = false;
+      closeInstructions();
     }
   }
 </script>
@@ -408,29 +627,37 @@
         aria-modal="true"
         aria-labelledby="trace-instructions-title"
       >
-        <p class="eyebrow">TRACE RACE FIELD MANUAL</p>
-        <h2 id="trace-instructions-title">Find them before they find you</h2>
-        <p>
-          You and your rival occupy hidden nodes on the same network. Your own
-          node glows cyan. Each connection line you cross counts as one
-          <strong>hop</strong>. Select nodes on the map, gather distance clues, and
-          use <strong>Ping</strong> when you think you know the rival's exact location.
-        </p>
-        <dl>
-          <div><dt>MOVE</dt><dd>Relocate to a directly connected node and reduce exposure by 1.</dd></div>
-          <div><dt>TRACE</dt><dd>Reveal that the rival is fewer than a reported number of hops away. Highlights every possible node, adds 2 exposure, and keeps your turn open.</dd></div>
-          <div><dt>PING</dt><dd>Attack the selected node. A correct Ping wins; a miss adds 3 exposure.</dd></div>
-          <div><dt>SCAN</dt><dd>Detect whether the rival is anywhere within 2 hops. Adds 1 exposure and ends your turn.</dd></div>
-          <div><dt>SCRAMBLE</dt><dd>Spend your turn reducing exposure by 3.</dd></div>
-        </dl>
-        <p class="instruction-tip">
-          A yellow node after Trace is a possible rival location. Trace gives an
-          intentionally broad “fewer than” range rather than an exact distance.
-          At 7 exposure,
-          your opponent receives your exact current node. Movement only works
-          along the glowing connection lines.
-        </p>
-        <button type="button" on:click={() => showInstructions = false}>BEGIN TRACE</button>
+        <header class="instruction-header">
+          <div>
+            <p class="eyebrow">TRACE RACE FIELD MANUAL</p>
+            <h2 id="trace-instructions-title">Find them before they find you</h2>
+          </div>
+          <button type="button" aria-label="Close instructions" on:click={closeInstructions}>×</button>
+        </header>
+        <div class="instructions-scroll">
+          <p>
+            You and your rival occupy hidden nodes on the same network. Your own
+            node glows cyan. Select an action first, then choose its target nodes.
+            Each connection line crossed counts as one <strong>hop</strong>.
+          </p>
+          <dl>
+            <div><dt>MOVE</dt><dd>Select a directly connected node. Moving reduces exposure by 1.</dd></div>
+            <div><dt>TRACE</dt><dd>Select exactly 5 unique nodes that form one connected group. Trace reports whether the rival is somewhere inside that group.</dd></div>
+            <div><dt>PING</dt><dd>Select one node to attack. An exact hit wins; a miss adds 3 exposure.</dd></div>
+            <div><dt>SCAN</dt><dd>Select a center node. Scan reports whether the rival is within 2 hops of that node and adds 1 exposure.</dd></div>
+            <div><dt>TRACKER</dt><dd>Select a node to watch for 3 rival turns. If the rival comes within 1 hop, its possible radius glows orange.</dd></div>
+            <div><dt>SCRAMBLE</dt><dd>Requires no node. Spend the turn reducing exposure by 3.</dd></div>
+          </dl>
+          <p class="instruction-tip">
+            At 7 exposure, your opponent sees 3 connected red nodes—exactly one
+            contains your signal. Red exposure clues override orange tracker clues.
+          </p>
+        </div>
+        <footer class="instruction-footer">
+          <button type="button" on:click={beginTraceRace}>
+            {pendingMode ? 'BEGIN TRACE' : 'RETURN TO GRID'}
+          </button>
+        </footer>
       </section>
     </div>
   {/if}
@@ -498,8 +725,10 @@
             <button
               class="network-node"
               class:network-node--current={displayedPosition === index}
-              class:network-node--selected={selectedNode === index}
-              class:network-node--candidate={isTraceCandidate(index)}
+              class:network-node--selected={traceSelection.includes(index)}
+              class:network-node--targetable={nodeCanBeTargeted(index)}
+              class:network-node--tracker={nodeIsTrackerCandidate(index)}
+              class:network-node--exposed={nodeIsExposureCandidate(index)}
               class:network-node--enemy={(mode === 'singleplayer' && localStatus === 'finished' && localCpuPosition === index)
                 || (mode === 'multiplayer' && $traceRaceServerState?.status === 'finished'
                   && playerId
@@ -507,7 +736,7 @@
               style={`left: ${position.x}%; top: ${position.y}%;`}
               type="button"
               aria-label={`Select network node ${formatNode(index)}`}
-              on:click={() => selectedNode = index}
+              on:click={() => selectActionNode(index)}
             >
               {formatNode(index)}
             </button>
@@ -535,15 +764,27 @@
         {:else}
           <div class="action-card">
             <p class="turn-status">{isMyTurn ? 'YOUR WINDOW' : 'RIVAL WINDOW'}</p>
-            <p class="selection">Selected: {selectedNode === null ? 'NONE' : `NODE ${formatNode(selectedNode)}`}</p>
+            <p class="selection">
+              {#if selectedAction === 'trace'}
+                TRACE GROUP: {traceSelection.length}/5 NODES
+              {:else if selectedAction}
+                {selectedAction.toUpperCase()} ARMED · SELECT A NODE
+              {:else}
+                SELECT AN ACTION
+              {/if}
+            </p>
             <div class="action-grid">
-              <button type="button" disabled={!isMyTurn} on:click={() => performAction('move')}>MOVE</button>
-              <button type="button" disabled={!isMyTurn} on:click={() => performAction('trace')}>TRACE</button>
-              <button type="button" disabled={!isMyTurn} on:click={() => performAction('ping')}>PING</button>
-              <button type="button" disabled={!isMyTurn} on:click={() => performAction('scan')}>SCAN</button>
-              <button type="button" disabled={!isMyTurn} on:click={() => performAction('scramble')}>SCRAMBLE</button>
+              <button class:action-active={selectedAction === 'move'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('move')}>MOVE</button>
+              <button class:action-active={selectedAction === 'trace'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('trace')}>TRACE</button>
+              <button class:action-active={selectedAction === 'ping'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('ping')}>PING</button>
+              <button class:action-active={selectedAction === 'scan'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('scan')}>SCAN</button>
+              <button class:action-active={selectedAction === 'tracker'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('tracker')}>TRACKER</button>
+              <button type="button" disabled={!isMyTurn} on:click={() => chooseAction('scramble')}>SCRAMBLE</button>
             </div>
-            <p class="hint">Each line is one hop. Trace highlights a broad set of possible nodes and keeps your turn open. Ping a selected node to attempt the winning lock.</p>
+            <p class="hint">Choose an action, then use the map. Trace needs 5 connected nodes; orange marks a triggered tracker radius and red marks a 3-node exposure clue.</p>
+            {#if displayedTracker}
+              <p class="tracker-status">TRACKER NODE {formatNode(displayedTracker.node)} · {displayedTracker.turnsRemaining} TURNS</p>
+            {/if}
           </div>
         {/if}
 
@@ -620,12 +861,14 @@
   .instructions {
     width: min(680px, 100%);
     max-height: 90vh;
-    padding: clamp(24px, 5vw, 42px);
-    overflow-y: auto;
+    overflow: hidden;
     color: #dafcff;
     background: #061219;
     border: 1px solid #00d7eb;
     box-shadow: 0 0 42px #00d7eb44;
+
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
 
     h2 {
       margin: 10px 0 14px;
@@ -633,7 +876,7 @@
       font-size: clamp(1.35rem, 4vw, 2rem);
     }
 
-    > p:not(.eyebrow) {
+    .instructions-scroll > p:not(.eyebrow) {
       color: #a6c4cb;
       line-height: 1.65;
     }
@@ -671,7 +914,7 @@
       line-height: 1.45;
     }
 
-    > button {
+    .instruction-footer button {
       width: 100%;
       min-height: 46px;
       margin-top: 8px;
@@ -681,6 +924,38 @@
       font-weight: 800;
       cursor: pointer;
     }
+  }
+
+  .instruction-header {
+    padding: 22px 24px 14px;
+    border-bottom: 1px solid #145b65;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+
+    button {
+      width: 34px;
+      height: 34px;
+      color: #ff9fc7;
+      background: #1b0b16;
+      border: 1px solid #9f395d;
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+  }
+
+  .instructions-scroll {
+    min-height: 0;
+    padding: 18px 24px;
+    overflow-y: auto;
+  }
+
+  .instruction-footer {
+    padding: 14px 24px 20px;
+    background: #061219;
+    border-top: 1px solid #145b65;
   }
 
   .instruction-tip {
@@ -913,6 +1188,11 @@
       outline: none;
     }
 
+    &--targetable:not(.network-node--selected, .network-node--current) {
+      border-color: #f2d40e;
+      box-shadow: 0 0 16px #f2d40e66;
+    }
+
     &--current {
       color: #02090d;
       background: #00d7eb;
@@ -920,16 +1200,23 @@
       box-shadow: 0 0 24px #00d7eb;
     }
 
-    &--candidate:not(.network-node--current) {
-      color: #211b00;
-      background: #f2d40e;
-      border-color: #fff3a1;
-      box-shadow: 0 0 22px #f2d40eaa;
+    &--tracker:not(.network-node--exposed) {
+      color: #211200;
+      background: #ff9d2e;
+      border-color: #ffd29d;
+      box-shadow: 0 0 22px #ff8a1daa;
+    }
+
+    &--exposed {
+      color: #ffffff;
+      background: #e52f45;
+      border-color: #ffc0c8;
+      box-shadow: 0 0 25px #ff354fee;
       animation: candidate-pulse 1.1s ease-in-out infinite;
     }
 
-    &--candidate.network-node--current {
-      outline: 4px solid #f2d40e;
+    &--tracker.network-node--current:not(.network-node--exposed) {
+      outline: 4px solid #ff9d2e;
       outline-offset: 4px;
     }
 
@@ -969,6 +1256,16 @@
     line-height: 1.5;
   }
 
+  .tracker-status {
+    margin: 10px 0 0;
+    padding: 8px;
+    color: #ffc47f;
+    background: #241505;
+    border: 1px solid #a95109;
+    font-size: 0.66rem;
+    letter-spacing: 1px;
+  }
+
   .action-grid {
     margin: 18px 0;
 
@@ -995,6 +1292,13 @@
       opacity: 0.35;
       cursor: not-allowed;
     }
+  }
+
+  .action-card .action-active {
+    color: #02090d;
+    background: #f2d40e;
+    border-color: #fff39a;
+    box-shadow: 0 0 16px #f2d40e77;
   }
 
   .result-card {
@@ -1046,6 +1350,12 @@
   .intel-entry--danger {
     color: #ff9fc7 !important;
     border-left: 2px solid #ff4e9b;
+    padding-left: 9px !important;
+  }
+
+  .intel-entry--tracker {
+    color: #ffc47f !important;
+    border-left: 2px solid #ff9d2e;
     padding-left: 9px !important;
   }
 

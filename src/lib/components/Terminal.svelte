@@ -347,10 +347,6 @@
 
       <p class="scene-id">{scene.id}</p>
 
-      {#if scene.speaker}
-        <p class="speaker">{interpolateSceneText(scene.speaker, textValues)}</p>
-      {/if}
-
       {#if scene.type === 'image' && scene.src}
         <figure class="scene-image-wrapper">
           <img class="scene-image" src={scene.src} alt={scene.alt ?? ''}>
@@ -363,19 +359,33 @@
         </figure>
       {/each}
 
-      <p
-        class="scene-text"
-        class:scene-text-complete={typingComplete}
-        bind:this={typedTextElement}
-        use:typewriter={{
-          text: sceneText,
-          timing: scene.speaker
-            ? typewriterProfiles.dialogue
-            : typewriterProfiles.narration,
-          onComplete: completeTyping
-        }}
-        aria-live="polite"
-      ></p>
+      <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scene.portrait)}>
+        {#if scene.type === 'dialogue' && scene.portrait}
+          <figure class="dialogue-portrait">
+            <img src={scene.portrait} alt={scene.portraitAlt ?? ''}>
+          </figure>
+        {/if}
+
+        <div class="scene-copy__text">
+          {#if scene.speaker}
+            <p class="speaker">{interpolateSceneText(scene.speaker, textValues)}</p>
+          {/if}
+
+          <p
+            class="scene-text"
+            class:scene-text-complete={typingComplete}
+            bind:this={typedTextElement}
+            use:typewriter={{
+              text: sceneText,
+              timing: scene.speaker
+                ? typewriterProfiles.dialogue
+                : typewriterProfiles.narration,
+              onComplete: completeTyping
+            }}
+            aria-live="polite"
+          ></p>
+        </div>
+      </div>
 
       {#if scene.type === 'conversation' && conversation}
         <div class="conversation-status" aria-live="polite">
@@ -622,6 +632,42 @@
     letter-spacing: 1px;
   }
 
+  .scene-copy {
+    max-width: 78ch;
+  }
+
+  .scene-copy--portrait {
+    max-width: 92ch;
+
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .scene-copy__text {
+    min-width: 0;
+  }
+
+  .dialogue-portrait {
+    width: 96px;
+    height: 112px;
+    margin: 0;
+    overflow: hidden;
+    background: #07111d;
+    border: 1px solid var(--terminal-accent);
+    border-radius: 4px 16px;
+    box-shadow: 0 0 18px #02fbfb2e;
+
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.88;
+    }
+  }
+
   .scene-text {
     max-width: 78ch;
     min-height: 4rem;
@@ -634,6 +680,18 @@
       content: '▋';
       color: var(--terminal-accent);
       animation: blink 800ms steps(1) infinite;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .scene-copy--portrait {
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .dialogue-portrait {
+      width: 70px;
+      height: 84px;
     }
   }
 

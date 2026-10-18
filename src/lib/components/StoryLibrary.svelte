@@ -1084,7 +1084,7 @@
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
 
-    if (!file || !selectedNode || selectedNode.type !== 'image') {
+    if (!file || !selectedNode || !['image', 'dialogue'].includes(selectedNode.type)) {
       return;
     }
 
@@ -1116,7 +1116,11 @@
 
       if (imageNode) {
         rememberForUndo();
-        imageNode.src = result.path;
+        if (imageNode.type === 'dialogue') {
+          imageNode.portrait = result.path;
+        } else {
+          imageNode.src = result.path;
+        }
         refreshStory();
         statusMessage = 'Image uploaded to the story host.';
       }
@@ -1140,6 +1144,13 @@
     };
 
     switch (type) {
+      case 'dialogue':
+        return {
+          ...baseNode,
+          speaker: '',
+          portrait: '',
+          portraitAlt: ''
+        };
       case 'choice':
       case 'vote':
       case 'timed-choice':
@@ -1659,6 +1670,33 @@
               || (selectedNode.type === 'effect' && selectedNode.attachedTo === undefined)}
               <label for="node-speaker">Speaker</label>
               <input id="node-speaker" bind:value={selectedNode.speaker}>
+            {/if}
+
+            {#if selectedNode.type === 'dialogue'}
+              <label for="dialogue-portrait-upload">Speaker portrait</label>
+              <label class="upload-button" for="dialogue-portrait-upload">
+                {imageUploading ? 'Uploading portrait…' : 'Upload portrait'}
+              </label>
+              <input
+                class="visually-hidden"
+                id="dialogue-portrait-upload"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml"
+                disabled={imageUploading}
+                on:change={uploadImage}
+              >
+              {#if selectedNode.portrait}
+                <div class="image-preview image-preview--portrait">
+                  <img src={selectedNode.portrait} alt={selectedNode.portraitAlt || 'Dialogue portrait preview'}>
+                  <span>{selectedNode.portrait}</span>
+                  <button type="button" on:click={() => {
+                    selectedNode.portrait = '';
+                    selectedNode.portraitAlt = '';
+                  }}>Remove portrait</button>
+                </div>
+              {/if}
+              <label for="dialogue-portrait-alt">Portrait alternative text</label>
+              <input id="dialogue-portrait-alt" bind:value={selectedNode.portraitAlt}>
             {/if}
 
             {#if routeFields(selectedNode).includes('next')}
@@ -2971,6 +3009,13 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+  }
+
+  .image-preview--portrait img {
+    width: 112px;
+    height: 132px;
+    margin: 0 auto;
+    object-fit: cover;
   }
 
   .editor-tutorial {

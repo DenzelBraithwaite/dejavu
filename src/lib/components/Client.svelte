@@ -11,6 +11,7 @@
     netRunnersServerState,
     type NetRunnersServerState
   } from '../stores/netRunnersSession';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { pigzServerState, type PigzServerState } from '../stores/pigzSession';
   import {
     traceRaceServerState,
@@ -31,6 +32,7 @@
   let showChatToast = false;
   let chatToastTimer: number;
   let pendingPage: string | null = null;
+  const partneredMinigames = new Set<string>();
 
   $: neuroChatInstalled = Boolean(
     $campaignState?.installedMods.includes('neuro-link-chat')
@@ -135,18 +137,34 @@
 
   function handleNetRunnersState(state: NetRunnersServerState): void {
     netRunnersServerState.set(state);
+
+    if (state.participantCount === 2) {
+      partneredMinigames.add('netrunners');
+    }
   }
 
   function handlePigzState(state: PigzServerState): void {
     pigzServerState.set(state);
+
+    if (state.participantCount === 2) {
+      partneredMinigames.add('pigz');
+    }
   }
 
   function handleTraceRaceState(state: TraceRaceState): void {
     traceRaceServerState.set(state);
+
+    if (state.participantCount === 2) {
+      partneredMinigames.add('trace-race');
+    }
   }
 
   function handlePacketWarState(state: PacketWarState): void {
     packetWarServerState.set(state);
+
+    if (state.participantCount === 2) {
+      partneredMinigames.add('packet-war');
+    }
   }
 
   function handleChatHistory(messages: ChatMessage[]): void {
@@ -222,11 +240,87 @@
   }
 
   function confirmMinigameExit(): void {
+    partneredMinigames.delete($location);
+
     if (pendingPage) {
       location.set(pendingPage);
     }
 
     pendingPage = null;
+  }
+
+  function currentGameIsMultiplayer(): boolean {
+    if (!$sessionState.playerId) {
+      return false;
+    }
+
+    const playerId = $sessionState.playerId;
+
+    if ($location === 'netrunners') {
+      return !$netRunnersGameState.singleplayer;
+    }
+
+    if ($location === 'pigz') {
+      return Boolean($pigzServerState?.participants[playerId]);
+    }
+
+    if ($location === 'trace-race') {
+      return Boolean($traceRaceServerState?.participants[playerId]);
+    }
+
+    if ($location === 'packet-war') {
+      return Boolean($packetWarServerState?.participants[playerId]);
+    }
+
+    return false;
+  }
+
+  function currentPartnerAlreadyLeft(): boolean {
+    if (!partneredMinigames.has($location)) {
+      return false;
+    }
+
+    if ($location === 'netrunners') {
+      return ($netRunnersServerState?.participantCount ?? 0) < 2;
+    }
+
+    if ($location === 'pigz') {
+      return ($pigzServerState?.participantCount ?? 0) < 2;
+    }
+
+    if ($location === 'trace-race') {
+      return ($traceRaceServerState?.participantCount ?? 0) < 2;
+    }
+
+    if ($location === 'packet-war') {
+      return ($packetWarServerState?.participantCount ?? 0) < 2;
+    }
+
+    return false;
+  }
+
+  function exitConfirmationTitle(): string {
+    if (!currentGameIsMultiplayer()) {
+      return 'Exit this solo game?';
+    }
+
+    if (currentPartnerAlreadyLeft()) {
+      return 'Close the abandoned game?';
+    }
+
+    return 'Leave your partner?';
+  }
+
+  function exitConfirmationMessage(): string {
+    if (!currentGameIsMultiplayer()) {
+      return 'Your current single-player round will be discarded.';
+    }
+
+    if (currentPartnerAlreadyLeft()) {
+      return 'The other player has already disconnected from this minigame. It is safe to return to the library.';
+    }
+
+    return 'Leaving now will abandon the other player and end the shared round.';
   }
 </script>
 
@@ -267,8 +361,8 @@
         <div class="exit-confirmation-backdrop">
           <section class="exit-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="exit-minigame-title">
             <p>ACTIVE CONNECTION</p>
-            <h2 id="exit-minigame-title">Exit this minigame?</h2>
-            <span>Leaving now may abandon an active partner and end the current round.</span>
+            <h2 id="exit-minigame-title">{exitConfirmationTitle()}</h2>
+            <span>{exitConfirmationMessage()}</span>
             <div>
               <button type="button" on:click={() => pendingPage = null}>STAY IN GAME</button>
               <button class="exit-button" type="button" on:click={confirmMinigameExit}>EXIT MINIGAME</button>

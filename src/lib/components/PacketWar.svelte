@@ -11,6 +11,7 @@
 
   let joined = false;
   let selectedMode: GameMode | null = null;
+  let pendingMode: GameMode | null = null;
   let errorMessage = '';
   let waitingForStoryPartner = false;
   let showInstructions = false;
@@ -42,10 +43,22 @@
   });
 
   function selectMode(mode: GameMode): void {
-    selectedMode = mode;
+    pendingMode = mode;
     errorMessage = '';
     waitingForStoryPartner = false;
     showInstructions = true;
+  }
+
+  function openConnection(): void {
+    showInstructions = false;
+
+    if (!pendingMode) {
+      return;
+    }
+
+    const mode = pendingMode;
+    pendingMode = null;
+    selectedMode = mode;
     joined = true;
     socket.emit('packet-war:join', mode, (result: { ok: boolean; error?: string }) => {
       if (!result.ok) {
@@ -54,6 +67,11 @@
         errorMessage = result.error ?? 'Could not join Packet War.';
       }
     });
+  }
+
+  function closeInstructions(): void {
+    showInstructions = false;
+    pendingMode = null;
   }
 
   function playCard(handIndex: number): void {
@@ -83,6 +101,7 @@
     }
 
     selectedMode = null;
+    pendingMode = null;
 
     if (returnToLibrary) {
       location.set('minigames');
@@ -148,7 +167,7 @@
 
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
-      showInstructions = false;
+      closeInstructions();
     }
   }
 </script>
@@ -174,52 +193,63 @@
         aria-modal="true"
         aria-labelledby="packet-instructions-title"
       >
-        <p class="eyebrow">PACKET WAR FIELD MANUAL</p>
-        <h2 id="packet-instructions-title">Break their integrity</h2>
-        <p>
-          On your turn, play one program from your hand. Programs cost
-          <strong>bandwidth</strong>, shown in the card's top-right corner. Your
-          bandwidth refills to your current maximum when your next turn begins.
-          Passing cycles the first card out of your hand, so an expensive hand
-          cannot permanently trap you.
-        </p>
-        <div class="objective-grid">
-          <article>
-            <strong>DUEL MODE</strong>
-            <span>Reduce the rival player's integrity from 30 to 0.</span>
-          </article>
-          <article>
-            <strong>CO-OP BREACH</strong>
-            <span>Work together to reduce BLACK ICE from 48 to 0 before either runner flatlines.</span>
-          </article>
+        <header class="instruction-header">
+          <div>
+            <p class="eyebrow">PACKET WAR FIELD MANUAL</p>
+            <h2 id="packet-instructions-title">Break their integrity</h2>
+          </div>
+          <button type="button" aria-label="Close instructions" on:click={closeInstructions}>×</button>
+        </header>
+        <div class="instructions-scroll">
+          <p>
+            On your turn, play one program from your hand. Programs cost
+            <strong>bandwidth</strong>, shown in the card's top-right corner. Each
+            turn begins by granting bandwidth equal to your current
+            <strong>income</strong>. Income begins at 2. Passing cycles the first
+            card out of your hand, so an expensive hand cannot permanently trap you.
+          </p>
+          <div class="objective-grid">
+            <article>
+              <strong>DUEL MODE</strong>
+              <span>Reduce the rival player's integrity from 30 to 0.</span>
+            </article>
+            <article>
+              <strong>CO-OP BREACH</strong>
+              <span>Work together to reduce BLACK ICE from 48 to 0 before either runner flatlines.</span>
+            </article>
+          </div>
+          <dl>
+            <div><dt>INTEGRITY</dt><dd>Your health. Reaching 0 ends the connection.</dd></div>
+            <div><dt>SHIELD</dt><dd>Absorbs incoming damage before integrity is lost. Unused shield persists between turns until damage consumes it.</dd></div>
+            <div><dt>MALWARE</dt><dd>Deals ongoing damage whenever the infected target's turn begins. Reboot removes all of your malware.</dd></div>
+            <div><dt>INCOME</dt><dd>Bandwidth gained at the start of each turn. Uplink permanently raises income by 1, with no cap.</dd></div>
+            <div><dt>DARK MIRROR</dt><dd>BLACK ICE can temporarily blind both runners to their teammate's telemetry.</dd></div>
+          </dl>
+          <h3>Program reference</h3>
+          <div class="program-reference">
+            <span><strong>SPIKE</strong> 6 damage</span>
+            <span><strong>FIREWALL</strong> +5 persistent shield</span>
+            <span><strong>LEECH</strong> 3 damage and repair 3</span>
+            <span><strong>WORM</strong> 2 damage and install 2 malware</span>
+            <span><strong>REBOOT</strong> repair 5 and remove malware</span>
+            <span><strong>OVERCLOCK</strong> +2 bandwidth; keep your turn</span>
+            <span><strong>RAILGUN · 5 BW</strong> 14 damage</span>
+            <span><strong>FORTRESS · 4 BW</strong> +12 persistent shield</span>
+            <span><strong>BLACK HOLE · 6 BW</strong> 8 damage and 4 malware</span>
+            <span><strong>UPLINK · RARE</strong> permanently raise bandwidth income</span>
+            <span><strong>GUARDIAN · CO-OP</strong> give your ally 7 shield</span>
+            <span><strong>MESH REPAIR · CO-OP</strong> repair both runners by 6</span>
+          </div>
+          <p class="instruction-tip">
+            In Co-op Breach, BLACK ICE retaliates after Player 2 acts. Its attack
+            becomes stronger as the rounds continue, so defensive cards matter.
+          </p>
         </div>
-        <dl>
-          <div><dt>INTEGRITY</dt><dd>Your health. Reaching 0 ends the connection.</dd></div>
-          <div><dt>SHIELD</dt><dd>Absorbs incoming damage before integrity is lost. Unused shield persists between turns until damage consumes it.</dd></div>
-          <div><dt>MALWARE</dt><dd>Deals ongoing damage whenever the infected target's turn begins. Reboot removes all of your malware.</dd></div>
-          <div><dt>BANDWIDTH</dt><dd>Refills to your current maximum at the start of your turn. Uplink can permanently raise that maximum without a cap.</dd></div>
-          <div><dt>DARK MIRROR</dt><dd>BLACK ICE can temporarily blind both runners to their teammate's telemetry.</dd></div>
-        </dl>
-        <h3>Program reference</h3>
-        <div class="program-reference">
-          <span><strong>SPIKE</strong> 6 damage</span>
-          <span><strong>FIREWALL</strong> +5 persistent shield</span>
-          <span><strong>LEECH</strong> 3 damage and repair 3</span>
-          <span><strong>WORM</strong> 2 damage and install 2 malware</span>
-          <span><strong>REBOOT</strong> repair 5 and remove malware</span>
-          <span><strong>OVERCLOCK</strong> +2 bandwidth; keep your turn</span>
-          <span><strong>RAILGUN · 5 BW</strong> 14 damage</span>
-          <span><strong>FORTRESS · 4 BW</strong> +12 persistent shield</span>
-          <span><strong>BLACK HOLE · 6 BW</strong> 8 damage and 4 malware</span>
-          <span><strong>UPLINK · RARE</strong> permanently raise maximum bandwidth</span>
-          <span><strong>GUARDIAN · CO-OP</strong> give your ally 7 shield</span>
-          <span><strong>MESH REPAIR · CO-OP</strong> repair both runners by 6</span>
-        </div>
-        <p class="instruction-tip">
-          In Co-op Breach, BLACK ICE retaliates after Player 2 acts. Its attack
-          becomes stronger as the rounds continue, so defensive cards matter.
-        </p>
-        <button type="button" on:click={() => showInstructions = false}>OPEN CONNECTION</button>
+        <footer class="instruction-footer">
+          <button type="button" on:click={openConnection}>
+            {pendingMode ? 'OPEN CONNECTION' : 'RETURN TO BATTLE'}
+          </button>
+        </footer>
       </section>
     </div>
   {/if}
@@ -289,7 +319,8 @@
           <div class="status-chips">
             <span class="status-chip status-chip--shield">SHIELD <strong>{player?.shield}</strong></span>
             <span class="status-chip status-chip--malware">MALWARE <strong>{player?.malware}</strong></span>
-            <span class="status-chip status-chip--bandwidth">BANDWIDTH <strong>{player?.bandwidth}/{player?.maxBandwidth}</strong></span>
+            <span class="status-chip status-chip--bandwidth">BANDWIDTH <strong>{player?.bandwidth}</strong></span>
+            <span class="status-chip status-chip--income">INCOME <strong>+{player?.bandwidthIncome}</strong></span>
           </div>
 
           {#if $packetWarServerState.mode === 'coop'}
@@ -302,7 +333,8 @@
                   <span>INT <strong>{opponent?.integrity}/30</strong></span>
                   <span>SHD <strong>{opponent?.shield}</strong></span>
                   <span>MLW <strong>{opponent?.malware}</strong></span>
-                  <span>BW <strong>{opponent?.bandwidth}/{opponent?.maxBandwidth}</strong></span>
+                  <span>BW <strong>{opponent?.bandwidth}</strong></span>
+                  <span>INC <strong>+{opponent?.bandwidthIncome}</strong></span>
                 </div>
               {/if}
             </div>
@@ -379,7 +411,7 @@
           <div class="hand-heading">
             <div>
               <p class="eyebrow">PROGRAM HAND</p>
-              <p>Select one executable. Bandwidth refills to your maximum at the start of your turn.</p>
+              <p>Select one executable. Your income grants fresh bandwidth at the start of each turn.</p>
             </div>
             <button type="button" disabled={!isMyTurn} on:click={passTurn}>PASS TURN</button>
           </div>
@@ -484,12 +516,14 @@
   .instructions {
     width: min(720px, 100%);
     max-height: 90vh;
-    padding: clamp(24px, 5vw, 42px);
-    overflow-y: auto;
+    overflow: hidden;
     color: #ebe6ff;
     background: #0c0b19;
     border: 1px solid #8a4dff;
     box-shadow: 0 0 42px #8a4dff55;
+
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
 
     h2 {
       margin: 10px 0 14px;
@@ -497,12 +531,12 @@
       font-size: clamp(1.35rem, 4vw, 2rem);
     }
 
-    > p:not(.eyebrow) {
+    .instructions-scroll > p:not(.eyebrow) {
       color: #b6b0c9;
       line-height: 1.65;
     }
 
-    > p strong,
+    .instructions-scroll > p strong,
     dt {
       color: #bd9cff;
     }
@@ -535,7 +569,7 @@
       line-height: 1.45;
     }
 
-    > button {
+    .instruction-footer button {
       width: 100%;
       min-height: 46px;
       color: #ffffff;
@@ -544,6 +578,38 @@
       font-weight: 800;
       cursor: pointer;
     }
+  }
+
+  .instruction-header {
+    padding: 22px 24px 14px;
+    border-bottom: 1px solid #30294b;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+
+    button {
+      width: 34px;
+      height: 34px;
+      color: #ff9bc5;
+      background: #1d1022;
+      border: 1px solid #9f395d;
+      font-size: 1.25rem;
+      cursor: pointer;
+    }
+  }
+
+  .instructions-scroll {
+    min-height: 0;
+    padding: 18px 24px;
+    overflow-y: auto;
+  }
+
+  .instruction-footer {
+    padding: 14px 24px 20px;
+    background: #0c0b19;
+    border-top: 1px solid #30294b;
   }
 
   .objective-grid {
@@ -901,6 +967,11 @@
       color: #f7dc62;
       border-color: #766719;
     }
+
+    .status-chip--income {
+      color: #bd9cff;
+      border-color: #7047c2;
+    }
   }
 
   .teammate-telemetry {
@@ -918,7 +989,7 @@
 
     > div {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
       gap: 6px;
     }
 

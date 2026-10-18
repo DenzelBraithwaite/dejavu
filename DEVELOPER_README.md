@@ -178,6 +178,23 @@ defineScene({
 
 Use `audience: 'p1'` or `audience: 'p2'` for a private perspective. Use `both` when both players can receive the scene.
 
+Dialogue can also show a small speaker portrait beside the active terminal text. In the visual editor, select the Dialogue node, upload a speaker portrait, and provide concise alternative text. The uploaded asset is stored through the same story-image endpoint used by Image nodes.
+
+```js
+defineScene({
+  id: 'chapter-01.trinity-greeting',
+  type: 'dialogue',
+  audience: 'both',
+  speaker: 'Trinity',
+  portrait: '/uploads/stories/trinity.webp',
+  portraitAlt: 'Trinity wearing mirrored neural-interface glasses',
+  text: 'Welcome to the Shades, {PLAYER_NAME}.',
+  next: 'chapter-01.look-around'
+})
+```
+
+The portrait belongs to the active Dialogue node only. Use a separate Image companion node for full terminal art, location imagery, or illustrations that should remain part of the scene presentation.
+
 ## Terminal history and clearing
 
 Completed scene output accumulates in each player's terminal by default. This lets dialogue, prompts, and responses remain readable after the next node starts.

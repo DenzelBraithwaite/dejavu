@@ -19,6 +19,8 @@
  * @property {SceneType} type
  * @property {Audience} [audience]
  * @property {string} [speaker]
+ * @property {string} [portrait]
+ * @property {string} [portraitAlt]
  * @property {string} [text]
  * @property {string} [next]
  * @property {SceneChoice[]} [choices]

@@ -6,6 +6,8 @@ export type StoryNode = {
   type: string;
   audience?: 'both' | PlayerId;
   speaker?: string;
+  portrait?: string;
+  portraitAlt?: string;
   text?: string;
   prompt?: string;
   next?: string;

@@ -17,7 +17,7 @@ export type PacketWarCombatant = {
 
 export type PacketWarPlayer = PacketWarCombatant & {
   bandwidth: number;
-  maxBandwidth: number;
+  bandwidthIncome: number;
   hand: string[];
   deck: string[];
 };

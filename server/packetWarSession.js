@@ -51,7 +51,7 @@ const PROGRAMS = {
   uplink: {
     name: 'UPLINK',
     cost: 2,
-    description: 'Permanently increase maximum bandwidth by 1.'
+    description: 'Permanently increase bandwidth income by 1.'
   },
   guardian: {
     name: 'GUARDIAN',
@@ -112,8 +112,8 @@ function createPlayer(name) {
     integrity: STARTING_INTEGRITY,
     shield: 0,
     malware: 0,
-    bandwidth: 3,
-    maxBandwidth: 3,
+    bandwidth: 2,
+    bandwidthIncome: 2,
     hand: [],
     deck: []
   };
@@ -334,7 +334,7 @@ function resolveProgram(state, playerId, cardId) {
       target.malware += 4;
       break;
     case 'uplink':
-      player.maxBandwidth += 1;
+      player.bandwidthIncome += 1;
       break;
     case 'guardian':
       state.players[otherPlayer(playerId)].shield += 7;
@@ -387,7 +387,7 @@ function preparePlayerTurn(player) {
     dealDamage(player, player.malware);
   }
 
-  player.bandwidth = player.maxBandwidth;
+  player.bandwidth = player.bandwidthIncome;
 }
 
 function runBreachTurn(state) {
