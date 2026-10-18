@@ -93,7 +93,7 @@
   }
 
   function confirmBet(): void {
-    if (bet <= 0 || bet > balance) {
+    if (bet < 0 || bet > balance) {
       return;
     }
 
@@ -158,7 +158,7 @@
         outcome: 'perfect',
         title: 'BILLYWIG',
         dialogue: 'I cannot believe you landed a perfect score!',
-        balanceChange: bet * 5
+        balanceChange: bet === 0 ? 100 : bet * 5
       };
     }
 
@@ -167,7 +167,7 @@
         outcome: 'six-card',
         title: 'SIX UNDER 26',
         dialogue: 'Six cards under 26? You must be cheating...',
-        balanceChange: bet * 3
+        balanceChange: bet === 0 ? 100 : bet * 3
       };
     }
 
@@ -176,7 +176,7 @@
         outcome: 'win',
         title: `${playerName.toUpperCase()} WINS`,
         dialogue: `Meh. I guess you win with a score of ${playerScore}.`,
-        balanceChange: bet * 2
+        balanceChange: bet === 0 ? 100 : bet * 2
       };
     }
 
@@ -308,7 +308,7 @@
           <button type="button" on:click={() => updateBet(100)}>+100</button>
         </div>
         <div class="button-row">
-          <button class="primary-button" type="button" disabled={bet === 0} on:click={confirmBet}>LOCK BET</button>
+          <button class="primary-button" type="button" on:click={confirmBet}>LOCK BET</button>
           <button type="button" on:click={() => phase = 'menu'}>CANCEL</button>
         </div>
       </div>

@@ -15,6 +15,11 @@
   let errorMessage = '';
   let waitingForStoryPartner = false;
   let showInstructions = false;
+  let libraryOpen = false;
+  let librarySide: 'runner' | 'boss' = 'runner';
+  let editingCard: Record<string, any> | null = null;
+
+  const emptyEffect = () => ({ type: 'damage', target: 'enemy', amount: 1 });
 
   $: playerId = $sessionState.playerId;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'packet-war';
@@ -166,7 +171,77 @@
       iceFirewall: 'cyan'
     };
 
-    return accents[cardId] ?? 'cyan';
+    return $packetWarServerState?.programs?.[cardId]?.color ?? accents[cardId] ?? 'cyan';
+  }
+
+  function createCard(): void {
+    editingCard = {
+      id: '',
+      name: '',
+      cost: 1,
+      description: '',
+      color: 'cyan',
+      quantity: 1,
+      boss: librarySide === 'boss',
+      multiplayerOnly: false,
+      effects: [emptyEffect()]
+    };
+  }
+
+  function editCard(card: Record<string, any>): void {
+    editingCard = structuredClone(card);
+  }
+
+  function addEffect(): void {
+    if (editingCard && editingCard.effects.length < 3) {
+      editingCard.effects = [...editingCard.effects, emptyEffect()];
+    }
+  }
+
+  function removeEffect(index: number): void {
+    if (editingCard) {
+      editingCard.effects = editingCard.effects.filter((_: unknown, effectIndex: number) => effectIndex !== index);
+    }
+  }
+
+  function saveCard(): void {
+    if (!editingCard) {
+      return;
+    }
+
+    socket.emit('packet-war:save-card', editingCard, (result: { ok: boolean; error?: string }) => {
+      handleActionResult(result);
+
+      if (result.ok) {
+        editingCard = null;
+      }
+    });
+  }
+
+  function deleteCard(card: Record<string, any>): void {
+    socket.emit('packet-war:delete-card', card.id, handleActionResult);
+  }
+
+  function visibleLibraryCards(): Record<string, any>[] {
+    const library = librarySide === 'boss'
+      ? $packetWarServerState?.bossLibrary
+      : $packetWarServerState?.cardLibrary;
+
+    return Object.values(library ?? {});
+  }
+
+  function effectSymbol(effect: Record<string, any>): string {
+    const symbols: Record<string, string> = {
+      damage: '♦', shield: '◈', heal: '+', malware: '✹', income: '⇧',
+      bandwidth: '⚡', purge: '✕', blind: '◉'
+    };
+
+    return symbols[effect.type] ?? '•';
+  }
+
+  function effectLabel(effect: Record<string, any>): string {
+    const amount = ['purge', 'blind'].includes(effect.type) ? '' : String(effect.amount);
+    return `${amount}${effectSymbol(effect)} ${String(effect.target).replaceAll('-', ' ')}`;
   }
 
   function handleWindowKeydown(event: KeyboardEvent): void {
@@ -258,7 +333,55 @@
     </div>
   {/if}
 
-  {#if !selectedMode}
+  {#if libraryOpen}
+    <div class="card-library">
+      <div class="library-heading">
+        <div><p class="eyebrow">DECK CONFIGURATION</p><h1>CARD <span>LIBRARY</span></h1></div>
+        <button type="button" on:click={() => { libraryOpen = false; editingCard = null; }}>BACK TO MENU</button>
+      </div>
+      <div class="library-tabs">
+        <button class:active={librarySide === 'runner'} on:click={() => { librarySide = 'runner'; editingCard = null; }}>RUNNER CARDS</button>
+        <button class:active={librarySide === 'boss'} on:click={() => { librarySide = 'boss'; editingCard = null; }}>BLACK ICE CARDS</button>
+        <button class="create-card" on:click={createCard}>+ NEW CARD</button>
+      </div>
+
+      {#if editingCard}
+        <section class="card-editor">
+          <div class="editor-grid">
+            <label>TITLE<input maxlength="28" bind:value={editingCard.name}></label>
+            <label>COST<input type="number" min="0" max="20" bind:value={editingCard.cost}></label>
+            <label>COLOR<select bind:value={editingCard.color}><option>pink</option><option>cyan</option><option>green</option><option>yellow</option><option>blue</option><option>purple</option></select></label>
+            <label>DECK WEIGHT<input type="number" min="0" max="20" bind:value={editingCard.quantity}></label>
+            <label class="description-field">DESCRIPTION<input maxlength="140" bind:value={editingCard.description}></label>
+            {#if !editingCard.boss}<label class="check-field"><input type="checkbox" bind:checked={editingCard.multiplayerOnly}> CO-OP ONLY</label>{/if}
+          </div>
+          <div class="effect-editor">
+            <div class="effect-heading"><strong>EFFECTS · MAX 3</strong><button disabled={editingCard.effects.length >= 3} on:click={addEffect}>+ EFFECT</button></div>
+            {#each editingCard.effects as effect, index}
+              <div class="effect-row">
+                <select bind:value={effect.type}><option value="damage">Damage</option><option value="shield">Shield</option><option value="heal">Heal</option><option value="malware">Malware</option><option value="income">Income</option><option value="bandwidth">Bandwidth</option><option value="purge">Purge malware</option>{#if editingCard.boss}<option value="blind">Blind ally vision</option>{/if}</select>
+                <select bind:value={effect.target}>{#if editingCard.boss}<option value="players">All runners</option><option value="self">BLACK ICE</option>{:else}<option value="self">Self</option><option value="ally">Ally</option><option value="both-allies">Both allies</option><option value="enemy">Enemy</option>{/if}</select>
+                <input type="number" min="0" max="99" bind:value={effect.amount} aria-label="Effect amount">
+                <button class="remove-effect" on:click={() => removeEffect(index)} aria-label="Remove effect">×</button>
+              </div>
+            {/each}
+          </div>
+          <div class="editor-actions"><button on:click={() => editingCard = null}>CANCEL</button><button class="save-card" on:click={saveCard}>SAVE CARD</button></div>
+        </section>
+      {/if}
+
+      <div class="library-card-grid">
+        {#each visibleLibraryCards() as card}
+          <article class="library-card library-card--{card.color}">
+            <span>{card.cost} ⚡</span><h2>{card.name}</h2><p>{card.description || 'Custom packet program.'}</p>
+            <div>{#each card.effects as effect}<small>{effectLabel(effect)}</small>{/each}</div>
+            <footer><span>WEIGHT {card.quantity}</span><button on:click={() => editCard(card)}>EDIT</button>{#if !card.builtIn}<button class="delete" on:click={() => deleteCard(card)}>DELETE</button>{/if}</footer>
+          </article>
+        {/each}
+      </div>
+      {#if errorMessage}<p class="error" role="alert">{errorMessage}</p>{/if}
+    </div>
+  {:else if !selectedMode}
     <div class="menu-screen">
       <p class="eyebrow">TACTICAL NETWORK COMBAT</p>
       <h1 id="packet-war-title">PACKET<span>WAR</span></h1>
@@ -274,6 +397,10 @@
         <button type="button" on:click={() => selectMode('coop')} disabled={!$sessionState.bothPlayersConnected}>
           <strong>CO-OP BREACH</strong>
           <span>Join bandwidth against hostile BLACK ICE.</span>
+        </button>
+        <button type="button" on:click={() => libraryOpen = true}>
+          <strong>CARD LIBRARY</strong>
+          <span>Create programs, tune deck weights, and configure BLACK ICE.</span>
         </button>
       </div>
       {#if !$sessionState.bothPlayersConnected}
@@ -321,10 +448,10 @@
           </div>
           <div class="integrity-meter"><i style={`width: ${((player?.integrity ?? 0) / 30) * 100}%`}></i></div>
           <div class="status-chips">
-            <span class="status-chip status-chip--shield">SHIELD <strong>{player?.shield}</strong></span>
-            <span class="status-chip status-chip--malware">MALWARE <strong>{player?.malware}</strong></span>
-            <span class="status-chip status-chip--bandwidth">BANDWIDTH <strong>{player?.bandwidth}</strong></span>
-            <span class="status-chip status-chip--income">INCOME <strong>+{player?.bandwidthIncome}</strong></span>
+            <span class="status-chip status-chip--shield" title="Shield">◈ <strong>{player?.shield}</strong></span>
+            <span class="status-chip status-chip--malware" title="Malware">✹ <strong>{player?.malware}</strong></span>
+            <span class="status-chip status-chip--bandwidth" title="Bandwidth">⚡ <strong>{player?.bandwidth}</strong></span>
+            <span class="status-chip status-chip--income" title="Bandwidth income">⇧ <strong>+{player?.bandwidthIncome}</strong></span>
           </div>
 
           {#if $packetWarServerState.mode === 'coop'}
@@ -334,11 +461,11 @@
                 <strong>DARK MIRROR // SIGNAL BLINDED</strong>
               {:else}
                 <div>
-                  <span>INT <strong>{opponent?.integrity}/30</strong></span>
-                  <span>SHD <strong>{opponent?.shield}</strong></span>
-                  <span>MLW <strong>{opponent?.malware}</strong></span>
-                  <span>BW <strong>{opponent?.bandwidth}</strong></span>
-                  <span>INC <strong>+{opponent?.bandwidthIncome}</strong></span>
+                  <span>♥ <strong>{opponent?.integrity}/30</strong></span>
+                  <span>◈ <strong>{opponent?.shield}</strong></span>
+                  <span>✹ <strong>{opponent?.malware}</strong></span>
+                  <span>⚡ <strong>{opponent?.bandwidth}</strong></span>
+                  <span>⇧ <strong>+{opponent?.bandwidthIncome}</strong></span>
                 </div>
               {/if}
             </div>
@@ -360,8 +487,8 @@
             </div>
             <div class="integrity-meter integrity-meter--enemy"><i style={`width: ${($packetWarServerState.breach.integrity / 48) * 100}%`}></i></div>
             <div class="status-chips">
-              <span class="status-chip status-chip--shield">SHIELD <strong>{$packetWarServerState.breach.shield}</strong></span>
-              <span class="status-chip status-chip--malware">MALWARE <strong>{$packetWarServerState.breach.malware}</strong></span>
+              <span class="status-chip status-chip--shield" title="Shield">◈ <strong>{$packetWarServerState.breach.shield}</strong></span>
+              <span class="status-chip status-chip--malware" title="Malware">✹ <strong>{$packetWarServerState.breach.malware}</strong></span>
             </div>
           {:else}
             <p>RIVAL DECK</p>
@@ -372,8 +499,8 @@
             </div>
             <div class="integrity-meter integrity-meter--enemy"><i style={`width: ${((opponent?.integrity ?? 0) / 30) * 100}%`}></i></div>
             <div class="status-chips">
-              <span class="status-chip status-chip--shield">SHIELD <strong>{opponent?.shield}</strong></span>
-              <span class="status-chip status-chip--malware">MALWARE <strong>{opponent?.malware}</strong></span>
+              <span class="status-chip status-chip--shield" title="Shield">◈ <strong>{opponent?.shield}</strong></span>
+              <span class="status-chip status-chip--malware" title="Malware">✹ <strong>{opponent?.malware}</strong></span>
             </div>
           {/if}
         </article>
@@ -441,9 +568,14 @@
                 disabled={!isMyTurn || ($packetWarServerState.programs[cardId]?.cost ?? 99) > (player?.bandwidth ?? 0)}
                 on:click={() => playCard(index)}
               >
-                <span class="program-cost">{$packetWarServerState.programs[cardId]?.cost} BW</span>
+                <span class="program-cost">−{$packetWarServerState.programs[cardId]?.cost} ⚡</span>
                 <strong>{$packetWarServerState.programs[cardId]?.name}</strong>
-                <span>{$packetWarServerState.programs[cardId]?.description}</span>
+                <span class="program-effects">
+                  {#each $packetWarServerState.programs[cardId]?.effects ?? [] as effect}
+                    <small title={`${effect.type} ${effect.target}`}>{effectLabel(effect)}</small>
+                  {/each}
+                </span>
+                <span class="program-description">{$packetWarServerState.programs[cardId]?.description}</span>
               </button>
             {/each}
           </div>
@@ -780,11 +912,11 @@
   }
 
   .mode-grid {
-    width: min(760px, 100%);
+    width: min(980px, 100%);
     margin-top: 34px;
 
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
 
     button {
@@ -957,15 +1089,15 @@
     gap: 7px;
 
     .status-chip {
-      min-width: 104px;
-      padding: 9px 11px;
+      min-width: 58px;
+      padding: 7px 9px;
       color: #b9b2d2;
       background: #16132b;
       border: 1px solid #3c3260;
       font-size: 0.66rem;
 
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: auto auto;
       align-items: center;
       gap: 10px;
 
@@ -1212,14 +1344,14 @@
 
   .program-hand {
     display: grid;
-    grid-template-columns: repeat(5, minmax(120px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(5, minmax(105px, 1fr));
+    gap: 8px;
   }
 
   .program-card {
     position: relative;
-    min-height: 150px;
-    padding: 14px;
+    min-height: 118px;
+    padding: 11px;
     color: #e7faff;
     background: #0b1920;
     border: 1px solid #00d7eb;
@@ -1228,18 +1360,18 @@
 
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 7px;
 
     strong {
-      margin-top: 18px;
+      margin-top: 15px;
       color: #7ef9ff;
       letter-spacing: 1px;
     }
 
-    > span:last-child {
+    .program-description {
       color: #a7acc3;
       font-family: "Space Mono", monospace;
-      font-size: 0.69rem;
+      font-size: 0.72rem;
       line-height: 1.4;
     }
 
@@ -1282,6 +1414,210 @@
     right: 10px;
     color: #f7dc62 !important;
     font-size: 0.62rem !important;
+  }
+
+  .program-effects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+
+    small {
+      padding: 3px 5px;
+      color: #ffffff;
+      background: #ffffff12;
+      border: 1px solid #ffffff22;
+      font-size: 0.62rem;
+      text-transform: uppercase;
+    }
+  }
+
+  .card-library {
+    height: calc(100% - 42px);
+    padding: 22px;
+    overflow-y: auto;
+  }
+
+  .library-heading,
+  .library-tabs,
+  .editor-actions,
+  .effect-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .library-heading h1 {
+    margin: 4px 0 16px;
+    font-size: clamp(1.8rem, 5vw, 3.5rem);
+  }
+
+  .library-heading button,
+  .library-tabs button,
+  .card-editor button,
+  .library-card button {
+    padding: 8px 11px;
+    color: #d7ccf7;
+    background: #151029;
+    border: 1px solid #7047c2;
+    cursor: pointer;
+  }
+
+  .library-tabs {
+    justify-content: flex-start;
+    margin-bottom: 16px;
+
+    button.active,
+    .create-card {
+      color: #090612;
+      background: #a783ff;
+    }
+
+    .create-card {
+      margin-left: auto;
+    }
+  }
+
+  .card-editor {
+    margin-bottom: 20px;
+    padding: 18px;
+    background: #0c0b19;
+    border: 1px solid #7047c2;
+  }
+
+  .editor-grid {
+    display: grid;
+    grid-template-columns: 2fr repeat(3, 1fr);
+    gap: 10px;
+
+    label {
+      color: #9d91ba;
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+
+      display: grid;
+      gap: 5px;
+    }
+
+    input,
+    select {
+      min-width: 0;
+      padding: 9px;
+      color: #ffffff;
+      background: #15132a;
+      border: 1px solid #40375f;
+    }
+
+    .description-field {
+      grid-column: span 3;
+    }
+
+    .check-field {
+      display: flex;
+      align-items: center;
+    }
+  }
+
+  .effect-editor {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #30294b;
+  }
+
+  .effect-row {
+    margin-top: 8px;
+
+    display: grid;
+    grid-template-columns: 1fr 1fr 90px 38px;
+    gap: 7px;
+
+    select,
+    input {
+      min-width: 0;
+      padding: 8px;
+      color: #ffffff;
+      background: #15132a;
+      border: 1px solid #40375f;
+    }
+  }
+
+  .editor-actions {
+    justify-content: flex-end;
+    margin-top: 16px;
+
+    .save-card {
+      color: #06120b;
+      background: #55f09a;
+      border-color: #baffd5;
+    }
+  }
+
+  .library-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 11px;
+  }
+
+  .library-card {
+    padding: 14px;
+    background: #0c0b19;
+    border: 1px solid #526071;
+
+    > span {
+      float: right;
+      color: #f7dc62;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      color: #ffffff;
+      font-size: 1rem;
+    }
+
+    p {
+      min-height: 38px;
+      color: #aaa4bf;
+      font-size: 0.72rem;
+    }
+
+    > div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+
+      small {
+        padding: 4px 6px;
+        background: #ffffff10;
+        border: 1px solid #ffffff1c;
+        text-transform: uppercase;
+      }
+    }
+
+    footer {
+      margin-top: 13px;
+
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      > span {
+        margin-right: auto;
+        color: #7e768f;
+        font-size: 0.63rem;
+      }
+
+      .delete {
+        color: #ff8da8;
+        border-color: #8f2d47;
+      }
+    }
+
+    &--pink { border-color: #ff4e9b; }
+    &--cyan { border-color: #00d7eb; }
+    &--green { border-color: #53e6a1; }
+    &--yellow { border-color: #f2d40e; }
+    &--blue { border-color: #4a98d9; }
+    &--purple { border-color: #9b72ff; }
   }
 
   .result-panel {

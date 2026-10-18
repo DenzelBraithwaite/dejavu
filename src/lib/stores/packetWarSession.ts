@@ -2,9 +2,21 @@ import { writable } from 'svelte/store';
 import type { PlayerId } from './session';
 
 export type PacketProgram = {
+  id: string;
   name: string;
   cost: number;
   description: string;
+  color: string;
+  quantity: number;
+  builtIn: boolean;
+  boss?: boolean;
+  multiplayerOnly?: boolean;
+  retainTurn?: boolean;
+  effects: Array<{
+    type: string;
+    target: string;
+    amount: number;
+  }>;
 };
 
 export type PacketWarCombatant = {
@@ -50,6 +62,8 @@ export type PacketWarState = {
   lastBreachProgram: PacketWarLogEntry | null;
   rematchVotes: Record<PlayerId, boolean | null>;
   programs: Record<string, PacketProgram>;
+  cardLibrary: Record<string, PacketProgram>;
+  bossLibrary: Record<string, PacketProgram>;
 };
 
 export const packetWarServerState = writable<PacketWarState | null>(null);

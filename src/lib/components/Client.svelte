@@ -256,6 +256,10 @@
       return false;
     }
 
+    if (!currentGameIsMultiplayer()) {
+      return false;
+    }
+
     if ($location === 'billywig' && $campaignState?.activeMinigame?.id !== 'billywig') {
       return false;
     }

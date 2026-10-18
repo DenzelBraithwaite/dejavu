@@ -37,6 +37,7 @@
   let cpuTimer: number | undefined;
   let lastServerStatus = '';
   let lastRollSequence = 0;
+  let showResetConfirmation = false;
 
   $: playerId = $sessionState.playerId;
   $: serverPlayer = playerId && $pigzServerState
@@ -160,7 +161,7 @@
   }
 
   function lockWager(): void {
-    if (wager <= 0 || wager > activeBalance) {
+    if (wager < 0 || wager > activeBalance) {
       return;
     }
 
@@ -264,7 +265,9 @@
   function finishLocalRound(winner: number): void {
     localWinner = winner;
     localPhase = 'finished';
-    const balanceChange = winner === 0 ? wager : -wager;
+    const balanceChange = winner === 0
+      ? (wager === 0 ? 100 : wager)
+      : -wager;
 
     netRunnersGameState.update((state) => ({
       ...state,
@@ -345,6 +348,27 @@
     }
   }
 
+  function returnToPigzMenu(): void {
+    resetLocalRound();
+    mode = 'singleplayer';
+    localPhase = 'menu';
+  }
+
+  function requestReset(): void {
+    if (mode === 'multiplayer') {
+      showResetConfirmation = true;
+      return;
+    }
+
+    returnToPigzMenu();
+  }
+
+  function confirmMultiplayerReset(): void {
+    leaveMultiplayer(false);
+    showResetConfirmation = false;
+    returnToPigzMenu();
+  }
+
   function animateDie(finalRoll: number, onComplete?: () => void): void {
     rolling = true;
     window.clearTimeout(animationTimer);
@@ -389,6 +413,16 @@
   <div class="pigz-screen">
     <div class="scanlines" aria-hidden="true"></div>
 
+    {#if showResetConfirmation}
+      <div class="result-backdrop">
+        <section class="reset-confirm" role="alertdialog" aria-modal="true">
+          <h2>Reset this multiplayer game?</h2>
+          <p>The shared round will close and the other player will be notified.</p>
+          <div><button on:click={() => showResetConfirmation = false}>CANCEL</button><button class="exit-button" on:click={confirmMultiplayerReset}>RESET GAME</button></div>
+        </section>
+      </div>
+    {/if}
+
     <div class="title-row">
       <div>
         <p class="eyebrow">HIGH-STAKES DICE PROTOCOL</p>
@@ -411,8 +445,9 @@
       <div class="waiting-panel panel" role="status">
         <p class="terminal-label">PIGZ&gt; LINKING TERMINALS</p>
         <div class="waiting-count">{$pigzServerState.participantCount}/2</div>
-        <h2>Waiting for your opponent</h2>
-        <p>Both players must launch Pigz from the Minigames library.</p>
+        <h2>{$pigzServerState.departureNotice ? 'Connection severed' : 'Waiting for your opponent'}</h2>
+        <p>{$pigzServerState.departureNotice ?? 'Both players must launch Pigz from the Minigames library.'}</p>
+        {#if $pigzServerState.departureNotice}<button on:click={confirmMultiplayerReset}>RETURN TO MAIN MENU</button>{/if}
       </div>
     {:else if (mode === 'singleplayer' && localPhase === 'betting')
       || (mode === 'multiplayer' && $pigzServerState?.status === 'betting')}
@@ -425,7 +460,7 @@
       {:else}
         <div class="wager-panel panel">
           <p class="terminal-label">PIGZ EXCHANGE&gt; PLACE YOUR BET</p>
-          <p>Even money. Win the match to gain your wager; lose and it burns.</p>
+          <p>Even money. A free 0₭ wager awards 100₭ on a win and costs nothing on a loss.</p>
 
           <div class="wager-display" aria-live="polite">
             <span>WAGER</span>
@@ -444,7 +479,7 @@
             <button type="button" on:click={() => updateWager(1000)}>+1000</button>
           </div>
 
-          <button class="lock-button" type="button" disabled={wager === 0} on:click={lockWager}>LOCK BET</button>
+          <button class="lock-button" type="button" on:click={lockWager}>LOCK BET</button>
         </div>
       {/if}
     {:else}
@@ -455,6 +490,11 @@
             <strong class="result-verdict">{localPlayerWon ? 'VICTORY' : 'DEFEAT'}</strong>
             <h2>{displayedWinnerName} WINS</h2>
             <p>Final score {displayedScores[0]} — {displayedScores[1]}</p>
+            <p class:result-credit-win={localPlayerWon} class:result-credit-loss={!localPlayerWon}>
+              {localPlayerWon
+                ? `WINNINGS +${wager === 0 ? 100 : wager}₭`
+                : `LOSS ${wager === 0 ? '0' : `-${wager}`}₭`}
+            </p>
 
             {#if launchedFromStory}
               <button class="primary-button story-button" type="button" disabled={waitingForStoryPartner} on:click={returnToStory}>
@@ -462,6 +502,7 @@
               </button>
             {:else if mode === 'singleplayer'}
               <button class="primary-button story-button" type="button" on:click={restartRound}>PLAY AGAIN</button>
+              <button type="button" on:click={returnToPigzMenu}>MAIN MENU</button>
             {:else if multiplayerRematchVote === true}
               <p class="rematch-status">Waiting for opponent confirmation.</p>
             {:else}
@@ -518,7 +559,7 @@
               <button class="primary-button" type="button" disabled={!isLocalTurn || rolling} on:click={rollDice}>ROLL</button>
               <button type="button" disabled={!isLocalTurn || rolling || displayedCurrentPoints === 0} on:click={hold}>HOLD</button>
             </div>
-            <button class="text-button" type="button" on:click={restartRound}>RESTART ROUND</button>
+            <button class="text-button" type="button" on:click={requestReset}>RESET GAME</button>
           {/if}
         </div>
 
@@ -652,10 +693,40 @@
     }
   }
 
+  .reset-confirm {
+    width: min(470px, 100%);
+    padding: 28px;
+    color: $softPink;
+    background: #160a1c;
+    border: 1px solid $pink;
+
+    h2 {
+      color: #ffffff;
+    }
+
+    > div {
+      margin-top: 22px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 9px;
+    }
+  }
+
   .result-verdict {
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-size: clamp(3rem, 8vw, 6rem);
     letter-spacing: 6px;
+  }
+
+  .result-credit-win {
+    color: #78ff9f;
+    font-weight: 900;
+  }
+
+  .result-credit-loss {
+    color: #ff8eae;
+    font-weight: 900;
   }
 
   .result-panel--victory {

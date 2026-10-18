@@ -6,12 +6,17 @@
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
 
-  let mode: 'menu' | 'instructions' | 'solo' | 'multi' = 'menu';
+  type Mode = 'menu' | 'instructions' | 'solo' | 'multi';
+
+  let mode: Mode = 'menu';
   let pendingMode: 'solo' | 'multi' = 'solo';
   let selectedHand: number | null = null;
   let error = '';
   let localState = createLocalState();
   let waitingForStoryPartner = false;
+  let helpReturnMode: Mode | null = null;
+  let showResetConfirmation = false;
+  let resetShouldExit = false;
 
   $: serverState = $arcadeStates.chopsticks ?? null;
   $: state = mode === 'solo' ? localState : serverState;
@@ -64,7 +69,7 @@
       mode = 'solo';
     } else {
       mode = 'multi';
-      socket.emit('arcade:join', 'chopsticks', handleResult);
+      socket.emit('arcade:join', 'chopsticks', 'versus', handleResult);
     }
   }
 
@@ -119,9 +124,8 @@
     } else {
       const source = Number(action.source);
       const target = Number(action.target);
-      localState.hands[targetPlayer][target] = (
-        localState.hands[targetPlayer][target] + localState.hands[actor][source]
-      ) % 5;
+      const nextValue = localState.hands[targetPlayer][target] + localState.hands[actor][source];
+      localState.hands[targetPlayer][target] = nextValue >= 5 ? 0 : nextValue;
       addLog(`${localState.players[actor].name} attacks the ${target === 0 ? 'left' : 'right'} hand.`);
     }
 
@@ -162,10 +166,42 @@
     selectedHand = null;
 
     if (mode === 'solo') {
+      mode = 'menu';
       localState = createLocalState();
     } else {
-      socket.emit('arcade:restart', 'chopsticks');
+      resetShouldExit = false;
+      showResetConfirmation = true;
     }
+  }
+
+  function openHelp(): void {
+    helpReturnMode = mode;
+    mode = 'instructions';
+  }
+
+  function closeHelp(): void {
+    mode = helpReturnMode ?? 'menu';
+    helpReturnMode = null;
+  }
+
+  function confirmMultiplayerReset(): void {
+    socket.emit('arcade:leave', 'chopsticks');
+    showResetConfirmation = false;
+    mode = 'menu';
+
+    if (resetShouldExit) {
+      location.set('minigames');
+    }
+  }
+
+  function requestExit(): void {
+    if (mode === 'multi') {
+      resetShouldExit = true;
+      showResetConfirmation = true;
+      return;
+    }
+
+    location.set('minigames');
   }
 
   function returnToMenu(): void {
@@ -212,7 +248,17 @@
 </script>
 
 <section class="chopsticks" class:hide={$location !== 'chopsticks'}>
-  <header><span>DEJAVU://CHOPSTICKS</span>{#if mode === 'solo' || mode === 'multi'}<button on:click={restart}>RESET</button>{/if}</header>
+  <header>
+    <span>DEJAVU://CHOPSTICKS</span>
+    <div class="header-actions">
+      {#if mode === 'solo' || mode === 'multi'}<button on:click={openHelp}>HOW TO PLAY</button><button on:click={restart}>RESET</button>{/if}
+      <button class="exit" on:click={requestExit}>EXIT</button>
+    </div>
+  </header>
+
+  {#if showResetConfirmation}
+    <div class="backdrop"><section class="reset-confirm" role="alertdialog" aria-modal="true"><h2>{resetShouldExit ? 'Exit this multiplayer game?' : 'Reset this multiplayer game?'}</h2><p>The other player will be notified that the shared session ended.</p><div><button on:click={() => showResetConfirmation = false}>CANCEL</button><button class="exit" on:click={confirmMultiplayerReset}>{resetShouldExit ? 'EXIT GAME' : 'RESET GAME'}</button></div></section></div>
+  {/if}
 
   {#if mode === 'menu'}
     <div class="menu">
@@ -220,28 +266,27 @@
       <h1>CHOPSTICKS</h1>
       <span>Transfer signals between hands. Zero both enemy channels to win.</span>
       <div><button on:click={() => openInstructions('solo')}>1P VS CPU</button><button on:click={() => openInstructions('multi')}>1P VS 2P</button></div>
-      <button class="back" on:click={() => location.set('minigames')}>← MINIGAMES</button>
     </div>
   {:else if mode === 'instructions'}
     <div class="backdrop">
       <section class="instructions">
-        <button class="close" on:click={() => mode = 'menu'} aria-label="Close">×</button>
+        <button class="close" on:click={closeHelp} aria-label="Close">×</button>
         <div>
           <p>TACTICAL BRIEF</p>
           <h2>Transfer the signal</h2>
           <ul>
             <li>Both players begin with one point on each hand.</li>
             <li>Select one of your live hands, then an enemy live hand. Your points are added to theirs.</li>
-            <li>A hand that reaches five becomes zero and is eliminated. Values wrap at five.</li>
+            <li>A hand that reaches five or more becomes zero and is eliminated. Values never wrap around.</li>
             <li>If one hand is empty and the other contains an even value (2 or 4), you may spend your turn splitting it equally.</li>
             <li>Eliminate both opposing hands to win.</li>
           </ul>
         </div>
-        <button class="primary" on:click={begin}>BEGIN DUEL</button>
+        <button class="primary" on:click={() => helpReturnMode ? closeHelp() : begin()}>{helpReturnMode ? 'RETURN TO GAME' : 'BEGIN DUEL'}</button>
       </section>
     </div>
   {:else if state?.status === 'waiting'}
-    <div class="waiting"><h2>WAITING FOR SECOND PLAYER</h2><p>{state.participantCount}/2 CONNECTED</p></div>
+    <div class="waiting"><h2>{state.departureNotice ? 'CONNECTION SEVERED' : 'WAITING FOR SECOND PLAYER'}</h2><p>{state.departureNotice ?? `${state.participantCount}/2 CONNECTED`}</p>{#if state.departureNotice}<button on:click={returnToMenu}>RETURN TO MAIN MENU</button>{/if}</div>
   {:else if state}
     <div class="game">
       <div class="turn"><span>TURN {state.turn}</span><strong>{state.players[state.activePlayer].name}'S MOVE</strong></div>
@@ -314,6 +359,36 @@
     }
   }
 
+  .header-actions {
+    display: flex;
+    gap: 7px;
+
+    button {
+      padding: 6px 10px;
+    }
+  }
+
+  .exit {
+    color: #ff91aa;
+    background: #290a13;
+    border-color: #b93452;
+  }
+
+  .reset-confirm {
+    width: min(460px, 90vw);
+    padding: 26px;
+    background: #0a1b14;
+    border: 1px solid #ff6688;
+
+    > div {
+      margin-top: 20px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  }
+
   button {
     padding: 9px 13px;
     color: #bfffdc;
@@ -357,12 +432,6 @@
     display: flex;
     justify-content: center;
     gap: 8px;
-  }
-
-  .back {
-    margin: 0 auto;
-    background: transparent;
-    border-color: transparent;
   }
 
   .backdrop {

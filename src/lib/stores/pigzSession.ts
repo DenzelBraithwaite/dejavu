@@ -20,6 +20,7 @@ export type PigzServerState = {
   lastRoll: number | null;
   rollSequence: number;
   winner: PlayerId | null;
+  departureNotice: string | null;
   winningScore: number;
   rematchVotes: Record<PlayerId, boolean | null>;
 };

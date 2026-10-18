@@ -106,7 +106,9 @@ Each browser stores independent music and sound-effect mute and volume settings.
 
 ### Minigame library
 
-The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners, Billywig, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks can be launched directly from this catalog or through a story minigame node. Trace Race supports a local CPU opponent and a hidden-information LAN duel. Packet War supports a two-player duel and a cooperative BLACK ICE breach. Lo-Hi, Mastermind, and Chopsticks each support solo and synchronized LAN play. Story-launched sessions return through their configured finished or exited-early destination.
+The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners, Billywig, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks can be launched directly from this catalog or through a story minigame node. Trace Race supports a local CPU opponent and a hidden-information LAN duel with persistent map clues and trackers. Packet War supports a two-player duel, a cooperative BLACK ICE breach, and a persistent card library for custom runner and boss programs. Mastermind supports solo, competitive, and shared 15-attempt co-op codebreaking. Lo-Hi and Chopsticks support solo and synchronized LAN play. Story-launched sessions return through their configured finished or exited-early destination.
+
+Betting games accept a zero-credit wager. Winning a free round awards 100 credits; losing it costs nothing.
 
 ### NetRunners
 

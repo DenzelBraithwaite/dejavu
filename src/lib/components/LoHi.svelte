@@ -14,7 +14,9 @@
     { id: 'blue', name: 'Blue Eagle', short: 'BE', image: '/blue_eagle.png' }
   ];
   const suits = factions.map((faction) => faction.id);
-  let mode: 'menu' | 'instructions' | 'solo' | 'multi' = 'menu';
+  type Mode = 'menu' | 'instructions' | 'solo' | 'multi';
+
+  let mode: Mode = 'menu';
   let pendingMode: 'solo' | 'multi' = 'solo';
   let error = '';
   let actionType: 'direction' | 'suits' | 'numbers' | 'exact' = 'direction';
@@ -25,6 +27,12 @@
   let exactSuit = suits[0];
   let localState = createLocalState();
   let waitingForStoryPartner = false;
+  let helpReturnMode: Mode | null = null;
+  let showResetConfirmation = false;
+  let resetShouldExit = false;
+  let eventNotice = '';
+  let eventTone: 'success' | 'danger' | 'neutral' = 'neutral';
+  let lastAnnouncedLogId = '';
 
   $: serverState = $arcadeStates['lo-hi'] ?? null;
   $: state = mode === 'solo' ? localState : serverState;
@@ -41,6 +49,14 @@
   $: if ($location !== 'lo-hi' && mode === 'multi') {
     socket.emit('arcade:leave', 'lo-hi');
     mode = 'menu';
+  }
+  $: if (mode === 'multi' && state?.log?.[0]?.id && state.log[0].id !== lastAnnouncedLogId) {
+    lastAnnouncedLogId = state.log[0].id;
+    const message = state.log[0].message;
+    announce(
+      message.includes('missed') ? `${state.log[0].message.split(' missed')[0].toUpperCase()} BUSTED` : 'SIGNAL RESOLVED',
+      message.includes('missed') ? 'danger' : 'success'
+    );
   }
 
   onDestroy(() => {
@@ -68,11 +84,17 @@
   }
 
   function openInstructions(nextMode: 'solo' | 'multi'): void {
+    helpReturnMode = null;
     pendingMode = nextMode;
     mode = 'instructions';
   }
 
   function begin(): void {
+    if (helpReturnMode) {
+      closeHelp();
+      return;
+    }
+
     error = '';
 
     if (pendingMode === 'solo') {
@@ -82,7 +104,7 @@
     }
 
     mode = 'multi';
-    socket.emit('arcade:join', 'lo-hi', handleResult);
+    socket.emit('arcade:join', 'lo-hi', 'versus', handleResult);
   }
 
   function returnToMenu(): void {
@@ -91,6 +113,17 @@
     }
 
     mode = 'menu';
+  }
+
+  function openHelp(): void {
+    helpReturnMode = mode;
+    pendingMode = mode === 'multi' ? 'multi' : 'solo';
+    mode = 'instructions';
+  }
+
+  function closeHelp(): void {
+    mode = helpReturnMode ?? 'menu';
+    helpReturnMode = null;
   }
 
   function submitAction(): void {
@@ -144,6 +177,7 @@
       if (won) {
         player.score += points;
         addLocalLog(`${player.name} wins +${points}. ${cardLabel(nextCard)} is live.`);
+        announce(`${player.name.toUpperCase()} READ THE SIGNAL`, 'success');
 
         if (action.type === 'exact') {
           localState.winner = actor;
@@ -152,6 +186,7 @@
       } else {
         player.state = 'lost';
         addLocalLog(`${player.name} misses. ${cardLabel(nextCard)} was transmitted.`);
+        announce(`${player.name.toUpperCase()} BUSTED`, 'danger');
       }
     }
 
@@ -167,9 +202,19 @@
     const active = (['p1', 'p2'] as const).filter((id) => localState.players[id].state === 'active');
 
     if (!active.length) {
-      const p1Score = localState.players.p1.score;
-      const p2Score = localState.players.p2.score;
-      localState.winner = p1Score === p2Score ? 'tie' : p1Score > p2Score ? 'p1' : 'p2';
+      const eligible = (['p1', 'p2'] as const)
+        .filter((id) => localState.players[id].state !== 'lost')
+        .sort((left, right) => localState.players[right].score - localState.players[left].score);
+
+      if (eligible.length === 1) {
+        localState.winner = eligible[0];
+      } else if (eligible.length === 0) {
+        localState.winner = 'tie';
+      } else {
+        localState.winner = localState.players[eligible[0]].score === localState.players[eligible[1]].score
+          ? 'tie'
+          : eligible[0];
+      }
       localState.status = 'finished';
       localState = { ...localState };
       return;
@@ -181,12 +226,17 @@
     localState = { ...localState };
 
     if (localState.activePlayer === 'p2') {
-      window.setTimeout(cpuTurn, 700);
+      window.setTimeout(cpuTurn, 1000 + Math.floor(Math.random() * 1001));
     }
   }
 
   function cpuTurn(): void {
     if (localState.status !== 'playing' || localState.activePlayer !== 'p2') {
+      return;
+    }
+
+    if (localState.players.p1.state === 'lost') {
+      applyLocalAction('p2', { type: 'hold' });
       return;
     }
 
@@ -203,10 +253,53 @@
 
   function restart(): void {
     if (mode === 'solo') {
-      localState = createLocalState();
+      returnToMenu();
     } else {
-      socket.emit('arcade:restart', 'lo-hi');
+      resetShouldExit = false;
+      showResetConfirmation = true;
     }
+  }
+
+  function confirmMultiplayerReset(): void {
+    socket.emit('arcade:leave', 'lo-hi');
+    showResetConfirmation = false;
+    mode = 'menu';
+
+    if (resetShouldExit) {
+      location.set('minigames');
+    }
+  }
+
+  function requestExit(): void {
+    if (mode === 'multi') {
+      resetShouldExit = true;
+      showResetConfirmation = true;
+      return;
+    }
+
+    location.set('minigames');
+  }
+
+  function announce(message: string, tone: typeof eventTone): void {
+    eventNotice = message;
+    eventTone = tone;
+    window.setTimeout(() => {
+      if (eventNotice === message) {
+        eventNotice = '';
+      }
+    }, 1800);
+  }
+
+  function logTone(message: string): string {
+    if (message.includes('misses') || message.includes('missed')) {
+      return 'danger';
+    }
+
+    if (message.includes('wins') || message.includes('won')) {
+      return 'success';
+    }
+
+    return 'neutral';
   }
 
   function returnToStory(): void {
@@ -285,10 +378,25 @@
 <section class="lohi terminal-game" class:hide={$location !== 'lo-hi'}>
   <header>
     <span>DEJAVU://LO_HI</span>
-    {#if mode === 'solo' || mode === 'multi'}
-      <button type="button" on:click={restart}>RESET</button>
-    {/if}
+    <div class="header-actions">
+      {#if mode === 'solo' || mode === 'multi'}
+        <button type="button" on:click={openHelp}>HOW TO PLAY</button>
+        <button type="button" on:click={restart}>RESET</button>
+      {/if}
+      <button class="exit-button" type="button" on:click={requestExit}>EXIT</button>
+    </div>
   </header>
+
+  {#if showResetConfirmation}
+    <div class="modal-backdrop">
+      <section class="confirm-modal" role="alertdialog" aria-modal="true">
+        <p class="eyebrow">ACTIVE CONNECTION</p>
+        <h2>{resetShouldExit ? 'Exit this multiplayer game?' : 'Reset this multiplayer game?'}</h2>
+        <p>This severs the shared session. The other player will be notified.</p>
+        <div><button type="button" on:click={() => showResetConfirmation = false}>CANCEL</button><button class="danger" type="button" on:click={confirmMultiplayerReset}>{resetShouldExit ? 'EXIT GAME' : 'RESET GAME'}</button></div>
+      </section>
+    </div>
+  {/if}
 
   {#if mode === 'menu'}
     <div class="menu-screen">
@@ -304,7 +412,7 @@
   {:else if mode === 'instructions'}
     <div class="modal-backdrop">
       <section class="instructions">
-        <button class="close" type="button" on:click={() => mode = 'menu'} aria-label="Close instructions">×</button>
+        <button class="close" type="button" on:click={closeHelp} aria-label="Close instructions">×</button>
         <div class="instructions-copy">
           <p class="eyebrow">CONNECTION BRIEF</p>
           <h2>How to play Lo-Hi</h2>
@@ -313,18 +421,25 @@
             <li><strong>Higher / lower:</strong> +1 point. An equal number loses.</li>
             <li><strong>Faction window:</strong> choose two of the five NetRunners factions for +3.</li>
             <li><strong>Number window:</strong> choose three numbers from 0–10 for +10.</li>
-            <li><strong>Exact card:</strong> one number and one suit. A correct prediction wins immediately.</li>
+            <li><strong>Exact card:</strong> one number and one faction. A correct prediction wins immediately.</li>
           </ul>
           <p>When every runner has held or dropped, the highest score wins.</p>
         </div>
-        <button class="primary" type="button" on:click={begin}>OPEN CONNECTION</button>
+        <button class="primary" type="button" on:click={begin}>{helpReturnMode ? 'RETURN TO GAME' : 'OPEN CONNECTION'}</button>
       </section>
     </div>
   {:else if state}
     <div class="game-screen">
       {#if state.status === 'waiting'}
-        <div class="waiting"><h2>WAITING FOR SECOND RUNNER</h2><p>{state.participantCount}/2 CONNECTED</p></div>
+        <div class="waiting">
+          <h2>{state.departureNotice ? 'CONNECTION SEVERED' : 'WAITING FOR SECOND RUNNER'}</h2>
+          <p>{state.departureNotice ?? `${state.participantCount}/2 CONNECTED`}</p>
+          {#if state.departureNotice}<button type="button" on:click={returnToMenu}>RETURN TO MAIN MENU</button>{/if}
+        </div>
       {:else}
+        {#if eventNotice}
+          <div class="event-notice event-notice--{eventTone}" aria-live="assertive">{eventNotice}</div>
+        {/if}
         <div class="scoreboard">
           {#each ['p1', 'p2'] as id}
             <div class:active={state.activePlayer === id}>
@@ -360,7 +475,7 @@
           <div class="controls">
             <div class="action-tabs">
               <button class:active={actionType === 'direction'} on:click={() => actionType = 'direction'}>HIGH / LOW</button>
-              <button class:active={actionType === 'suits'} on:click={() => actionType = 'suits'}>2 SUITS</button>
+              <button class:active={actionType === 'suits'} on:click={() => actionType = 'suits'}>2 FACTIONS</button>
               <button class:active={actionType === 'numbers'} on:click={() => actionType = 'numbers'}>3 NUMBERS</button>
               <button class:active={actionType === 'exact'} on:click={() => actionType = 'exact'}>EXACT</button>
             </div>
@@ -379,7 +494,7 @@
           <p class="turn-message">{state.players[playerId]?.state === 'active' ? 'WAITING FOR RIVAL MOVE…' : 'YOU ARE SAFE. OBSERVING REMAINING SIGNALS…'}</p>
         {/if}
 
-        <div class="game-log"><h3>TRANSMISSION LOG</h3>{#each state.log as entry}<p>{entry.message}</p>{/each}</div>
+        <div class="game-log"><h3>TRANSMISSION LOG</h3>{#each state.log as entry}<p class="log--{logTone(entry.message)}">{entry.message}</p>{/each}</div>
       {/if}
       {#if error}<p class="error">{error}</p>{/if}
     </div>
@@ -406,6 +521,21 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 7px;
+
+    button {
+      padding: 6px 10px;
+    }
+
+    .exit-button {
+      color: #ff9aac;
+      background: #250a12;
+      border-color: #b92c48;
     }
   }
 
@@ -504,6 +634,27 @@
     padding: 32px;
     overflow-y: auto;
     line-height: 1.6;
+  }
+
+  .confirm-modal {
+    width: min(470px, 90vw);
+    padding: 26px;
+    background: #08131e;
+    border: 1px solid #ff5875;
+
+    > div {
+      margin-top: 20px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .danger {
+      color: #18050a;
+      background: #ff6b82;
+      border-color: #ffc1cc;
+    }
   }
 
   .game-screen {
@@ -658,6 +809,37 @@
     padding: 14px;
     background: #071019;
     border: 1px solid #24394a;
+  }
+
+  .event-notice {
+    max-width: 800px;
+    margin: 0 auto 16px;
+    padding: 14px;
+    border: 1px solid;
+    font-size: 1.1rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-align: center;
+
+    &--success {
+      color: #78ff9f;
+      background: #071b0e;
+      box-shadow: 0 0 22px #78ff9f33;
+    }
+
+    &--danger {
+      color: #ff6b7a;
+      background: #24080e;
+      box-shadow: 0 0 22px #ff6b7a44;
+    }
+  }
+
+  .log--danger {
+    color: #ff7b89;
+  }
+
+  .log--success {
+    color: #78ff9f;
   }
 
   .action-tabs {

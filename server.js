@@ -49,6 +49,8 @@ import {
   leavePacketWar,
   passPacketWarTurn,
   playPacketWarCard,
+  savePacketWarCard,
+  deletePacketWarCard,
   votePacketWarRematch
 } from './server/packetWarSession.js';
 import {
@@ -818,6 +820,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('packet-war:save-card', (card, acknowledge = () => {}) => {
+    const result = savePacketWarCard(packetWarState, card);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastPacketWarState();
+    }
+  });
+
+  socket.on('packet-war:delete-card', (cardId, acknowledge = () => {}) => {
+    const result = deletePacketWarCard(packetWarState, cardId);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastPacketWarState();
+    }
+  });
+
   socket.on('packet-war:rematch', (wantsRematch, acknowledge = () => {}) => {
     const result = votePacketWarRematch(packetWarState, playerId, wantsRematch);
     acknowledge(result);
@@ -835,12 +855,13 @@ io.on('connection', (socket) => {
     cancelStoryMinigame('packet-war', acknowledge);
   });
 
-  socket.on('arcade:join', (gameId, acknowledge = () => {}) => {
+  socket.on('arcade:join', (gameId, mode, acknowledge = () => {}) => {
     const result = joinArcadeGame(
       arcadeSessions,
       gameId,
       playerId,
-      campaignState.players[playerId].name
+      campaignState.players[playerId].name,
+      mode
     );
     acknowledge(result);
 

@@ -8,11 +8,11 @@ export type TraceRacePlayer = {
   exposureRevealNodes: number[];
   exposureRevealPosition: number | null;
   searchRevealNodes: number[];
-  tracker: {
+  trackers: Array<{
     node: number;
-    turnsRemaining: number;
+    ownerTurnsRemaining: number;
     alertedNodes: number[];
-  } | null;
+  }>;
   intel: string[];
 };
 

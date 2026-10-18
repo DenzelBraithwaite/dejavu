@@ -15,15 +15,25 @@ export function createArcadeSessions() {
   };
 }
 
-export function joinArcadeGame(sessions, gameId, playerId, playerName) {
+export function joinArcadeGame(sessions, gameId, playerId, playerName, requestedMode = 'versus') {
   const state = sessions[gameId];
 
   if (!state) {
     return errorResult('Unknown arcade module.');
   }
 
+  const nextMode = gameId === 'mastermind' && requestedMode === 'coop'
+    ? 'coop'
+    : 'versus';
+
+  if (state.mode && state.mode !== nextMode && participantCount(state) > 0) {
+    return errorResult(`The active table is configured for ${state.mode.toUpperCase()}.`);
+  }
+
+  state.mode = nextMode;
   state.participants[playerId] = true;
   state.players[playerId].name = playerName;
+  state.departureNotice = null;
 
   if (participantCount(state) === 2) {
     resetGame(state);
@@ -42,9 +52,18 @@ export function leaveArcadeGame(sessions, gameId, playerId) {
     return;
   }
 
+  const departingName = state.players[playerId].name;
+  const sharedGameWasActive = participantCount(state) === 2;
   state.participants[playerId] = false;
   resetGame(state);
   state.status = participantCount(state) ? 'waiting' : 'menu';
+  state.departureNotice = sharedGameWasActive
+    ? `${departingName} left the game. The shared session was closed.`
+    : null;
+
+  if (participantCount(state) === 0) {
+    state.mode = null;
+  }
 }
 
 export function performArcadeAction(sessions, gameId, playerId, action) {
@@ -106,7 +125,9 @@ function createBaseState(game) {
       p2: { name: 'Player 2' }
     },
     winner: null,
-    log: []
+    log: [],
+    mode: null,
+    departureNotice: null
   };
 }
 
@@ -127,7 +148,10 @@ function createMastermindState() {
     pendingGuesses: {
       p1: null,
       p2: null
-    }
+    },
+    activePlayer: 'p1',
+    totalAttempts: 0,
+    maximumAttempts: 15
   };
 }
 
@@ -146,6 +170,7 @@ function createChopsticksState() {
 function resetGame(state) {
   state.winner = null;
   state.log = [];
+  state.departureNotice = null;
 
   if (state.game === 'lo-hi') {
     state.currentCard = randomCard();
@@ -162,6 +187,8 @@ function resetGame(state) {
     state.secret = createSecret();
     state.round = 1;
     state.pendingGuesses = { p1: null, p2: null };
+    state.activePlayer = 'p1';
+    state.totalAttempts = 0;
 
     for (const player of Object.values(state.players)) {
       player.attempts = [];
@@ -222,7 +249,7 @@ function evaluateLoHiBet(currentCard, nextCard, action) {
 
   if (action.type === 'suits') {
     const values = Array.isArray(action.values) ? action.values.slice(0, 2) : [];
-    return { won: values.includes(nextCard.suit), points: 3, label: 'SUIT WINDOW' };
+    return { won: values.includes(nextCard.suit), points: 3, label: 'FACTION WINDOW' };
   }
 
   if (action.type === 'numbers') {
@@ -243,8 +270,19 @@ function settleOrAdvanceLoHi(state, playerId) {
     .filter(([, player]) => player.state === 'active');
 
   if (activePlayers.length === 0) {
-    const scores = Object.entries(state.players).sort((a, b) => b[1].score - a[1].score);
-    state.winner = scores[0][1].score === scores[1][1].score ? 'tie' : scores[0][0];
+    const eligibleScores = Object.entries(state.players)
+      .filter(([, player]) => player.state !== 'lost')
+      .sort((a, b) => b[1].score - a[1].score);
+
+    if (eligibleScores.length === 1) {
+      state.winner = eligibleScores[0][0];
+    } else if (eligibleScores.length === 0) {
+      state.winner = 'tie';
+    } else {
+      state.winner = eligibleScores[0][1].score === eligibleScores[1][1].score
+        ? 'tie'
+        : eligibleScores[0][0];
+    }
     state.status = 'finished';
     return;
   }
@@ -259,6 +297,10 @@ function advanceLoHi(state, playerId) {
 }
 
 function playMastermind(state, playerId, action) {
+  if (state.mode === 'coop') {
+    return playCoopMastermind(state, playerId, action);
+  }
+
   if (action.type !== 'guess' || state.pendingGuesses[playerId]) {
     return errorResult('Submit one four-digit guess for this round.');
   }
@@ -281,7 +323,7 @@ function playMastermind(state, playerId, action) {
     const value = state.pendingGuesses[id];
     const feedback = scoreMastermind(state.secret, value);
     results[id] = feedback;
-    state.players[id].attempts.push({ guess: value, ...feedback, round: state.round });
+    state.players[id].attempts.unshift({ guess: value, ...feedback, round: state.round });
     addLog(state, `${state.players[id].name}: ${value} · ${feedback.exact} exact · ${feedback.misplaced} displaced.`);
   }
 
@@ -296,6 +338,47 @@ function playMastermind(state, playerId, action) {
     state.pendingGuesses = { p1: null, p2: null };
   }
 
+  return successResult();
+}
+
+function playCoopMastermind(state, playerId, action) {
+  if (state.activePlayer !== playerId) {
+    return errorResult('Wait for your teammate to transmit a guess.');
+  }
+
+  const guess = String(action.guess ?? '');
+
+  if (action.type !== 'guess' || !/^[1-6]{4}$/.test(guess)) {
+    return errorResult('The code must contain four digits from 1 to 6.');
+  }
+
+  const feedback = scoreMastermind(state.secret, guess);
+  state.totalAttempts += 1;
+  state.players[playerId].attempts.unshift({
+    guess,
+    ...feedback,
+    round: state.totalAttempts,
+    playerId,
+    playerName: state.players[playerId].name
+  });
+  addLog(state, `${state.players[playerId].name}: ${guess} · ${feedback.exact} exact · ${feedback.misplaced} displaced.`);
+
+  if (feedback.exact === 4) {
+    state.winner = 'players';
+    state.status = 'finished';
+    state.revealedSecret = state.secret;
+    return successResult();
+  }
+
+  if (state.totalAttempts >= state.maximumAttempts) {
+    state.winner = 'code';
+    state.status = 'finished';
+    state.revealedSecret = state.secret;
+    return successResult();
+  }
+
+  state.activePlayer = playerId === 'p1' ? 'p2' : 'p1';
+  state.round = state.totalAttempts + 1;
   return successResult();
 }
 
@@ -354,7 +437,9 @@ function playChopsticks(state, playerId, action) {
       return errorResult('Select one live hand on each side.');
     }
 
-    state.hands[otherPlayer][target] = (targetValue + attackValue) % 5;
+    state.hands[otherPlayer][target] = targetValue + attackValue >= 5
+      ? 0
+      : targetValue + attackValue;
     addLog(state, `${state.players[playerId].name} sent ${attackValue} into ${state.players[otherPlayer].name}'s ${target === 0 ? 'left' : 'right'} hand.`);
   }
 

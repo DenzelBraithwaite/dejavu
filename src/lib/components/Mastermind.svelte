@@ -11,43 +11,62 @@
     exact: number;
     misplaced: number;
     round: number;
+    playerName?: string;
   };
 
-  let mode: 'menu' | 'instructions' | 'solo' | 'multi' = 'menu';
-  let pendingMode: 'solo' | 'multi' = 'solo';
+  type Mode = 'menu' | 'instructions' | 'solo' | 'multi' | 'coop';
+
+  let mode: Mode = 'menu';
+  let pendingMode: 'solo' | 'multi' | 'coop' = 'solo';
   let guess = '';
   let error = '';
   let localSecret = createSecret();
   let localAttempts: Attempt[] = [];
   let localFinished = false;
+  let localFailed = false;
   let waitingForStoryPartner = false;
+  let helpReturnMode: Mode | null = null;
+  let showResetConfirmation = false;
+  let resetShouldExit = false;
 
   $: state = $arcadeStates.mastermind ?? null;
   $: playerId = $sessionState.playerId ?? 'p1';
-  $: attempts = mode === 'solo' ? localAttempts : state?.players[playerId]?.attempts ?? [];
+  $: attempts = mode === 'solo'
+    ? localAttempts
+    : mode === 'coop' && state
+      ? [...(state.players.p1.attempts ?? []), ...(state.players.p2.attempts ?? [])]
+        .sort((left, right) => right.round - left.round)
+      : state?.players[playerId]?.attempts ?? [];
   $: waitingForRival = mode === 'multi' && Boolean(state?.pendingGuesses?.[playerId]);
+  $: canSubmit = mode !== 'coop' || state?.activePlayer === playerId;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'mastermind';
   $: if (launchedFromStory && mode === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
     mode = 'instructions';
   }
-  $: if ($location !== 'mastermind' && mode === 'multi') {
+  $: if ($location !== 'mastermind' && (mode === 'multi' || mode === 'coop')) {
     socket.emit('arcade:leave', 'mastermind');
     mode = 'menu';
   }
 
   onDestroy(() => {
-    if (mode === 'multi') {
+    if (mode === 'multi' || mode === 'coop') {
       socket.emit('arcade:leave', 'mastermind');
     }
   });
 
-  function openInstructions(nextMode: 'solo' | 'multi'): void {
+  function openInstructions(nextMode: 'solo' | 'multi' | 'coop'): void {
+    helpReturnMode = null;
     pendingMode = nextMode;
     mode = 'instructions';
   }
 
   function begin(): void {
+    if (helpReturnMode) {
+      closeHelp();
+      return;
+    }
+
     resetLocal();
 
     if (pendingMode === 'solo') {
@@ -55,8 +74,8 @@
       return;
     }
 
-    mode = 'multi';
-    socket.emit('arcade:join', 'mastermind', handleResult);
+    mode = pendingMode;
+    socket.emit('arcade:join', 'mastermind', pendingMode === 'coop' ? 'coop' : 'versus', handleResult);
   }
 
   function submitGuess(): void {
@@ -74,6 +93,7 @@
         ...localAttempts
       ];
       localFinished = feedback.exact === 4;
+      localFailed = !localFinished && localAttempts.length >= 15;
       guess = '';
       return;
     }
@@ -99,14 +119,16 @@
 
   function restart(): void {
     if (mode === 'solo') {
+      mode = 'menu';
       resetLocal();
     } else {
-      socket.emit('arcade:restart', 'mastermind');
+      resetShouldExit = false;
+      showResetConfirmation = true;
     }
   }
 
   function returnToMenu(): void {
-    if (mode === 'multi') {
+    if (mode === 'multi' || mode === 'coop') {
       socket.emit('arcade:leave', 'mastermind');
     }
 
@@ -117,8 +139,39 @@
     localSecret = createSecret();
     localAttempts = [];
     localFinished = false;
+    localFailed = false;
     guess = '';
     error = '';
+  }
+
+  function openHelp(): void {
+    helpReturnMode = mode;
+    mode = 'instructions';
+  }
+
+  function closeHelp(): void {
+    mode = helpReturnMode ?? 'menu';
+    helpReturnMode = null;
+  }
+
+  function confirmMultiplayerReset(): void {
+    socket.emit('arcade:leave', 'mastermind');
+    showResetConfirmation = false;
+    mode = 'menu';
+
+    if (resetShouldExit) {
+      location.set('minigames');
+    }
+  }
+
+  function requestExit(): void {
+    if (mode === 'multi' || mode === 'coop') {
+      resetShouldExit = true;
+      showResetConfirmation = true;
+      return;
+    }
+
+    location.set('minigames');
   }
 
   function createSecret(): string {
@@ -162,6 +215,12 @@
       return 'CODEBREAKER COMPLETE';
     }
 
+    if (state.mode === 'coop') {
+      return state.winner === 'players'
+        ? 'CODE CRACKED TOGETHER'
+        : 'ATTEMPT LIMIT EXHAUSTED';
+    }
+
     return state.winner === 'tie'
       ? 'DEAD HEAT'
       : `${state.players[state.winner]?.name ?? 'Unknown player'} WINS`;
@@ -182,21 +241,36 @@
 <section class="mastermind" class:hide={$location !== 'mastermind'}>
   <header>
     <span>DEJAVU://MASTERMIND</span>
-    {#if mode === 'solo' || mode === 'multi'}<button type="button" on:click={restart}>RESET</button>{/if}
+    <div class="header-actions">
+      {#if ['solo', 'multi', 'coop'].includes(mode)}
+        <button type="button" on:click={openHelp}>HOW TO PLAY</button>
+        <button type="button" on:click={restart}>RESET</button>
+      {/if}
+      <button class="exit" type="button" on:click={requestExit}>EXIT</button>
+    </div>
   </header>
+
+  {#if showResetConfirmation}
+    <div class="backdrop">
+      <section class="reset-confirm" role="alertdialog" aria-modal="true">
+        <h2>{resetShouldExit ? 'Exit this multiplayer game?' : 'Reset this multiplayer game?'}</h2>
+        <p>The connection will be severed and the other player will be notified.</p>
+        <div><button on:click={() => showResetConfirmation = false}>CANCEL</button><button class="exit" on:click={confirmMultiplayerReset}>{resetShouldExit ? 'EXIT GAME' : 'RESET GAME'}</button></div>
+      </section>
+    </div>
+  {/if}
 
   {#if mode === 'menu'}
     <div class="menu">
       <p>CODEBREAKER MODULE</p>
       <h1>MASTERMIND</h1>
       <span>Break the four-digit cipher. Every digit is between 1 and 6.</span>
-      <div><button on:click={() => openInstructions('solo')}>1P CODEBREAK</button><button on:click={() => openInstructions('multi')}>1P VS 2P</button></div>
-      <button class="back" on:click={() => location.set('minigames')}>← MINIGAMES</button>
+      <div><button on:click={() => openInstructions('solo')}>1P CODEBREAK</button><button on:click={() => openInstructions('multi')}>1P VS 2P</button><button on:click={() => openInstructions('coop')}>CO-OP CODEBREAK</button></div>
     </div>
   {:else if mode === 'instructions'}
     <div class="backdrop">
       <section class="instructions">
-        <button class="close" on:click={() => mode = 'menu'} aria-label="Close">×</button>
+        <button class="close" on:click={closeHelp} aria-label="Close">×</button>
         <div>
           <p>CODEBREAKER BRIEF</p>
           <h2>Crack the sequence</h2>
@@ -205,25 +279,31 @@
             <li><strong>Exact</strong> means the right digit is in the right position.</li>
             <li><strong>Displaced</strong> means the digit exists but belongs in another position.</li>
             <li>In multiplayer, both runners submit one guess per round. The next round unlocks only after both submit, so neither player can rush ahead.</li>
+            <li>In co-op, players alternate guesses and share one history. Crack the code together within 15 total attempts.</li>
           </ul>
-          <p>Singleplayer has no attempt limit and records how many turns the breach required.</p>
+          <p>Singleplayer also has a 15-attempt limit. Competitive mode has no limit.</p>
         </div>
-        <button class="primary" on:click={begin}>BEGIN CODEBREAK</button>
+        <button class="primary" on:click={begin}>{helpReturnMode ? 'RETURN TO GAME' : 'BEGIN CODEBREAK'}</button>
       </section>
     </div>
-  {:else if mode === 'multi' && state?.status === 'waiting'}
-    <div class="waiting"><h2>AWAITING SECOND CODEBREAKER</h2><p>{state.participantCount}/2 CONNECTED</p></div>
+  {:else if (mode === 'multi' || mode === 'coop') && state?.status === 'waiting'}
+    <div class="waiting">
+      <h2>{state.departureNotice ? 'CONNECTION SEVERED' : 'AWAITING SECOND CODEBREAKER'}</h2>
+      <p>{state.departureNotice ?? `${state.participantCount}/2 CONNECTED`}</p>
+      {#if state.departureNotice}<button on:click={returnToMenu}>RETURN TO MAIN MENU</button>{/if}
+    </div>
   {:else}
     <div class="game">
       <div class="code-display" aria-label="Current guess">
         {#each Array(4) as _, index}<span>{guess[index] ?? '·'}</span>{/each}
       </div>
 
-      {#if localFinished || state?.status === 'finished'}
-        {@const winner = mode === 'solo' ? playerId : state?.winner}
-        <section class:lost={winner !== playerId && winner !== 'tie'} class="result">
-          <p>{winner === 'tie' ? 'SIMULTANEOUS BREACH' : winner === playerId ? 'CODE ACCEPTED' : 'BREACH LOST'}</p>
-          <h2>{mode === 'solo' ? `CRACKED IN ${localAttempts.length} TURNS` : multiplayerResultTitle()}</h2>
+      {#if localFinished || localFailed || state?.status === 'finished'}
+        {@const winner = mode === 'solo' ? (localFinished ? playerId : 'code') : state?.winner}
+        {@const won = winner === playerId || winner === 'players' || winner === 'tie'}
+        <section class:lost={!won} class="result">
+          <p>{winner === 'tie' ? 'SIMULTANEOUS BREACH' : won ? 'CODE ACCEPTED' : 'BREACH LOST'}</p>
+          <h2>{mode === 'solo' ? (localFinished ? `CRACKED IN ${localAttempts.length} TURNS` : '15 ATTEMPTS EXHAUSTED') : multiplayerResultTitle()}</h2>
           {#if waitingForStoryPartner}
             <p>Waiting for your partner to close the codebreak…</p>
           {:else if launchedFromStory}
@@ -237,9 +317,10 @@
         <div class="keypad">
           {#each [1, 2, 3, 4, 5, 6] as digit}<button on:click={() => appendDigit(digit)}>{digit}</button>{/each}
           <button on:click={() => guess = guess.slice(0, -1)}>⌫</button>
-          <button class="submit" disabled={guess.length !== 4 || waitingForRival} on:click={submitGuess}>TRANSMIT</button>
+          <button class="submit" disabled={guess.length !== 4 || waitingForRival || !canSubmit} on:click={submitGuess}>TRANSMIT</button>
         </div>
         {#if waitingForRival}<p class="waiting-copy">GUESS LOCKED · WAITING FOR RIVAL</p>{/if}
+        {#if mode === 'coop'}<p class="waiting-copy">{state?.totalAttempts ?? 0}/15 ATTEMPTS · {canSubmit ? 'YOUR GUESS' : 'WAITING FOR TEAMMATE'}</p>{/if}
       {/if}
 
       {#if error}<p class="error">{error}</p>{/if}
@@ -248,7 +329,7 @@
         <h3>ATTEMPT HISTORY</h3>
         {#if attempts.length === 0}<p>No guesses transmitted.</p>{/if}
         {#each attempts as attempt}
-          <div><strong>{attempt.guess}</strong><span>{attempt.exact} EXACT</span><span>{attempt.misplaced} DISPLACED</span><small>TURN {attempt.round}</small></div>
+          <div><strong>{attempt.guess}</strong><span>{attempt.exact} EXACT</span><span>{attempt.misplaced} DISPLACED</span><small>{attempt.playerName ? `${attempt.playerName} · ` : ''}TURN {attempt.round}</small></div>
         {/each}
       </section>
     </div>
@@ -275,6 +356,36 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 7px;
+
+    button {
+      padding: 6px 10px;
+    }
+  }
+
+  .exit {
+    color: #ff91aa;
+    background: #2a0a14;
+    border-color: #b93555;
+  }
+
+  .reset-confirm {
+    width: min(460px, 90vw);
+    padding: 26px;
+    background: #100c20;
+    border: 1px solid #ff6688;
+
+    > div {
+      margin-top: 20px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
   }
 
@@ -321,12 +432,6 @@
     display: flex;
     justify-content: center;
     gap: 8px;
-  }
-
-  .back {
-    margin: 0 auto;
-    background: transparent;
-    border-color: transparent;
   }
 
   .backdrop {

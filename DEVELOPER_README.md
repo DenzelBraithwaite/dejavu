@@ -529,6 +529,8 @@ defineScene({
 
 For multiplayer stories, the runtime waits until both players launch the node and opens the selected module on both clients. Solo stories require only the owning player. NetRunners, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for the required completion signals before returning to the connected story destination. Available IDs are `netrunners`, `billywig`, `pigz`, `trace-race`, `packet-war`, `lo-hi`, `mastermind`, and `chopsticks`. New minigames must provide their own result IDs and server-owned completion handling.
 
+Packet War card definitions are server-owned. The in-game card library edits built-in cards, creates custom runner or BLACK ICE cards, and writes runtime customizations to `data/packet-war-cards.json`. This file is intentionally ignored by Git so each installation can maintain its own card set. A card can contain up to three effects; deck `quantity` acts as its weighted draw frequency.
+
 ## Typewriter configuration
 
 The action is in `src/lib/actions/typewriter.ts`. It supports:

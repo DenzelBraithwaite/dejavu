@@ -18,6 +18,7 @@ export function createPigzState() {
     lastRoll: null,
     rollSequence: 0,
     winner: null,
+    departureNotice: null,
     rematchVotes: {
       p1: null,
       p2: null
@@ -38,6 +39,7 @@ function createPlayer(name) {
 export function joinPigz(state, playerId, playerName) {
   state.participants[playerId] = true;
   state.players[playerId].name = playerName;
+  state.departureNotice = null;
 
   if (countParticipants(state) === 1) {
     state.status = 'waiting';
@@ -49,9 +51,14 @@ export function joinPigz(state, playerId, playerName) {
 }
 
 export function leavePigz(state, playerId) {
+  const departingName = state.players[playerId].name;
+  const sharedGameWasActive = countParticipants(state) === 2;
   state.participants[playerId] = false;
   state.status = countParticipants(state) > 0 ? 'waiting' : 'menu';
   resetRound(state);
+  state.departureNotice = sharedGameWasActive
+    ? `${departingName} left the game. The shared round was closed.`
+    : null;
 }
 
 export function submitPigzBet(state, playerId, amountValue) {
@@ -62,7 +69,7 @@ export function submitPigzBet(state, playerId, amountValue) {
   const amount = Math.floor(Number(amountValue));
   const player = state.players[playerId];
 
-  if (!Number.isFinite(amount) || amount < 1 || amount > player.money) {
+  if (!Number.isFinite(amount) || amount < 0 || amount > player.money) {
     return errorResult('Choose a wager within your available balance.');
   }
 
@@ -200,7 +207,7 @@ function finishRound(state, winnerId) {
 
   for (const [playerId, player] of Object.entries(state.players)) {
     const balanceChange = playerId === winnerId
-      ? player.amountBet
+      ? (player.amountBet === 0 ? 100 : player.amountBet)
       : -player.amountBet;
     player.money = Math.max(0, player.money + balanceChange);
   }

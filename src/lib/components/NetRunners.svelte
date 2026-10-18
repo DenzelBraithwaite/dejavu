@@ -290,7 +290,9 @@
   function calculateWinnings(player: {name: string; money: number; amountBet: number; colorBet: string; points: number}, playerNum: 'p1' | 'p2' | 'p3' | 'p4') {
     if (player.colorBet === $netRunnersGameState.lastWinningColor) {
       netRunnersGameState.update($netRunnersGameState => {
-        if (didAllPlayersPickSameColor()) {
+        if ($netRunnersGameState[playerNum].amountBet === 0) {
+          $netRunnersGameState[playerNum].money += 100;
+        } else if (didAllPlayersPickSameColor()) {
           // Bonus 200% from 3x to 5x if all players won with same color.
           $netRunnersGameState[playerNum].money += Math.round(($netRunnersGameState[playerNum].amountBet * (5 + (calculateBonusBasedOnTrackCardOdds(player.colorBet) * 0.25))));
           
@@ -826,7 +828,6 @@
             <button
               type="button"
               class="netrunner-lock-bet"
-              disabled={$netRunnersGameState.p1.amountBet === 0}
               on:click={placeBet}
             >
               LOCK BET

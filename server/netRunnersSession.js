@@ -97,7 +97,7 @@ export function submitNetRunnersBet(state, playerId, bet) {
   const amount = Math.floor(Number(bet.amount));
   const player = state.players[playerId];
 
-  if (!Number.isFinite(amount) || amount < 1 || amount > player.money) {
+  if (!Number.isFinite(amount) || amount < 0 || amount > player.money) {
     return errorResult('Choose a bet within your available balance.');
   }
 
@@ -247,7 +247,9 @@ function settleBet(state, playerId) {
     multiplier -= (matchingBets - 1) * 0.5;
   }
 
-  player.money += Math.round(player.amountBet * (multiplier + laneBonus));
+  player.money += player.amountBet === 0
+    ? 100
+    : Math.round(player.amountBet * (multiplier + laneBonus));
 }
 
 function selectBotBets(state) {

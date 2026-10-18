@@ -1,92 +1,130 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
 const STARTING_INTEGRITY = 30;
 const BREACH_INTEGRITY = 48;
 const MAX_HAND_SIZE = 5;
+const CARD_LIBRARY_PATH = path.join(process.cwd(), 'data', 'packet-war-cards.json');
 
 const PROGRAMS = {
   spike: {
     name: 'SPIKE',
     cost: 2,
-    description: 'Deal 6 integrity damage.'
+    description: 'Deal 6 integrity damage.',
+    color: 'pink', quantity: 5, builtIn: true,
+    effects: [{ type: 'damage', target: 'enemy', amount: 6 }]
   },
   firewall: {
     name: 'FIREWALL',
     cost: 1,
-    description: 'Gain 5 shield.'
+    description: 'Gain 5 shield.',
+    color: 'cyan', quantity: 5, builtIn: true,
+    effects: [{ type: 'shield', target: 'self', amount: 5 }]
   },
   leech: {
     name: 'LEECH',
     cost: 2,
-    description: 'Deal 3 damage and repair 3 integrity.'
+    description: 'Deal 3 damage and repair 3 integrity.',
+    color: 'green', quantity: 3, builtIn: true,
+    effects: [{ type: 'damage', target: 'enemy', amount: 3 }, { type: 'heal', target: 'self', amount: 3 }]
   },
   worm: {
     name: 'WORM',
     cost: 2,
-    description: 'Deal 2 damage now and install 2 malware.'
+    description: 'Deal 2 damage now and install 2 malware.',
+    color: 'yellow', quantity: 4, builtIn: true,
+    effects: [{ type: 'damage', target: 'enemy', amount: 2 }, { type: 'malware', target: 'enemy', amount: 2 }]
   },
   reboot: {
     name: 'REBOOT',
     cost: 1,
-    description: 'Repair 5 integrity and purge malware.'
+    description: 'Repair 5 integrity and purge malware.',
+    color: 'blue', quantity: 3, builtIn: true,
+    effects: [{ type: 'heal', target: 'self', amount: 5 }, { type: 'purge', target: 'self', amount: 1 }]
   },
   overclock: {
     name: 'OVERCLOCK',
     cost: 0,
-    description: 'Gain 2 bandwidth this turn.'
+    description: 'Gain 2 bandwidth this turn.',
+    color: 'purple', quantity: 3, builtIn: true, retainTurn: true,
+    effects: [{ type: 'bandwidth', target: 'self', amount: 2 }]
   },
   railgun: {
     name: 'RAILGUN',
     cost: 5,
-    description: 'Deal 14 integrity damage.'
+    description: 'Deal 14 integrity damage.',
+    color: 'pink', quantity: 2, builtIn: true,
+    effects: [{ type: 'damage', target: 'enemy', amount: 14 }]
   },
   fortress: {
     name: 'FORTRESS',
     cost: 4,
-    description: 'Gain 12 persistent shield.'
+    description: 'Gain 12 persistent shield.',
+    color: 'cyan', quantity: 2, builtIn: true,
+    effects: [{ type: 'shield', target: 'self', amount: 12 }]
   },
   blackhole: {
     name: 'BLACK HOLE',
     cost: 6,
-    description: 'Deal 8 damage and install 4 malware.'
+    description: 'Deal 8 damage and install 4 malware.',
+    color: 'purple', quantity: 1, builtIn: true,
+    effects: [{ type: 'damage', target: 'enemy', amount: 8 }, { type: 'malware', target: 'enemy', amount: 4 }]
   },
   uplink: {
     name: 'UPLINK',
     cost: 2,
-    description: 'Permanently increase bandwidth income by 1.'
+    description: 'Permanently increase bandwidth income by 1.',
+    color: 'yellow', quantity: 1, builtIn: true,
+    effects: [{ type: 'income', target: 'self', amount: 1 }]
   },
   guardian: {
     name: 'GUARDIAN',
     cost: 2,
-    description: 'Co-op: Give your ally 7 shield.'
+    description: 'Co-op: Give your ally 7 shield.',
+    color: 'cyan', quantity: 2, builtIn: true, multiplayerOnly: true,
+    effects: [{ type: 'shield', target: 'ally', amount: 7 }]
   },
   meshRepair: {
     name: 'MESH REPAIR',
     cost: 4,
-    description: 'Co-op: Repair 6 integrity for both runners.'
+    description: 'Co-op: Repair 6 integrity for both runners.',
+    color: 'green', quantity: 2, builtIn: true, multiplayerOnly: true,
+    effects: [{ type: 'heal', target: 'both-allies', amount: 6 }]
   },
   darkMirror: {
     name: 'DARK MIRROR',
     cost: 0,
-    description: 'Hide ally telemetry until BLACK ICE acts again.'
+    description: 'Hide ally telemetry until BLACK ICE acts again.',
+    color: 'purple', quantity: 1, builtIn: true, boss: true,
+    effects: [{ type: 'blind', target: 'players', amount: 1 }]
   },
   iceStrike: {
     name: 'NULL STRIKE',
     cost: 0,
-    description: 'Damage both runners with a scaling hostile pulse.'
+    description: 'Damage both runners with a scaling hostile pulse.',
+    color: 'pink', quantity: 5, builtIn: true, boss: true,
+    effects: [{ type: 'damage', target: 'players', amount: 5 }]
   },
   iceInfect: {
     name: 'ROOT INFECTION',
     cost: 0,
-    description: 'Install 2 malware on both runners.'
+    description: 'Install 2 malware on both runners.',
+    color: 'yellow', quantity: 3, builtIn: true, boss: true,
+    effects: [{ type: 'malware', target: 'players', amount: 2 }]
   },
   iceReboot: {
     name: 'COLD REBOOT',
     cost: 0,
-    description: 'Repair 8 integrity and purge hostile malware.'
+    description: 'Repair 8 integrity and purge hostile malware.',
+    color: 'blue', quantity: 2, builtIn: true, boss: true,
+    effects: [{ type: 'heal', target: 'self', amount: 8 }, { type: 'purge', target: 'self', amount: 1 }]
   },
   iceFirewall: {
     name: 'ICE WALL',
     cost: 0,
-    description: 'Generate 8 persistent shield.'
+    description: 'Generate 8 persistent shield.',
+    color: 'cyan', quantity: 2, builtIn: true, boss: true,
+    effects: [{ type: 'shield', target: 'self', amount: 8 }]
   }
 };
 
@@ -100,6 +138,8 @@ const BASE_DECK = [
 const COOP_PROGRAMS = ['guardian', 'guardian', 'meshRepair', 'meshRepair'];
 
 export function createPacketWarState() {
+  const libraries = loadCardLibraries();
+
   return {
     version: 1,
     mode: null,
@@ -124,8 +164,42 @@ export function createPacketWarState() {
     rematchVotes: {
       p1: null,
       p2: null
-    }
+    },
+    cardLibrary: libraries.cardLibrary,
+    bossLibrary: libraries.bossLibrary
   };
+}
+
+function loadCardLibraries() {
+  const defaults = {
+    cardLibrary: createCardLibrary(false),
+    bossLibrary: createCardLibrary(true)
+  };
+
+  try {
+    const stored = JSON.parse(readFileSync(CARD_LIBRARY_PATH, 'utf8'));
+    return {
+      cardLibrary: { ...defaults.cardLibrary, ...(stored.cardLibrary ?? {}) },
+      bossLibrary: { ...defaults.bossLibrary, ...(stored.bossLibrary ?? {}) }
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function persistCardLibraries(state) {
+  writeFileSync(CARD_LIBRARY_PATH, JSON.stringify({
+    cardLibrary: state.cardLibrary,
+    bossLibrary: state.bossLibrary
+  }, null, 2));
+}
+
+function createCardLibrary(boss) {
+  return Object.fromEntries(
+    Object.entries(PROGRAMS)
+      .filter(([, program]) => Boolean(program.boss) === boss)
+      .map(([id, program]) => [id, structuredClone({ id, ...program })])
+  );
 }
 
 function createPlayer(name) {
@@ -193,7 +267,7 @@ export function playPacketWarCard(state, playerId, handIndexValue) {
   const player = state.players[playerId];
   const handIndex = Number(handIndexValue);
   const cardId = player.hand[handIndex];
-  const program = PROGRAMS[cardId];
+  const program = state.cardLibrary[cardId];
 
   if (!program) {
     return errorResult('That program is no longer in your hand.');
@@ -206,13 +280,13 @@ export function playPacketWarCard(state, playerId, handIndexValue) {
   player.bandwidth -= program.cost;
   player.hand.splice(handIndex, 1);
   resolveProgram(state, playerId, cardId);
-  drawCard(player, state.mode);
+  drawCard(player, state);
 
   if (resolveWinner(state)) {
     return successResult();
   }
 
-  if (cardId === 'overclock') {
+  if (program.retainTurn) {
     addLog(state, `${player.name} retained the execution window.`);
     return successResult();
   }
@@ -231,11 +305,11 @@ export function passPacketWarTurn(state, playerId) {
   const player = state.players[playerId];
   const cycledCard = player.hand.shift();
 
-  drawCard(player, state.mode);
+  drawCard(player, state);
   addLog(
     state,
     cycledCard
-      ? `${player.name} passed and cycled ${PROGRAMS[cycledCard].name} out of their hand.`
+      ? `${player.name} passed and cycled ${state.cardLibrary[cycledCard].name} out of their hand.`
       : `${player.name} held bandwidth and passed.`
   );
   finishTurn(state, playerId);
@@ -272,8 +346,65 @@ export function getPacketWarSnapshot(state, viewerId) {
   return {
     ...snapshot,
     participantCount: countParticipants(state),
-    programs: PROGRAMS
+    programs: {
+      ...snapshot.cardLibrary,
+      ...snapshot.bossLibrary
+    }
   };
+}
+
+export function savePacketWarCard(state, payload) {
+  const requestedId = String(payload?.id ?? '').trim();
+  const id = requestedId || `custom-${Date.now()}`;
+  const existing = state.cardLibrary[id] ?? state.bossLibrary[id];
+  const boss = existing ? Boolean(existing.boss) : Boolean(payload?.boss);
+  const effects = Array.isArray(payload?.effects) ? payload.effects.slice(0, 3) : [];
+
+  if (!String(payload?.name ?? '').trim()) {
+    return errorResult('Card title is required.');
+  }
+
+  if (effects.length === 0) {
+    return errorResult('Add at least one card effect.');
+  }
+
+  const card = {
+    id,
+    name: String(payload.name).trim().slice(0, 28).toUpperCase(),
+    cost: clampInteger(payload.cost, 0, 20),
+    description: String(payload.description ?? '').trim().slice(0, 140),
+    color: ['pink', 'cyan', 'green', 'yellow', 'blue', 'purple'].includes(payload.color)
+      ? payload.color
+      : 'cyan',
+    quantity: clampInteger(payload.quantity, 0, 20),
+    builtIn: Boolean(existing?.builtIn),
+    boss,
+    multiplayerOnly: Boolean(payload.multiplayerOnly),
+    retainTurn: Boolean(payload.retainTurn),
+    effects: effects.map(normalizeEffect)
+  };
+
+  const destination = boss ? state.bossLibrary : state.cardLibrary;
+  destination[id] = card;
+  persistCardLibraries(state);
+  return { ok: true, id };
+}
+
+export function deletePacketWarCard(state, cardId) {
+  const library = state.cardLibrary[cardId] ? state.cardLibrary : state.bossLibrary;
+  const card = library[cardId];
+
+  if (!card) {
+    return errorResult('That card no longer exists.');
+  }
+
+  if (card.builtIn) {
+    return errorResult('Built-in cards can be modified but not deleted.');
+  }
+
+  delete library[cardId];
+  persistCardLibraries(state);
+  return successResult();
 }
 
 function startRound(state) {
@@ -286,13 +417,10 @@ function startRound(state) {
     : 'DUEL LINK OPEN: Reduce the rival deck to zero integrity.');
 
   for (const player of Object.values(state.players)) {
-    player.deck = shuffle([
-      ...BASE_DECK,
-      ...(selectedMode === 'coop' ? COOP_PROGRAMS : [])
-    ]);
+    player.deck = shuffle(createDeckFromLibrary(state.cardLibrary, selectedMode));
 
     for (let index = 0; index < MAX_HAND_SIZE; index += 1) {
-      drawCard(player, selectedMode);
+      drawCard(player, state);
     }
   }
 }
@@ -320,59 +448,14 @@ function resetRound(state) {
 
 function resolveProgram(state, playerId, cardId) {
   const player = state.players[playerId];
-  const target = state.mode === 'coop'
-    ? state.breach
-    : state.players[otherPlayer(playerId)];
-  const programName = PROGRAMS[cardId].name;
+  const program = state.cardLibrary[cardId];
+  const programName = program.name;
 
-  switch (cardId) {
-    case 'spike':
-      dealDamage(target, 6);
-      break;
-    case 'firewall':
-      player.shield += 5;
-      break;
-    case 'leech':
-      dealDamage(target, 3);
-      player.integrity = Math.min(STARTING_INTEGRITY, player.integrity + 3);
-      break;
-    case 'worm':
-      dealDamage(target, 2);
-      target.malware += 2;
-      break;
-    case 'reboot':
-      player.integrity = Math.min(STARTING_INTEGRITY, player.integrity + 5);
-      player.malware = 0;
-      break;
-    case 'overclock':
-      player.bandwidth += 2;
-      break;
-    case 'railgun':
-      dealDamage(target, 14);
-      break;
-    case 'fortress':
-      player.shield += 12;
-      break;
-    case 'blackhole':
-      dealDamage(target, 8);
-      target.malware += 4;
-      break;
-    case 'uplink':
-      player.bandwidthIncome += 1;
-      break;
-    case 'guardian':
-      state.players[otherPlayer(playerId)].shield += 7;
-      break;
-    case 'meshRepair':
-      for (const runner of Object.values(state.players)) {
-        runner.integrity = Math.min(STARTING_INTEGRITY, runner.integrity + 6);
-      }
-      break;
-  }
+  applyEffects(state, playerId, program.effects, false);
 
   const event = addLog(
     state,
-    `${player.name} executed ${programName}. ${PROGRAMS[cardId].description}`,
+    `${player.name} executed ${programName}. ${program.description}`,
     {
       type: 'program',
       actor: player.name,
@@ -421,51 +504,11 @@ function runBreachTurn(state) {
     dealDamage(state.breach, state.breach.malware);
   }
 
-  const roll = Math.random();
-  let cardId = 'iceStrike';
-
-  if (state.breach.integrity <= 30 && roll < 0.22) {
-    cardId = 'iceReboot';
-  } else if (roll < 0.47) {
-    cardId = 'iceInfect';
-  } else if (roll < 0.65) {
-    cardId = 'iceFirewall';
-  } else if (roll < 0.8) {
-    cardId = 'darkMirror';
-  }
-
-  switch (cardId) {
-    case 'iceInfect':
-      for (const player of Object.values(state.players)) {
-        player.malware += 2;
-      }
-      state.breach.teamStatsBlinded = false;
-      break;
-    case 'iceReboot':
-      state.breach.integrity = Math.min(BREACH_INTEGRITY, state.breach.integrity + 8);
-      state.breach.malware = 0;
-      state.breach.teamStatsBlinded = false;
-      break;
-    case 'iceFirewall':
-      state.breach.shield += 8;
-      state.breach.teamStatsBlinded = false;
-      break;
-    case 'darkMirror':
-      state.breach.teamStatsBlinded = true;
-      break;
-    default: {
-      const attack = 3 + Math.min(3, Math.floor(state.round / 3));
-
-      for (const player of Object.values(state.players)) {
-        dealDamage(player, attack);
-      }
-
-      state.breach.teamStatsBlinded = false;
-      break;
-    }
-  }
-
-  const program = PROGRAMS[cardId];
+  state.breach.teamStatsBlinded = false;
+  const availableCards = Object.values(state.bossLibrary).filter((program) => program.quantity > 0);
+  const program = weightedProgram(availableCards);
+  const cardId = program.id;
+  applyEffects(state, 'breach', program.effects, true);
   const event = addLog(
     state,
     `BLACK ICE executed ${program.name}. ${program.description}`,
@@ -517,12 +560,120 @@ function dealDamage(target, amount) {
   target.integrity = Math.max(0, target.integrity - (amount - absorbed));
 }
 
-function drawCard(player, mode) {
+function applyEffects(state, actorId, effects, bossCard) {
+  for (const effect of effects ?? []) {
+    for (const target of resolveEffectTargets(state, actorId, effect.target, bossCard)) {
+      const amount = clampInteger(effect.amount, 0, 99);
+
+      switch (effect.type) {
+        case 'damage':
+          dealDamage(target, amount);
+          break;
+        case 'shield':
+          target.shield += amount;
+          break;
+        case 'heal':
+          target.integrity = Math.min(
+            target === state.breach ? BREACH_INTEGRITY : STARTING_INTEGRITY,
+            target.integrity + amount
+          );
+          break;
+        case 'malware':
+          target.malware += amount;
+          break;
+        case 'income':
+          if ('bandwidthIncome' in target) {
+            target.bandwidthIncome += amount;
+          }
+          break;
+        case 'bandwidth':
+          if ('bandwidth' in target) {
+            target.bandwidth += amount;
+          }
+          break;
+        case 'purge':
+          target.malware = 0;
+          break;
+        case 'blind':
+          state.breach.teamStatsBlinded = true;
+          break;
+      }
+    }
+  }
+}
+
+function resolveEffectTargets(state, actorId, targetName, bossCard) {
+  if (bossCard) {
+    if (targetName === 'self' || targetName === 'enemy') {
+      return [state.breach];
+    }
+
+    return Object.values(state.players);
+  }
+
+  const actor = state.players[actorId];
+  const ally = state.players[otherPlayer(actorId)];
+  const enemy = state.mode === 'coop' ? state.breach : ally;
+
+  switch (targetName) {
+    case 'self':
+      return [actor];
+    case 'ally':
+      return [ally];
+    case 'both-allies':
+    case 'players':
+      return Object.values(state.players);
+    case 'enemy':
+    default:
+      return [enemy];
+  }
+}
+
+function createDeckFromLibrary(library, mode) {
+  const deck = [];
+
+  for (const card of Object.values(library)) {
+    if (card.multiplayerOnly && mode !== 'coop') {
+      continue;
+    }
+
+    for (let count = 0; count < card.quantity; count += 1) {
+      deck.push(card.id);
+    }
+  }
+
+  return deck.length ? deck : ['spike'];
+}
+
+function weightedProgram(programs) {
+  const pool = programs.flatMap((program) => Array(program.quantity).fill(program));
+  return pool[Math.floor(Math.random() * pool.length)] ?? { id: 'iceStrike', ...PROGRAMS.iceStrike };
+}
+
+function normalizeEffect(effect) {
+  const allowedTypes = ['damage', 'shield', 'heal', 'malware', 'income', 'bandwidth', 'purge', 'blind'];
+  const allowedTargets = ['self', 'ally', 'both-allies', 'enemy', 'players'];
+
+  return {
+    type: allowedTypes.includes(effect?.type) ? effect.type : 'damage',
+    target: allowedTargets.includes(effect?.target) ? effect.target : 'enemy',
+    amount: clampInteger(effect?.amount, 0, 99)
+  };
+}
+
+function clampInteger(value, minimum, maximum) {
+  const number = Math.floor(Number(value));
+
+  if (!Number.isFinite(number)) {
+    return minimum;
+  }
+
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function drawCard(player, state) {
   if (player.deck.length === 0) {
-    player.deck = shuffle([
-      ...BASE_DECK,
-      ...(mode === 'coop' ? COOP_PROGRAMS : [])
-    ]);
+    player.deck = shuffle(createDeckFromLibrary(state.cardLibrary, state.mode));
   }
 
   const card = player.deck.pop();

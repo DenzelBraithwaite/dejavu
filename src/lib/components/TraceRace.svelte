@@ -11,7 +11,7 @@
   type ActionType = 'move' | 'trace' | 'ping' | 'scan' | 'tracker' | 'scramble';
   type Tracker = {
     node: number;
-    turnsRemaining: number;
+    ownerTurnsRemaining: number;
     alertedNodes: number[];
   };
 
@@ -50,7 +50,7 @@
   let localExposureRevealNodes: number[] = [];
   let localExposureRevealPosition: number | null = null;
   let localSearchRevealNodes: number[] = [];
-  let localTracker: Tracker | null = null;
+  let localTrackers: Tracker[] = [];
   let localTurn = 1;
   let localIntel: string[] = [];
   let cpuTimer: number | undefined;
@@ -72,9 +72,9 @@
   $: displayedSearchRevealNodes = mode === 'singleplayer'
     ? localSearchRevealNodes
     : serverPlayer?.searchRevealNodes ?? [];
-  $: displayedTracker = mode === 'singleplayer'
-    ? localTracker
-    : serverPlayer?.tracker ?? null;
+  $: displayedTrackers = mode === 'singleplayer'
+    ? localTrackers
+    : serverPlayer?.trackers ?? [];
   $: displayedIntel = mode === 'singleplayer'
     ? localIntel
     : serverPlayer?.intel ?? [];
@@ -156,7 +156,7 @@
     localExposureRevealNodes = [];
     localExposureRevealPosition = null;
     localSearchRevealNodes = [];
-    localTracker = null;
+    localTrackers = [];
     localTurn = 1;
     resetTargeting();
     errorMessage = '';
@@ -246,6 +246,8 @@
   }
 
   function performLocalAction(type: ActionType, target?: number, targets: number[] = []): void {
+    prepareLocalVisualsForTurn();
+
     if (type === 'move') {
       if (!neighborsOf(localPlayerPosition).includes(target as number)) {
         errorMessage = 'Choose a node directly linked to your current position.';
@@ -254,14 +256,14 @@
 
       localPlayerPosition = target as number;
       localPlayerExposure = Math.max(0, localPlayerExposure - 1);
-      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: Relocated to NODE ${formatNode(localPlayerPosition)}.`);
     }
 
     if (type === 'trace') {
       localPlayerExposure = Math.min(9, localPlayerExposure + 2);
-      localSearchRevealNodes = [...targets];
-      addLocalIntel(targets.includes(localCpuPosition)
+      const foundSignal = targets.includes(localCpuPosition);
+      localSearchRevealNodes = foundSignal ? [...targets] : [];
+      addLocalIntel(foundSignal
         ? `TURN ${localTurn}: TRACE POSITIVE. Rival signal is inside nodes ${formatNodeList(targets)}.`
         : `TURN ${localTurn}: TRACE CLEAR. Rival signal is not inside nodes ${formatNodeList(targets)}.`);
     }
@@ -275,33 +277,37 @@
       }
 
       localPlayerExposure = Math.min(9, localPlayerExposure + 3);
-      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: NODE ${formatNode(target as number)} was empty.`);
     }
 
     if (type === 'scan') {
       const nearby = shortestDistance(target as number, localCpuPosition) <= 2;
       localPlayerExposure = Math.min(9, localPlayerExposure + 1);
-      localSearchRevealNodes = nodesWithinDistance(target as number, 2);
+      localSearchRevealNodes = nearby ? nodesWithinDistance(target as number, 2) : [];
       addLocalIntel(nearby
         ? `TURN ${localTurn}: SCAN POSITIVE. Rival signal detected within 2 hops of NODE ${formatNode(target as number)}.`
         : `TURN ${localTurn}: SCAN CLEAR. No rival signal within 2 hops of NODE ${formatNode(target as number)}.`);
     }
 
     if (type === 'tracker') {
-      localTracker = {
+      if (localTrackers.length >= 2) {
+        errorMessage = 'You already have two trackers active. Wait for one to expire.';
+        return;
+      }
+
+      const tracker: Tracker = {
         node: target as number,
-        turnsRemaining: 3,
+        ownerTurnsRemaining: 2,
         alertedNodes: []
       };
-      localSearchRevealNodes = [];
-      addLocalIntel(`TURN ${localTurn}: TRACKER armed at NODE ${formatNode(target as number)} for 3 rival turns.`);
-      updateLocalTracker(false);
+      localTrackers = [...localTrackers, tracker];
+      localPlayerExposure = Math.min(9, localPlayerExposure + 1);
+      addLocalIntel(`TURN ${localTurn}: TRACKER armed at NODE ${formatNode(target as number)}. Exposure +1.`);
+      updateLocalTrackers();
     }
 
     if (type === 'scramble') {
       localPlayerExposure = Math.max(0, localPlayerExposure - 3);
-      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: Signal signature scrambled.`);
     }
 
@@ -340,7 +346,7 @@
     }
 
     updateLocalExposureReveal();
-    updateLocalTracker(true);
+    updateLocalTrackers();
 
     localActivePlayer = 'player';
     localTurn += 1;
@@ -422,47 +428,45 @@
       return;
     }
 
-    if (localExposureRevealPosition === localCpuPosition
-      && localExposureRevealNodes.length === 3) {
-      return;
-    }
-
     const nextReveal = createExposureCluster(localCpuPosition);
     localExposureRevealNodes = nextReveal;
     localExposureRevealPosition = localCpuPosition;
-    addLocalIntel(`EXPOSURE LEAK: Rival occupies one of these 3 nodes: ${formatNodeList(nextReveal)}.`);
+    addLocalIntel(`EXPOSURE LEAK: Rival occupies one of these 2 nodes: ${formatNodeList(nextReveal)}.`);
   }
 
-  function updateLocalTracker(advanceTurn: boolean): void {
-    if (!localTracker) {
-      return;
+  function updateLocalTrackers(): void {
+    for (const tracker of localTrackers) {
+      if (shortestDistance(tracker.node, localCpuPosition) <= 1) {
+        tracker.alertedNodes = [tracker.node, ...neighborsOf(tracker.node)];
+        addLocalIntel(`TRACKER ALERT: Rival entered the pink radius around NODE ${formatNode(tracker.node)}.`);
+      }
     }
 
-    if (shortestDistance(localTracker.node, localCpuPosition) <= 1) {
-      localTracker.alertedNodes = [localTracker.node, ...neighborsOf(localTracker.node)];
-      localTracker = { ...localTracker };
-      addLocalIntel(`TRACKER ALERT: Rival entered the orange radius around NODE ${formatNode(localTracker.node)}.`);
+    localTrackers = [...localTrackers];
+  }
+
+  function prepareLocalVisualsForTurn(): void {
+    localSearchRevealNodes = [];
+
+    for (const tracker of localTrackers) {
+      tracker.alertedNodes = [];
+      tracker.ownerTurnsRemaining -= 1;
     }
 
-    if (!advanceTurn) {
-      return;
+    const expired = localTrackers.filter((tracker) => tracker.ownerTurnsRemaining <= 0);
+
+    for (const tracker of expired) {
+      addLocalIntel(`TRACKER EXPIRED: NODE ${formatNode(tracker.node)} returned to idle.`);
     }
 
-    localTracker.turnsRemaining -= 1;
-
-    if (localTracker.turnsRemaining <= 0) {
-      addLocalIntel(`TRACKER EXPIRED: NODE ${formatNode(localTracker.node)} returned to idle.`);
-      localTracker = null;
-    } else {
-      localTracker = { ...localTracker };
-    }
+    localTrackers = localTrackers.filter((tracker) => tracker.ownerTurnsRemaining > 0);
   }
 
   function createExposureCluster(position: number): number[] {
     const cluster = [position];
 
     for (const neighbor of shuffle(neighborsOf(position))) {
-      if (cluster.length >= 3) {
+      if (cluster.length >= 2) {
         break;
       }
 
@@ -506,18 +510,6 @@
   function resetTargeting(): void {
     selectedAction = null;
     traceSelection = [];
-  }
-
-  function nodeIsTrackerCandidate(node: number): boolean {
-    return Boolean(displayedTracker?.alertedNodes.includes(node));
-  }
-
-  function nodeIsSearchCandidate(node: number): boolean {
-    return displayedSearchRevealNodes.includes(node);
-  }
-
-  function nodeIsExposureCandidate(node: number): boolean {
-    return displayedExposureRevealNodes.includes(node);
   }
 
   function nodeCanBeTargeted(node: number): boolean {
@@ -667,12 +659,12 @@
             <div><dt>TRACE</dt><dd>Select exactly 5 unique nodes that form one connected group. Trace reports whether the rival is somewhere inside that group.</dd></div>
             <div><dt>PING</dt><dd>Select one node to attack. An exact hit wins; a miss adds 3 exposure.</dd></div>
             <div><dt>SCAN</dt><dd>Select a center node. Scan reports whether the rival is within 2 hops of that node and adds 1 exposure.</dd></div>
-            <div><dt>TRACKER</dt><dd>Select a node to watch for 3 rival turns. If the rival comes within 1 hop, its possible radius glows orange.</dd></div>
+            <div><dt>TRACKER</dt><dd>Place up to 2 trackers. The node glows purple; if a rival enters its 1-hop radius, that radius glows pink. Trackers add 1 exposure.</dd></div>
             <div><dt>SCRAMBLE</dt><dd>Requires no node. Spend the turn reducing exposure by 3.</dd></div>
           </dl>
           <p class="instruction-tip">
-            At 7 exposure, your opponent sees 3 connected red nodes—exactly one
-            contains your signal. Red exposure clues override orange tracker clues.
+            At 7 exposure, your opponent sees 2 connected red nodes—exactly one
+            contains your signal. Newer clues override older map highlights.
           </p>
         </div>
         <footer class="instruction-footer">
@@ -749,9 +741,10 @@
               class:network-node--current={displayedPosition === index}
               class:network-node--selected={traceSelection.includes(index)}
               class:network-node--targetable={nodeCanBeTargeted(index)}
-              class:network-node--search={nodeIsSearchCandidate(index)}
-              class:network-node--tracker={nodeIsTrackerCandidate(index)}
-              class:network-node--exposed={nodeIsExposureCandidate(index)}
+              class:network-node--search={displayedSearchRevealNodes.includes(index)}
+              class:network-node--tracker-placed={displayedTrackers.some((tracker) => tracker.node === index)}
+              class:network-node--tracker={displayedTrackers.some((tracker) => tracker.alertedNodes.includes(index))}
+              class:network-node--exposed={displayedExposureRevealNodes.includes(index)}
               class:network-node--enemy={(mode === 'singleplayer' && localStatus === 'finished' && localCpuPosition === index)
                 || (mode === 'multiplayer' && $traceRaceServerState?.status === 'finished'
                   && playerId
@@ -799,15 +792,19 @@
             </p>
             <div class="action-grid">
               <button class:action-active={selectedAction === 'move'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('move')}>MOVE</button>
-              <button class:action-active={selectedAction === 'trace'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('trace')}>TRACE</button>
-              <button class:action-active={selectedAction === 'ping'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('ping')}>PING</button>
-              <button class:action-active={selectedAction === 'scan'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('scan')}>SCAN</button>
-              <button class:action-active={selectedAction === 'tracker'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('tracker')}>TRACKER</button>
-              <button type="button" disabled={!isMyTurn} on:click={() => chooseAction('scramble')}>SCRAMBLE</button>
+              <button class:action-active={selectedAction === 'trace'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('trace')}>TRACE <small class="exposure-cost">+2</small></button>
+              <button class:action-active={selectedAction === 'ping'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('ping')}>PING <small class="exposure-cost">+3</small></button>
+              <button class:action-active={selectedAction === 'scan'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('scan')}>SCAN <small class="exposure-cost">+1</small></button>
+              <button class:action-active={selectedAction === 'tracker'} type="button" disabled={!isMyTurn || displayedTrackers.length >= 2} on:click={() => chooseAction('tracker')}>TRACKER <small class="exposure-cost">+1</small></button>
+              <button type="button" disabled={!isMyTurn} on:click={() => chooseAction('scramble')}>SCRAMBLE <small class="exposure-relief">−3</small></button>
             </div>
-            <p class="hint">Choose an action, then use the map. Trace needs 5 connected nodes; orange marks a triggered tracker radius and red marks a 3-node exposure clue.</p>
-            {#if displayedTracker}
-              <p class="tracker-status">TRACKER NODE {formatNode(displayedTracker.node)} · {displayedTracker.turnsRemaining} TURNS</p>
+            <p class="hint">Trace-positive nodes glow yellow, trackers purple, triggered tracker radii pink, and exposure clues red.</p>
+            {#if displayedTrackers.length}
+              <p class="tracker-status">
+                {#each displayedTrackers as tracker, index}
+                  {index ? ' · ' : ''}NODE {formatNode(tracker.node)}
+                {/each}
+              </p>
             {/if}
           </div>
         {/if}
@@ -1224,12 +1221,25 @@
       box-shadow: 0 0 24px #00d7eb;
     }
 
-    &--search:not(.network-node--exposed),
+    &--search:not(.network-node--exposed) {
+      color: #211d00;
+      background: #f2d40e;
+      border-color: #fff4a1;
+      box-shadow: 0 0 22px #f2d40ecc;
+    }
+
+    &--tracker-placed:not(.network-node--search, .network-node--tracker, .network-node--exposed) {
+      color: #ffffff;
+      background: #7c3aed;
+      border-color: #d8c2ff;
+      box-shadow: 0 0 22px #8b5cf6cc;
+    }
+
     &--tracker:not(.network-node--exposed) {
-      color: #211200;
-      background: #ff9d2e;
-      border-color: #ffd29d;
-      box-shadow: 0 0 22px #ff8a1daa;
+      color: #2b071b;
+      background: #ff62bd;
+      border-color: #ffd0eb;
+      box-shadow: 0 0 24px #ff3faeee;
     }
 
     &--exposed {
@@ -1241,7 +1251,7 @@
     }
 
     &--tracker.network-node--current:not(.network-node--exposed) {
-      outline: 4px solid #ff9d2e;
+      outline: 4px solid #ff62bd;
       outline-offset: 4px;
     }
 
@@ -1251,6 +1261,21 @@
       border-color: #ffc4df;
       box-shadow: 0 0 24px #ff4e9b;
     }
+  }
+
+  .exposure-cost,
+  .exposure-relief {
+    margin-left: 4px;
+    font-size: 0.68rem;
+    font-weight: 900;
+  }
+
+  .exposure-cost {
+    color: #ff5a72;
+  }
+
+  .exposure-relief {
+    color: #55f09a;
   }
 
   aside {
