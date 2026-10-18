@@ -11,7 +11,7 @@ The long-term product has two connected modes:
 - Build mode lets creators make stories as flowcharts without writing code.
 - Play mode runs those story graphs as synchronized two-player terminal games.
 
-Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. The installed catalog includes the NetRunners race, the solo Billywig card table, and the neon-pink Pigz dice game.
+Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. The installed catalog includes NetRunners, Billywig, Pigz, Trace Race, and Packet War.
 
 Read the complete product direction in [Visual Story Builder Product Direction](docs/GAME_BUILDER_DIRECTION.md).
 
@@ -72,7 +72,7 @@ The current scene contract supports:
 - State effects for inventory, flags, stats, characters, and installed mods.
 - Conditional branches based on inventory, flags, stats, and the previous dice result.
 - Ending nodes.
-- A NetRunners minigame-node contract with completed and cancelled routes.
+- A generic minigame-node contract with completed and cancelled routes.
 
 The Notes prologue has been converted into scene data with separate player perspectives, character naming, a dice check, timed choice, checkpoint, conversation, shared vote, and image scene. Chapter 1 currently ends at a placeholder because the notes contain its outline but not complete scene-level dialogue.
 
@@ -105,18 +105,18 @@ Each browser stores independent music and sound-effect mute and volume settings.
 
 ### Minigame library
 
-The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners, Billywig, and Pigz can be launched directly from this catalog or through a story minigame node. Pigz offers singleplayer against an automated opponent and server-authoritative two-player LAN play. Story-launched sessions return through their configured completed or cancelled destination.
+The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners, Billywig, Pigz, Trace Race, and Packet War can be launched directly from this catalog or through a story minigame node. Trace Race supports a local CPU opponent and a hidden-information LAN duel. Packet War supports a two-player duel and a cooperative BLACK ICE breach. Story-launched sessions return through their configured completed or cancelled destination.
 
 ### NetRunners
 
 NetRunners retains its neon cyberpunk presentation.
 
-- Single-player races draw automatically every three seconds.
+- Single-player races draw automatically every two seconds.
 - Multiplayer is available to the two connected game clients.
 - The first multiplayer participant sees `1/2 PLAYERS` while waiting.
 - Both players select factions and lock bets independently.
 - The server starts the race after both bets are ready.
-- The server draws cards every three seconds and broadcasts the race state.
+- The server draws cards every two seconds and broadcasts the race state.
 - A rematch starts only if both players agree.
 - Either player declining returns both clients to the NetRunners menu.
 

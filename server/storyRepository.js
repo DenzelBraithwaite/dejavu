@@ -164,14 +164,53 @@ export function createStoryRepository(databasePath) {
 
 function seedBuiltInStory(database, document) {
   const existing = database.prepare(
-    'SELECT id FROM stories WHERE id = ?'
+    `
+      SELECT
+        id,
+        version,
+        document_json AS documentJson
+      FROM stories
+      WHERE id = ?
+    `
   ).get(document.id);
 
+  const now = new Date().toISOString();
+
   if (existing) {
+    const storedDocument = JSON.parse(existing.documentJson);
+    const supportedMinigames = [
+      ...new Set([
+        ...(storedDocument.supportedMinigames ?? []),
+        ...document.supportedMinigames
+      ])
+    ];
+
+    if (supportedMinigames.length === storedDocument.supportedMinigames?.length) {
+      return;
+    }
+
+    const nextVersion = Number(existing.version) + 1;
+    const migratedDocument = {
+      ...storedDocument,
+      version: nextVersion,
+      supportedMinigames
+    };
+
+    database.prepare(`
+      UPDATE stories
+      SET
+        version = ?,
+        document_json = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      nextVersion,
+      JSON.stringify(migratedDocument),
+      now,
+      document.id
+    );
     return;
   }
-
-  const now = new Date().toISOString();
 
   database.prepare(`
     INSERT INTO stories (

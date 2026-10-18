@@ -785,14 +785,38 @@
     }
 
     if (field === 'resultNext.completed') {
-      return 'COMPLETE';
+      return 'FINISHED';
     }
 
     if (field === 'resultNext.cancelled') {
-      return 'CANCEL';
+      return 'EARLY EXIT';
     }
 
     return isCompanionNode(node) ? 'RETURNS' : 'NEXT';
+  }
+
+  function routeIsLoop(node: StoryNode, field: string): boolean {
+    if (!editingStory) {
+      return false;
+    }
+
+    const destination = editingStory.nodes.find(
+      (candidate) => candidate.id === getRouteValue(node, field)
+    );
+
+    if (!destination || destination.audience !== node.audience) {
+      return false;
+    }
+
+    const laneNodes = getLaneNodes((node.audience ?? 'both') as LaneId);
+    const sourceIndex = laneNodes.findIndex(
+      (candidate) => candidate.id === node.id
+    );
+    const destinationIndex = laneNodes.findIndex(
+      (candidate) => candidate.id === destination.id
+    );
+
+    return destinationIndex >= 0 && destinationIndex <= sourceIndex;
   }
 
   function getRouteValue(node: StoryNode, field: string): string {
@@ -1488,8 +1512,11 @@
                               </span>
                             {:else}
                               {#each routeFields(node).filter((field) => getRouteValue(node, field)) as field}
-                                <span>
+                                <span class:loop-route={routeIsLoop(node, field)}>
                                   {routeFieldLabel(node, field)} → {routeLabel(node, field)}
+                                  {#if routeIsLoop(node, field)}
+                                    <strong>↻ LOOP</strong>
+                                  {/if}
                                 </span>
                               {/each}
                             {/if}
@@ -1828,16 +1855,23 @@
                 <option value="netrunners">NetRunners</option>
                 <option value="billywig">Billywig</option>
                 <option value="pigz">Pigz</option>
+                <option value="trace-race">Trace Race</option>
+                <option value="packet-war">Packet War</option>
               </select>
-              <div class="route-label">Completed destination</div>
+              <p class="inspector-help">
+                <strong>Finished</strong> means the round reached a normal result,
+                whether the players won or lost. <strong>Exited early</strong> means
+                someone left before the round produced a result.
+              </p>
+              <div class="route-label">Finished game destination</div>
               <div class="route-control">
                 <span class:missing={!selectedNode.resultNext.completed}>{routeLabel(selectedNode, 'resultNext.completed')}</span>
-                <button type="button" on:click={() => startLinkSelection('resultNext.completed', 'Completed destination')}>Select node</button>
+                <button type="button" on:click={() => startLinkSelection('resultNext.completed', 'Finished game destination')}>Select node</button>
               </div>
-              <div class="route-label">Cancelled destination</div>
+              <div class="route-label">Exited early destination</div>
               <div class="route-control">
                 <span class:missing={!selectedNode.resultNext.cancelled}>{routeLabel(selectedNode, 'resultNext.cancelled')}</span>
-                <button type="button" on:click={() => startLinkSelection('resultNext.cancelled', 'Cancelled destination')}>Select node</button>
+                <button type="button" on:click={() => startLinkSelection('resultNext.cancelled', 'Exited early destination')}>Select node</button>
               </div>
             {/if}
 
@@ -1921,6 +1955,9 @@
               <li><strong>Add to Player</strong> appends a new node to the bottom of that lane. It only auto-connects when the previous node has an unused normal route.</li>
               <li><strong>+ next, + yes, or + no</strong> creates a node directly on that exact route. Use these when building a connected sequence or branch.</li>
               <li><strong>Select next node</strong> connects to an existing node. <strong>Select previous node</strong> makes an existing node lead into the selected node.</li>
+              <li><strong>Loops are supported.</strong> Make a Choice node the area's hub. Route Talk, Search, or Play branches through their scenes and connect their last nodes back to the hub. Route Leave forward to the next area. Backward routes are marked <strong>↻ LOOP</strong>.</li>
+              <li>For a locked exit, route the hub's <strong>Leave</strong> choice into a Condition. Its true route leaves the area; its false route shows a denial message and returns to the hub. Conditions resolve immediately, so never point one directly to itself.</li>
+              <li>For a repeatable minigame, connect its Finished and Exited Early routes back to the hub. The runtime resets its launch checkpoint each time the players return.</li>
               <li><strong>Companion changes</strong> show images, update inventory, or change atmosphere with a main-flow node. They do not need their own previous or next route.</li>
               <li>Red nodes have a missing or invalid connection. Save only after every playable route reaches another node or an Ending.</li>
             </ol>
@@ -2506,6 +2543,16 @@
         font-size: 0.55rem;
         text-overflow: ellipsis;
         white-space: nowrap;
+
+        strong {
+          margin-left: 5px;
+          color: #f8e69a;
+          font-size: 0.5rem;
+        }
+      }
+
+      span.loop-route {
+        color: #f8e69a;
       }
     }
 
@@ -2649,6 +2696,20 @@
     input,
     select {
       width: 100%;
+    }
+  }
+
+  .inspector-help {
+    margin: 12px 0;
+    padding: 10px;
+    color: #aeb9c9;
+    background: #0b1524;
+    border-left: 3px solid #4a98d9;
+    font-size: 0.72rem;
+    line-height: 1.55;
+
+    strong {
+      color: #7dd3fc;
     }
   }
 

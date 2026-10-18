@@ -1,5 +1,5 @@
 const COLORS = ['purple', 'pink', 'yellow', 'cyan', 'blue'];
-const DRAW_INTERVAL_MS = 3000;
+const DRAW_INTERVAL_MS = 2000;
 const STARTING_MONEY = 1000;
 
 export function createNetRunnersState() {

@@ -230,6 +230,7 @@ export function completeActiveMinigame(state, resultId) {
     resultId,
     createdAt: new Date().toISOString()
   });
+  delete state.minigames[scene.id];
   state.activeMinigame = null;
   setSharedScene(state, nextSceneId);
   state.updatedAt = new Date().toISOString();

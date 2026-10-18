@@ -25,6 +25,22 @@
       playerCount: 2,
       status: 'READY',
       artwork: 'pigz'
+    },
+    {
+      id: 'trace-race',
+      title: 'Trace Race',
+      description: 'Hunt a hidden rival signal through a neon network before they trace you first.',
+      playerCount: 2,
+      status: 'READY',
+      artwork: 'trace-race'
+    },
+    {
+      id: 'packet-war',
+      title: 'Packet War',
+      description: 'Deploy tactical programs in a runner duel or breach hostile BLACK ICE together.',
+      playerCount: 2,
+      status: 'READY',
+      artwork: 'packet-war'
     }
   ];
 </script>
@@ -55,7 +71,7 @@
               <div class="billywig-card billywig-card--center">26</div>
               <div class="billywig-card billywig-card--right">16</div>
               <span class="billywig-scanline"></span>
-            {:else}
+            {:else if minigame.artwork === 'pigz'}
               <div class="pigz-die">
                 <i></i>
                 <i></i>
@@ -65,6 +81,22 @@
               </div>
               <div class="pigz-score pigz-score--left">72</div>
               <div class="pigz-score pigz-score--right">89</div>
+            {:else if minigame.artwork === 'trace-race'}
+              <div class="trace-map">
+                <i class="trace-line trace-line--one"></i>
+                <i class="trace-line trace-line--two"></i>
+                <i class="trace-line trace-line--three"></i>
+                <span class="trace-node trace-node--one">01</span>
+                <span class="trace-node trace-node--two">05</span>
+                <span class="trace-node trace-node--three">09</span>
+                <span class="trace-node trace-node--four">12</span>
+              </div>
+            {:else}
+              <div class="packet-route">
+                <span class="packet-deck">P1</span>
+                <div class="packet-stream"><i></i><i></i><i></i></div>
+                <span class="packet-deck packet-deck--hostile">ICE</span>
+              </div>
             {/if}
           </div>
           <div class="module-copy">
@@ -288,6 +320,146 @@
 
   .pigz-score--right {
     right: 16%;
+  }
+
+  .module-art--trace-race {
+    background:
+      linear-gradient(90deg, #00d7eb0d 1px, transparent 1px),
+      linear-gradient(#00d7eb0d 1px, transparent 1px),
+      radial-gradient(circle at center, #073c47, #02090d 70%);
+    background-size: 22px 22px, 22px 22px, auto;
+  }
+
+  .trace-map {
+    position: absolute;
+    inset: 0;
+  }
+
+  .trace-line {
+    position: absolute;
+    height: 2px;
+    background: #00d7eb;
+    box-shadow: 0 0 8px #00d7eb;
+    transform-origin: left center;
+  }
+
+  .trace-line--one {
+    width: 38%;
+    left: 19%;
+    top: 36%;
+    transform: rotate(16deg);
+  }
+
+  .trace-line--two {
+    width: 40%;
+    left: 44%;
+    top: 48%;
+    transform: rotate(-20deg);
+  }
+
+  .trace-line--three {
+    width: 48%;
+    left: 23%;
+    top: 67%;
+    transform: rotate(-5deg);
+  }
+
+  .trace-node {
+    position: absolute;
+    width: 42px;
+    height: 42px;
+    color: #051013;
+    background: #00d7eb;
+    border: 2px solid #c9fcff;
+    border-radius: 50%;
+    box-shadow: 0 0 18px #00d7eb;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.65rem;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .trace-node--one {
+    left: 13%;
+    top: 23%;
+  }
+
+  .trace-node--two {
+    left: 43%;
+    top: 43%;
+  }
+
+  .trace-node--three {
+    left: 22%;
+    top: 66%;
+  }
+
+  .trace-node--four {
+    right: 12%;
+    top: 24%;
+    color: #ffffff;
+    background: #ff4e9b;
+    border-color: #ffc4df;
+    box-shadow: 0 0 18px #ff4e9b;
+  }
+
+  .module-art--packet-war {
+    background:
+      linear-gradient(90deg, #9b72ff0d 1px, transparent 1px),
+      linear-gradient(#9b72ff0d 1px, transparent 1px),
+      radial-gradient(circle at center, #2b1852, #060612 70%);
+    background-size: 22px 22px, 22px 22px, auto;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .packet-route {
+    width: 82%;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .packet-deck {
+    width: 68px;
+    height: 92px;
+    color: #7ef9ff;
+    background: #09191f;
+    border: 2px solid #00d7eb;
+    box-shadow: 0 0 18px #00d7eb66;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-weight: 900;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .packet-deck--hostile {
+    color: #ff9bc5;
+    background: #250c1a;
+    border-color: #ff4e9b;
+    box-shadow: 0 0 18px #ff4e9b66;
+  }
+
+  .packet-stream {
+    position: relative;
+    flex: 1;
+    height: 2px;
+    background: #7047c2;
+
+    display: flex;
+    justify-content: space-around;
+
+    i {
+      width: 12px;
+      height: 12px;
+      background: #bd9cff;
+      box-shadow: 0 0 10px #9b72ff;
+      transform: translateY(-5px) rotate(45deg);
+    }
   }
 
   .module-copy {

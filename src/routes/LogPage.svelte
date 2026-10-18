@@ -5,10 +5,12 @@
     Journal,
     MinigameLibrary,
     NetRunners,
+    PacketWar,
     Pigz,
     SettingsMenu,
     StoryLibrary,
-    Terminal
+    Terminal,
+    TraceRace
   } from '../lib/components';
 </script>
 
@@ -20,6 +22,8 @@
   <NetRunners />
   <Billywig />
   <Pigz />
+  <TraceRace />
+  <PacketWar />
   <SettingsMenu />
   <StoryLibrary />
 </div>

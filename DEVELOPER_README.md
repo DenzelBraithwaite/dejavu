@@ -27,10 +27,14 @@ src/lib/components/StoryLibrary.svelte  Story CRUD and node editor
 src/lib/components/MinigameLibrary.svelte  Registered minigame catalog
 src/lib/components/Billywig.svelte         Solo card game and story return flow
 src/lib/components/Pigz.svelte             Pink dice game, solo CPU, and LAN UI
+src/lib/components/TraceRace.svelte        Hidden-signal pursuit, local CPU, and LAN UI
+src/lib/components/PacketWar.svelte        Duel and cooperative program-card UI
 src/lib/stores/library.ts            Browser story metadata and selections
 server/gameSession.js                Authoritative scene execution
 server/netRunnersSession.js          Authoritative multiplayer minigame
 server/pigzSession.js                Authoritative Pigz turns and wagers
+server/traceRaceSession.js           Authoritative hidden-position LAN pursuit
+server/packetWarSession.js           Authoritative duel and cooperative breach
 server/storyRepository.js            SQLite story persistence
 server.js                            Sessions, sockets, library, saves, and hosting
 ```
@@ -66,6 +70,12 @@ Image, item/effect, and music/atmosphere nodes are grouped as companion changes 
 
 Node cards show their type ordinal, such as `3rd dialogue node`, plus readable route destinations. Missing incoming routes, missing outgoing routes, broken destinations, and illegal cross-player links receive a red invalid border. Start nodes, endings, and visual labels have the expected validation exceptions.
 
+### Loops and repeatable areas
+
+Routes may connect backward to earlier nodes. The editor marks these connections with `↻ LOOP`. To build a repeatable location, use a Choice node as the area's hub: route each repeatable action through its own dialogue, dice, or minigame nodes and connect the end of that branch back to the hub. The Leave choice points forward to the next location. For a locked exit, connect Leave to a Condition: its true route exits, while its false route shows a denial message and returns to the hub. Do not point an automatically resolved Condition directly to itself.
+
+For minigames, the Finished route means the round reached a normal outcome, regardless of which participant won. The Exited Early route means someone left before the round produced an outcome. Either route may return to an area hub, and the runtime resets the minigame launch checkpoint before it is visited again.
+
 Visual labels are editor-only organizers such as `CHAPTER 2` or `SCENE CHANGE`. They do not execute and cannot be selected as route destinations. A lane containing a condition expands to a two-column branch layout.
 
 Saving validates unique node IDs and verifies that both player start nodes exist, then increments the story version.
@@ -75,7 +85,7 @@ Available palette nodes are:
 - Dialogue, free-form player input, choice, checkpoint, and open-floor conversation.
 - Dice check, shared vote, and timed choice.
 - Item/effect and condition.
-- Image, NetRunners minigame, and ending.
+- Image, minigame, and ending.
 - Visual labels for chapters, locations, and other editor-only organization.
 
 Incomplete destination fields are allowed while creators build a draft, but the canvas marks missing, broken, self-referencing, and illegal cross-lane routes in red. Start nodes, endings, labels, and companion presentation nodes use their appropriate validation exceptions.
@@ -500,7 +510,7 @@ defineScene({
 })
 ```
 
-The runtime waits until both players launch the node and opens the selected module on both clients. NetRunners and Pigz resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for both completion signals before returning to the connected story destination. New minigames must provide their own result IDs and server-owned completion handling.
+The runtime waits until both players launch the node and opens the selected module on both clients. NetRunners, Pigz, Trace Race, and Packet War resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for both completion signals before returning to the connected story destination. Available IDs are `netrunners`, `billywig`, `pigz`, `trace-race`, and `packet-war`. New minigames must provide their own result IDs and server-owned completion handling.
 
 ## Typewriter configuration
 
@@ -549,7 +559,7 @@ The Save control is disabled until both players have selected the same cartridge
 
 ## NetRunners
 
-Single-player and multiplayer races now draw automatically every three seconds.
+Single-player and multiplayer races now draw automatically every two seconds.
 
 Multiplayer flow:
 
@@ -557,7 +567,7 @@ Multiplayer flow:
 2. The UI shows `1/2 PLAYERS` until the second client joins.
 3. Both players select a faction and place a bet.
 4. The server starts the race when both bets are locked.
-5. The server draws one card every three seconds and broadcasts canonical state.
+5. The server draws one card every two seconds and broadcasts canonical state.
 6. After the winner is settled, both players must choose Play Again for a rematch.
 7. Either player choosing Main Menu returns both clients to the NetRunners menu.
 

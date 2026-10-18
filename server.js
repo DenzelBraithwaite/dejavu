@@ -34,6 +34,23 @@ import {
   submitPigzBet,
   votePigzRematch
 } from './server/pigzSession.js';
+import {
+  createTraceRaceState,
+  getTraceRaceSnapshot,
+  joinTraceRace,
+  leaveTraceRace,
+  performTraceRaceAction,
+  voteTraceRaceRematch
+} from './server/traceRaceSession.js';
+import {
+  createPacketWarState,
+  getPacketWarSnapshot,
+  joinPacketWar,
+  leavePacketWar,
+  passPacketWarTurn,
+  playPacketWarCard,
+  votePacketWarRematch
+} from './server/packetWarSession.js';
 import { createStoryRepository } from './server/storyRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -76,10 +93,20 @@ let activeStoryId = null;
 let campaignState = createCampaignState();
 let netRunnersState = createNetRunnersState();
 let pigzState = createPigzState();
+let traceRaceState = createTraceRaceState();
+let packetWarState = createPacketWarState();
 let billywigCompletionSceneId = null;
 const billywigFinishedPlayers = new Set();
 let pigzCompletionSceneId = null;
 const pigzFinishedPlayers = new Set();
+const storyMinigameFinishedPlayers = {
+  'trace-race': new Set(),
+  'packet-war': new Set()
+};
+const storyMinigameCompletionScenes = {
+  'trace-race': null,
+  'packet-war': null
+};
 const chatMessages = [];
 
 initializeDeadlines(campaignState);
@@ -144,6 +171,8 @@ io.on('connection', (socket) => {
   socket.emit('library:state', createLibraryState());
   socket.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
   socket.emit('pigz:state', getPigzSnapshot(pigzState));
+  socket.emit('trace-race:state', getTraceRaceSnapshot(traceRaceState, playerId));
+  socket.emit('packet-war:state', getPacketWarSnapshot(packetWarState, playerId));
   if (hasInstalledMod('neuro-link-chat')) {
     socket.emit('chat:history', chatMessages);
   }
@@ -580,6 +609,96 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('trace-race:join', () => {
+    joinTraceRace(traceRaceState, playerId, campaignState.players[playerId].name);
+    broadcastTraceRaceState();
+  });
+
+  socket.on('trace-race:leave', () => {
+    leaveTraceRace(traceRaceState, playerId);
+    broadcastTraceRaceState();
+  });
+
+  socket.on('trace-race:action', (action, acknowledge = () => {}) => {
+    const result = performTraceRaceAction(traceRaceState, playerId, action);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastTraceRaceState();
+    }
+  });
+
+  socket.on('trace-race:rematch', (wantsRematch, acknowledge = () => {}) => {
+    const result = voteTraceRaceRematch(traceRaceState, playerId, wantsRematch);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastTraceRaceState();
+    }
+  });
+
+  socket.on('trace-race:story-complete', (acknowledge = () => {}) => {
+    completeStoryMinigame('trace-race', playerId, acknowledge);
+  });
+
+  socket.on('trace-race:story-cancel', (acknowledge = () => {}) => {
+    cancelStoryMinigame('trace-race', acknowledge);
+  });
+
+  socket.on('packet-war:join', (mode, acknowledge = () => {}) => {
+    const result = joinPacketWar(
+      packetWarState,
+      playerId,
+      campaignState.players[playerId].name,
+      mode
+    );
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastPacketWarState();
+    }
+  });
+
+  socket.on('packet-war:leave', () => {
+    leavePacketWar(packetWarState, playerId);
+    broadcastPacketWarState();
+  });
+
+  socket.on('packet-war:play', (handIndex, acknowledge = () => {}) => {
+    const result = playPacketWarCard(packetWarState, playerId, handIndex);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastPacketWarState();
+    }
+  });
+
+  socket.on('packet-war:pass', (acknowledge = () => {}) => {
+    const result = passPacketWarTurn(packetWarState, playerId);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastPacketWarState();
+    }
+  });
+
+  socket.on('packet-war:rematch', (wantsRematch, acknowledge = () => {}) => {
+    const result = votePacketWarRematch(packetWarState, playerId, wantsRematch);
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastPacketWarState();
+    }
+  });
+
+  socket.on('packet-war:story-complete', (acknowledge = () => {}) => {
+    completeStoryMinigame('packet-war', playerId, acknowledge);
+  });
+
+  socket.on('packet-war:story-cancel', (acknowledge = () => {}) => {
+    cancelStoryMinigame('packet-war', acknowledge);
+  });
+
   socket.on('disconnect', () => {
     const slot = playerSlots[playerId];
 
@@ -591,6 +710,8 @@ io.on('connection', (socket) => {
 
     leaveNetRunners(netRunnersState, playerId);
     leavePigz(pigzState, playerId);
+    leaveTraceRace(traceRaceState, playerId);
+    leavePacketWar(packetWarState, playerId);
 
     if (campaignState.activeMinigame?.id === 'netrunners') {
       const campaignResult = completeActiveMinigame(campaignState, 'cancelled');
@@ -602,6 +723,8 @@ io.on('connection', (socket) => {
     broadcastSessionStatus();
     io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
     io.emit('pigz:state', getPigzSnapshot(pigzState));
+    broadcastTraceRaceState();
+    broadcastPacketWarState();
   });
 });
 
@@ -714,6 +837,32 @@ function broadcastSessionStatus() {
   }
 }
 
+function broadcastTraceRaceState() {
+  for (const playerId of ['p1', 'p2']) {
+    const socketId = playerSlots[playerId].socketId;
+
+    if (socketId) {
+      io.to(socketId).emit(
+        'trace-race:state',
+        getTraceRaceSnapshot(traceRaceState, playerId)
+      );
+    }
+  }
+}
+
+function broadcastPacketWarState() {
+  for (const playerId of ['p1', 'p2']) {
+    const socketId = playerSlots[playerId].socketId;
+
+    if (socketId) {
+      io.to(socketId).emit(
+        'packet-war:state',
+        getPacketWarSnapshot(packetWarState, playerId)
+      );
+    }
+  }
+}
+
 function countConnectedPlayers() {
   return Object.values(playerSlots).filter((slot) => slot.connected).length;
 }
@@ -815,4 +964,60 @@ function synchronizePigzCompletionScene() {
 function resetPigzCompletion() {
   pigzCompletionSceneId = null;
   pigzFinishedPlayers.clear();
+}
+
+function completeStoryMinigame(minigameId, playerId, acknowledge) {
+  if (campaignState.activeMinigame?.id !== minigameId) {
+    acknowledge({
+      ok: false,
+      error: `No story-launched ${minigameId} round is active.`
+    });
+    return;
+  }
+
+  const activeSceneId = campaignState.activeMinigame.sceneId;
+
+  if (storyMinigameCompletionScenes[minigameId] !== activeSceneId) {
+    storyMinigameCompletionScenes[minigameId] = activeSceneId;
+    storyMinigameFinishedPlayers[minigameId].clear();
+  }
+
+  const finishedPlayers = storyMinigameFinishedPlayers[minigameId];
+  finishedPlayers.add(playerId);
+
+  if (finishedPlayers.size < 2) {
+    acknowledge({
+      ok: true,
+      waitingForPartner: true
+    });
+    return;
+  }
+
+  const result = completeActiveMinigame(campaignState, 'completed');
+  acknowledge(result);
+
+  if (result.ok) {
+    finishedPlayers.clear();
+    storyMinigameCompletionScenes[minigameId] = null;
+    io.emit('campaign:state', getCampaignSnapshot(campaignState));
+  }
+}
+
+function cancelStoryMinigame(minigameId, acknowledge) {
+  if (campaignState.activeMinigame?.id !== minigameId) {
+    acknowledge({
+      ok: false,
+      error: `No story-launched ${minigameId} round is active.`
+    });
+    return;
+  }
+
+  const result = completeActiveMinigame(campaignState, 'cancelled');
+  acknowledge(result);
+
+  if (result.ok) {
+    storyMinigameFinishedPlayers[minigameId].clear();
+    storyMinigameCompletionScenes[minigameId] = null;
+    io.emit('campaign:state', getCampaignSnapshot(campaignState));
+  }
 }

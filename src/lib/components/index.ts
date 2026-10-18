@@ -12,6 +12,8 @@ import MinigameLibrary from './MinigameLibrary.svelte';
 import NetRunners from './NetRunners.svelte';
 import NetRunnersCard from './NetRunnersCard.svelte';
 import Pigz from './Pigz.svelte';
+import TraceRace from './TraceRace.svelte';
+import PacketWar from './PacketWar.svelte';
 import PlayerGamblingCard from './PlayerGamblingCard.svelte';
 import Sidebar from './Sidebar.svelte';
 import SaveMenu from './SaveMenu.svelte';
@@ -33,6 +35,8 @@ export {
   NetRunners,
   NetRunnersCard,
   Pigz,
+  TraceRace,
+  PacketWar,
   PlayerGamblingCard,
   CharacterMenu,
   ChatPanel,

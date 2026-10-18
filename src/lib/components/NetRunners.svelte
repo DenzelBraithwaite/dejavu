@@ -14,7 +14,7 @@
   // Components
   import { NetRunnersCard, PlayerGamblingCard } from './';
 
-  const automaticDrawDelayMs = 3000;
+  const automaticDrawDelayMs = 2000;
   let automaticDrawTimer: number | undefined;
   let lastMultiplayerStatus = '';
 
@@ -694,7 +694,7 @@
         <button on:click={toggleInfo} class="menu-btn">INFO</button>
         <button on:click={resetGame} class="menu-btn" class:btn-disabled={!$netRunnersGameState.gameControlsVisible || !$netRunnersGameState.singleplayer} disabled={!$netRunnersGameState.gameControlsVisible || !$netRunnersGameState.singleplayer}>RESET</button>
         {#if $netRunnersGameState.roundStarted}
-          <p class="auto-draw-status">AUTO DRAW · 3 SECONDS</p>
+          <p class="auto-draw-status">AUTO DRAW · 2 SECONDS</p>
         {/if}
 
         {#if $netRunnersGameState.colorSelectVisible}

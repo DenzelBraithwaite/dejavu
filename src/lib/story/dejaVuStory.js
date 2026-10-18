@@ -7,7 +7,7 @@ export const dejaVuStoryDocument = {
   description: 'Two strangers wake after an experimental operation and discover that neither their memories nor their escorts can be trusted.',
   author: 'Denzel Braithwaite',
   status: 'published',
-  version: 1,
+  version: 2,
   builtIn: true,
   initialSceneIds: {
     p1: 'prologue.p1.wake',
@@ -18,5 +18,11 @@ export const dejaVuStoryDocument = {
     id: 'dejavu-terminal',
     name: 'Déjà Vu Terminal'
   },
-  supportedMinigames: ['netrunners']
+  supportedMinigames: [
+    'netrunners',
+    'billywig',
+    'pigz',
+    'trace-race',
+    'packet-war'
+  ]
 };
