@@ -89,6 +89,10 @@
   let imageLibraryOpen = false;
   let imageLibraryTarget: 'portrait' | 'image' = 'image';
   let storyImages: string[] = [];
+  let pendingAssetDeletion: {
+    path: string;
+    references: Array<{ id: string; title: string }>;
+  } | null = null;
   let toastTimer: number | undefined;
   let lastToastKey = '';
   let lastLocation = '';
@@ -893,25 +897,42 @@
     }
   }
 
-  function nodeIsIncomingConnection(node: StoryNode): boolean {
-    if (!selectedNode) {
+  function nodeIsIncomingConnection(
+    node: StoryNode,
+    currentNode: StoryNode | null
+  ): boolean {
+    if (!currentNode) {
       return false;
     }
 
     return routeFields(node).some(
-      (field) => getRouteValue(node, field) === selectedNode.id
+      (field) => getRouteValue(node, field) === currentNode.id
     );
   }
 
-  function nodeIsOutgoingConnection(node: StoryNode): boolean {
-    if (!selectedNode) {
+  function nodeIsOutgoingConnection(
+    node: StoryNode,
+    currentNode: StoryNode | null
+  ): boolean {
+    if (!currentNode) {
       return false;
     }
 
-    return routeFields(selectedNode).some(
-      (field) => getRouteValue(selectedNode, field) === node.id
-    ) || (isCompanionNode(node) && node.attachedTo === selectedNode.id)
-      || (isCompanionNode(selectedNode) && selectedNode.attachedTo === node.id);
+    return routeFields(currentNode).some(
+      (field) => getRouteValue(currentNode, field) === node.id
+    );
+  }
+
+  function nodeIsCompanionConnection(
+    node: StoryNode,
+    currentNode: StoryNode | null
+  ): boolean {
+    if (!currentNode) {
+      return false;
+    }
+
+    return (isCompanionNode(node) && node.attachedTo === currentNode.id)
+      || (isCompanionNode(currentNode) && currentNode.attachedTo === node.id);
   }
 
   function startLinkSelection(field: string, label: string): void {
@@ -1387,6 +1408,47 @@
     refreshStory();
   }
 
+  async function deleteStoryImage(path: string, confirmed = false): Promise<void> {
+    const fileName = path.split('/').at(-1);
+
+    if (!fileName) {
+      return;
+    }
+
+    clearMessages();
+
+    try {
+      const query = confirmed ? '?confirm=true' : '';
+      const response = await fetch(
+        `/api/story-assets/images/${encodeURIComponent(fileName)}${query}`,
+        { method: 'DELETE' }
+      );
+      const result = await response.json();
+
+      if (response.status === 409 && result.requiresConfirmation) {
+        pendingAssetDeletion = {
+          path,
+          references: result.references ?? []
+        };
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(result.error ?? 'The image could not be deleted.');
+      }
+
+      storyImages = storyImages.filter((imagePath) => imagePath !== path);
+      pendingAssetDeletion = null;
+      statusMessage = result.references?.length
+        ? 'Image deleted. Existing story references were left unchanged.'
+        : 'Image deleted from the asset library.';
+    } catch (error) {
+      errorMessage = error instanceof Error
+        ? error.message
+        : 'The image could not be deleted.';
+    }
+  }
+
   function moveSelectedNode(direction: -1 | 1): void {
     if (!editingStory || !selectedNode) {
       return;
@@ -1739,18 +1801,20 @@
 
         <fieldset class="play-mode-fieldset">
           <legend>Playable modes</legend>
-          <label>
+          <label class="mode-checkbox">
             <input
               type="checkbox"
               checked={newPlayModes.singleplayer}
+              disabled={newPlayModes.singleplayer && !newPlayModes.multiplayer}
               on:change={(event) => setNewStoryMode('singleplayer', event.currentTarget.checked)}
             >
             Singleplayer map
           </label>
-          <label>
+          <label class="mode-checkbox">
             <input
               type="checkbox"
               checked={newPlayModes.multiplayer}
+              disabled={newPlayModes.multiplayer && !newPlayModes.singleplayer}
               on:change={(event) => setNewStoryMode('multiplayer', event.currentTarget.checked)}
             >
             Multiplayer map
@@ -1800,26 +1864,32 @@
 
       <div class="map-toolbar">
         <div class="map-tabs" aria-label="Story map">
-          <button class:active={activeStoryMap === 'singleplayer'} type="button" on:click={() => selectStoryMap('singleplayer')}>
-            SINGLEPLAYER MAP
-          </button>
-          <button class:active={activeStoryMap === 'multiplayer'} type="button" on:click={() => selectStoryMap('multiplayer')}>
-            MULTIPLAYER MAP
-          </button>
+          {#if editingStory.playModes.singleplayer}
+            <button class:active={activeStoryMap === 'singleplayer'} type="button" on:click={() => selectStoryMap('singleplayer')}>
+              SINGLEPLAYER MAP
+            </button>
+          {/if}
+          {#if editingStory.playModes.multiplayer}
+            <button class:active={activeStoryMap === 'multiplayer'} type="button" on:click={() => selectStoryMap('multiplayer')}>
+              MULTIPLAYER MAP
+            </button>
+          {/if}
         </div>
         <div class="mode-toggles">
-          <label>
+          <label class="mode-checkbox">
             <input
               type="checkbox"
               checked={editingStory.playModes.singleplayer}
+              disabled={editingStory.playModes.singleplayer && !editingStory.playModes.multiplayer}
               on:change={(event) => setStoryModeEnabled('singleplayer', event.currentTarget.checked)}
             >
             Solo playable
           </label>
-          <label>
+          <label class="mode-checkbox">
             <input
               type="checkbox"
               checked={editingStory.playModes.multiplayer}
+              disabled={editingStory.playModes.multiplayer && !editingStory.playModes.singleplayer}
               on:change={(event) => setStoryModeEnabled('multiplayer', event.currentTarget.checked)}
             >
             Multiplayer playable
@@ -1876,8 +1946,9 @@
                       class:branch-node={nodeHasBranches(node)}
                       class:companion-node={isCompanionNode(node)}
                       class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
-                      class:connected-before={nodeIsIncomingConnection(node)}
-                      class:connected-after={nodeIsOutgoingConnection(node)}
+                      class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
+                      class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
+                      class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
                       class:drag-before={dragTargetId === node.id && dragPlacement === 'before'}
                       class:drag-after={dragTargetId === node.id && dragPlacement === 'after'}
                       draggable="false"
@@ -2329,11 +2400,11 @@
                 <option value="netrunners">NetRunners</option>
                 <option value="billywig">Billywig</option>
                 <option value="pigz">Pigz</option>
-                <option value="trace-race">Trace Race</option>
-                <option value="packet-war">Packet War</option>
+                <option value="trace-race">TracerT</option>
+                <option value="packet-war">Packettack</option>
                 <option value="lo-hi">Lo-Hi</option>
-                <option value="mastermind">Mastermind</option>
-                <option value="chopsticks">Chopsticks</option>
+                <option value="mastermind">Cipher</option>
+                <option value="chopsticks">Overclock</option>
               </select>
               <p class="inspector-help">
                 <strong>Finished</strong> means the round reached a normal result,
@@ -2487,13 +2558,43 @@
         {:else}
           <div class="image-library-grid">
             {#each storyImages as imagePath}
-              <button type="button" on:click={() => selectStoryImage(imagePath)}>
-                <img src={imagePath} alt="">
-                <span>{imagePath.split('/').at(-1)}</span>
-              </button>
+              <article>
+                <button class="asset-select" type="button" on:click={() => selectStoryImage(imagePath)}>
+                  <img src={imagePath} alt="">
+                  <span>{imagePath.split('/').at(-1)}</span>
+                </button>
+                <button class="asset-delete" type="button" on:click={() => deleteStoryImage(imagePath)}>
+                  DELETE
+                </button>
+              </article>
             {/each}
           </div>
         {/if}
+      </section>
+    </div>
+  {/if}
+
+  {#if pendingAssetDeletion}
+    <div class="image-library-backdrop asset-warning-backdrop">
+      <section class="asset-warning" role="alertdialog" aria-modal="true" aria-labelledby="asset-warning-title">
+        <p class="eyebrow">REFERENCED ASSET</p>
+        <h2 id="asset-warning-title">Delete this image anyway?</h2>
+        <p>
+          The file is referenced by {pendingAssetDeletion.references.length}
+          {pendingAssetDeletion.references.length === 1 ? ' story' : ' stories'}.
+          Deleting it is permitted, but those image or portrait nodes will show a missing asset until replaced.
+        </p>
+        <ul>
+          {#each pendingAssetDeletion.references as reference}
+            <li>{reference.title}</li>
+          {/each}
+        </ul>
+        <div>
+          <button type="button" on:click={() => pendingAssetDeletion = null}>KEEP IMAGE</button>
+          <button class="danger-button" type="button" on:click={() => deleteStoryImage(pendingAssetDeletion?.path ?? '', true)}>
+            DELETE ANYWAY
+          </button>
+        </div>
       </section>
     </div>
   {/if}
@@ -2827,6 +2928,58 @@
     font-size: 0.68rem;
   }
 
+  .mode-checkbox {
+    position: relative;
+    min-height: 30px;
+    padding: 6px 10px 6px 38px;
+    color: #aeb9c9;
+    background: #080f1b;
+    border: 1px solid #2c3b54;
+    cursor: pointer;
+
+    display: flex;
+    align-items: center;
+
+    input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 10px;
+      width: 16px;
+      height: 16px;
+      background: #030812;
+      border: 1px solid #4a98d9;
+      box-shadow: inset 0 0 0 3px #030812;
+    }
+
+    &:has(input:checked) {
+      color: #d8fbff;
+      border-color: #02fbfb;
+
+      &::before {
+        background: #02fbfb;
+        box-shadow: inset 0 0 0 3px #07111d, 0 0 12px #02fbfb77;
+      }
+    }
+
+    &:has(input:focus-visible) {
+      outline: 2px solid #ffffff;
+      outline-offset: 2px;
+    }
+
+    &:has(input:disabled) {
+      cursor: not-allowed;
+      opacity: 0.72;
+    }
+  }
+
   .editor-toolbar {
     padding: 10px 14px;
     background: #0c1322;
@@ -3043,13 +3196,48 @@
     }
 
     &.connected-before .flow-node {
-      border-left: 3px solid #9dffa6;
-      box-shadow: -8px 0 18px #9dffa629;
+      background: linear-gradient(90deg, #16452d, #0b1820 74%);
+      border: 2px solid #6bff9d;
+      box-shadow: 0 0 20px #6bff9d45;
+
+      &::after {
+        content: 'PREVIOUS';
+        color: #8effb3;
+      }
     }
 
     &.connected-after .flow-node {
-      border-right: 3px solid #f8e69a;
-      box-shadow: 8px 0 18px #f8e69a24;
+      background: linear-gradient(90deg, #40350c, #17170e 74%);
+      border: 2px solid #f8d84e;
+      box-shadow: 0 0 20px #f8d84e45;
+
+      &::after {
+        content: 'NEXT';
+        color: #ffe77a;
+      }
+    }
+
+    &.connected-companion .flow-node {
+      background: linear-gradient(90deg, #351d58, #151022 74%);
+      border: 2px solid #b98cff;
+      box-shadow: 0 0 20px #b98cff45;
+
+      &::after {
+        content: 'CONNECTED';
+        color: #d5b8ff;
+      }
+    }
+
+    &.connected-before .flow-node::after,
+    &.connected-after .flow-node::after,
+    &.connected-companion .flow-node::after {
+      width: max-content;
+      padding: 2px 5px;
+      font-size: 0.5rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: #07111ddd;
+      border: 1px solid currentColor;
     }
 
     &.drag-before::before,
@@ -3614,13 +3802,32 @@
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 10px;
 
-    button {
+    article {
       min-width: 0;
       padding: 8px;
+      background: #07101c;
+      border: 1px solid #253b56;
+
+      display: grid;
+      gap: 7px;
+    }
+
+    .asset-select {
+      min-width: 0;
+      padding: 0;
+      background: transparent;
+      border: 0;
       text-align: left;
 
       display: grid;
       gap: 7px;
+    }
+
+    .asset-delete {
+      color: #ff9b8b;
+      background: #2a0d0a;
+      border-color: #cb381f;
+      font-size: 0.62rem;
     }
 
     img {
@@ -3636,6 +3843,44 @@
       font-size: 0.62rem;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+  }
+
+  .asset-warning-backdrop {
+    z-index: 45;
+  }
+
+  .asset-warning {
+    width: min(560px, 100%);
+    padding: 26px;
+    background: #120b0b;
+    border: 1px solid #e58271;
+    box-shadow: 0 0 38px #cb381f44;
+
+    h2 {
+      margin: 8px 0 12px;
+      color: #ffb0a4;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    p,
+    li {
+      color: #d8c2bf;
+      line-height: 1.55;
+    }
+
+    > div {
+      margin-top: 20px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .danger-button {
+      color: #fff2ef;
+      background: #692519;
+      border-color: #e58271;
     }
   }
 

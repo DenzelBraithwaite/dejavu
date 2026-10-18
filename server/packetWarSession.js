@@ -156,6 +156,7 @@ export function createPacketWarState() {
     activePlayer: 'p1',
     round: 1,
     winner: null,
+    departureNotice: null,
     log: [],
     eventSequence: 0,
     lastProgram: null,
@@ -198,7 +199,11 @@ function createCardLibrary(boss) {
   return Object.fromEntries(
     Object.entries(PROGRAMS)
       .filter(([, program]) => Boolean(program.boss) === boss)
-      .map(([id, program]) => [id, structuredClone({ id, ...program })])
+      .map(([id, program]) => [id, structuredClone({
+        id,
+        ...program,
+        availability: boss ? 'boss' : 'runner'
+      })])
   );
 }
 
@@ -248,9 +253,13 @@ export function joinPacketWar(state, playerId, playerName, modeValue) {
 }
 
 export function leavePacketWar(state, playerId) {
+  const sessionWasActive = ['playing', 'finished'].includes(state.status);
   state.participants[playerId] = false;
   resetRound(state);
   state.status = countParticipants(state) > 0 ? 'waiting' : 'menu';
+  state.departureNotice = sessionWasActive && countParticipants(state) > 0
+    ? `${state.players[playerId].name} left the connection. This session cannot be resumed.`
+    : null;
 
   if (countParticipants(state) === 0) {
     state.mode = null;
@@ -318,7 +327,7 @@ export function passPacketWarTurn(state, playerId) {
 
 export function votePacketWarRematch(state, playerId, wantsRematch) {
   if (state.status !== 'finished' || !state.participants[playerId]) {
-    return errorResult('There is no completed packet war to replay.');
+    return errorResult('There is no completed Packettack session to replay.');
   }
 
   state.rematchVotes[playerId] = Boolean(wantsRematch);
@@ -356,8 +365,13 @@ export function getPacketWarSnapshot(state, viewerId) {
 export function savePacketWarCard(state, payload) {
   const requestedId = String(payload?.id ?? '').trim();
   const id = requestedId || `custom-${Date.now()}`;
-  const existing = state.cardLibrary[id] ?? state.bossLibrary[id];
-  const boss = existing ? Boolean(existing.boss) : Boolean(payload?.boss);
+  const availability = ['runner', 'boss'].includes(payload?.availability)
+    ? payload.availability
+    : payload?.boss ? 'boss' : 'runner';
+  const targetLibrary = availability === 'boss'
+    ? state.bossLibrary
+    : state.cardLibrary;
+  const existing = targetLibrary[id];
   const effects = Array.isArray(payload?.effects) ? payload.effects.slice(0, 3) : [];
 
   if (!String(payload?.name ?? '').trim()) {
@@ -367,6 +381,17 @@ export function savePacketWarCard(state, payload) {
   if (effects.length === 0) {
     return errorResult('Add at least one card effect.');
   }
+
+  const normalizedEffects = effects.map(normalizeEffect).map((effect) => {
+    if (availability !== 'boss' && effect.type === 'blind') {
+      return {
+        ...effect,
+        type: 'damage'
+      };
+    }
+
+    return effect;
+  });
 
   const card = {
     id,
@@ -378,21 +403,26 @@ export function savePacketWarCard(state, payload) {
       : 'cyan',
     quantity: clampInteger(payload.quantity, 0, 20),
     builtIn: Boolean(existing?.builtIn),
-    boss,
+    boss: availability === 'boss',
+    availability,
     multiplayerOnly: Boolean(payload.multiplayerOnly),
     retainTurn: Boolean(payload.retainTurn),
-    effects: effects.map(normalizeEffect)
+    effects: normalizedEffects
   };
 
-  const destination = boss ? state.bossLibrary : state.cardLibrary;
-  destination[id] = card;
+  targetLibrary[id] = structuredClone(card);
+
   persistCardLibraries(state);
   return { ok: true, id };
 }
 
-export function deletePacketWarCard(state, cardId) {
-  const library = state.cardLibrary[cardId] ? state.cardLibrary : state.bossLibrary;
-  const card = library[cardId];
+export function deletePacketWarCard(state, request) {
+  const cardId = String(request?.cardId ?? request ?? '');
+  const librarySide = request?.librarySide === 'boss' ? 'boss' : 'runner';
+  const targetLibrary = librarySide === 'boss'
+    ? state.bossLibrary
+    : state.cardLibrary;
+  const card = targetLibrary[cardId];
 
   if (!card) {
     return errorResult('That card no longer exists.');
@@ -402,7 +432,7 @@ export function deletePacketWarCard(state, cardId) {
     return errorResult('Built-in cards can be modified but not deleted.');
   }
 
-  delete library[cardId];
+  delete targetLibrary[cardId];
   persistCardLibraries(state);
   return successResult();
 }
@@ -430,6 +460,7 @@ function resetRound(state) {
   state.activePlayer = 'p1';
   state.round = 1;
   state.winner = null;
+  state.departureNotice = null;
   state.log = [];
   state.eventSequence = 0;
   state.lastProgram = null;
@@ -595,7 +626,9 @@ function applyEffects(state, actorId, effects, bossCard) {
           target.malware = 0;
           break;
         case 'blind':
-          state.breach.teamStatsBlinded = true;
+          if (bossCard) {
+            state.breach.teamStatsBlinded = true;
+          }
           break;
       }
     }
@@ -604,7 +637,7 @@ function applyEffects(state, actorId, effects, bossCard) {
 
 function resolveEffectTargets(state, actorId, targetName, bossCard) {
   if (bossCard) {
-    if (targetName === 'self' || targetName === 'enemy') {
+    if (targetName === 'self') {
       return [state.breach];
     }
 
@@ -685,7 +718,7 @@ function drawCard(player, state) {
 
 function validateTurn(state, playerId) {
   if (state.status !== 'playing') {
-    return errorResult('Packet War is not accepting programs.');
+    return errorResult('Packettack is not accepting programs.');
   }
 
   if (state.activePlayer !== playerId) {

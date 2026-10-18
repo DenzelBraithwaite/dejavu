@@ -159,8 +159,8 @@ function createChopsticksState() {
   return {
     ...createBaseState('chopsticks'),
     hands: {
-      p1: [1, 1],
-      p2: [1, 1]
+      p1: [1, 1, 0, 0],
+      p2: [1, 1, 0, 0]
     },
     activePlayer: 'p1',
     turn: 1
@@ -196,7 +196,7 @@ function resetGame(state) {
   }
 
   if (state.game === 'chopsticks') {
-    state.hands = { p1: [1, 1], p2: [1, 1] };
+    state.hands = { p1: [1, 1, 0, 0], p2: [1, 1, 0, 0] };
     state.activePlayer = 'p1';
     state.turn = 1;
   }
@@ -417,30 +417,47 @@ function playChopsticks(state, playerId, action) {
 
   const otherPlayer = playerId === 'p1' ? 'p2' : 'p1';
 
-  if (action.type === 'split') {
+  if (action.type === 'redistribute') {
     const hands = state.hands[playerId];
-    const liveValue = hands.find((value) => value > 0);
+    const source = Number(action.source);
+    const sourceValue = hands[source];
+    const emptySlots = hands
+      .map((value, index) => value === 0 ? index : -1)
+      .filter((index) => index >= 0);
 
-    if (!hands.includes(0) || !liveValue || liveValue % 2 !== 0) {
-      return errorResult('Split requires one empty hand and an even live hand.');
+    if (![0, 1, 2, 3].includes(source) || ![2, 4].includes(sourceValue) || emptySlots.length === 0) {
+      return errorResult('Redistribution requires a 2GB or 4GB live stick and an empty RAM slot.');
     }
 
-    state.hands[playerId] = [liveValue / 2, liveValue / 2];
-    addLog(state, `${state.players[playerId].name} split ${liveValue} into two hands.`);
+    if (sourceValue === 4 && action.pattern === 'four-ones') {
+      const liveSticks = hands.filter((value) => value > 0);
+
+      if (liveSticks.length !== 1 || emptySlots.length !== 3) {
+        return errorResult('A 4×1GB redistribution requires one live 4GB stick and three empty slots.');
+      }
+
+      state.hands[playerId] = [1, 1, 1, 1];
+      addLog(state, `${state.players[playerId].name} redistributed one 4GB stick into four 1GB sticks.`);
+    } else {
+      const nextValue = sourceValue / 2;
+      hands[source] = nextValue;
+      hands[emptySlots[0]] = nextValue;
+      addLog(state, `${state.players[playerId].name} redistributed ${sourceValue}GB into two ${nextValue}GB sticks.`);
+    }
   } else {
     const source = Number(action.source);
     const target = Number(action.target);
     const attackValue = state.hands[playerId][source];
     const targetValue = state.hands[otherPlayer][target];
 
-    if (![0, 1].includes(source) || ![0, 1].includes(target) || attackValue === 0 || targetValue === 0) {
-      return errorResult('Select one live hand on each side.');
+    if (![0, 1, 2, 3].includes(source) || ![0, 1, 2, 3].includes(target) || attackValue === 0 || targetValue === 0) {
+      return errorResult('Select one live RAM stick on each side.');
     }
 
     state.hands[otherPlayer][target] = targetValue + attackValue >= 5
       ? 0
       : targetValue + attackValue;
-    addLog(state, `${state.players[playerId].name} sent ${attackValue} into ${state.players[otherPlayer].name}'s ${target === 0 ? 'left' : 'right'} hand.`);
+    addLog(state, `${state.players[playerId].name} pushed ${attackValue}GB into ${state.players[otherPlayer].name}'s RAM-${target + 1}.`);
   }
 
   if (state.hands[otherPlayer].every((value) => value === 0)) {

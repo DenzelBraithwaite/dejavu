@@ -5,6 +5,10 @@
   import { sessionState, type PlayerId } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { settleWager } from '../game/wager';
+  import WagerPanel from './WagerPanel.svelte';
 
   type Mode = 'menu' | 'instructions' | 'solo' | 'multi';
 
@@ -17,6 +21,10 @@
   let helpReturnMode: Mode | null = null;
   let showResetConfirmation = false;
   let resetShouldExit = false;
+  let showWager = false;
+  let wager = 0;
+  let wagerSettled = false;
+  let wagerArmed = false;
 
   $: serverState = $arcadeStates.chopsticks ?? null;
   $: state = mode === 'solo' ? localState : serverState;
@@ -25,15 +33,22 @@
   $: canAct = state?.status === 'playing'
     && (mode === 'solo' ? state.activePlayer === 'p1' : state.activePlayer === playerId);
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks';
+  $: setMinigameSessionActive(
+    'chopsticks',
+    (mode === 'solo' || mode === 'multi') && !state?.departureNotice
+  );
+  $: if ((mode === 'solo' || mode === 'multi') && state?.status === 'playing') {
+    wagerArmed = true;
+  }
+  $: if (state?.status === 'finished' && wagerArmed && !wagerSettled) {
+    settleWager(wager, state.winner === playerId ? 'win' : 'loss');
+    wagerSettled = true;
+    wagerArmed = false;
+  }
   $: if (launchedFromStory && mode === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
     mode = 'instructions';
   }
-  $: if ($location !== 'chopsticks' && mode === 'multi') {
-    socket.emit('arcade:leave', 'chopsticks');
-    mode = 'menu';
-  }
-
   onDestroy(() => {
     if (mode === 'multi') {
       socket.emit('arcade:leave', 'chopsticks');
@@ -49,7 +64,7 @@
       players: { p1: { name: 'You' }, p2: { name: 'CPU' } },
       winner: null,
       log: [],
-      hands: { p1: [1, 1], p2: [1, 1] },
+      hands: { p1: [1, 1, 0, 0], p2: [1, 1, 0, 0] },
       activePlayer: 'p1',
       turn: 1
     };
@@ -61,6 +76,19 @@
   }
 
   function begin(): void {
+    if (helpReturnMode) {
+      closeHelp();
+      return;
+    }
+
+    showWager = true;
+  }
+
+  function confirmWager(event: CustomEvent<number>): void {
+    wager = event.detail;
+    wagerSettled = false;
+    wagerArmed = false;
+    showWager = false;
     selectedHand = null;
     error = '';
 
@@ -90,8 +118,13 @@
     selectedHand = null;
   }
 
-  function split(): void {
-    sendAction({ type: 'split' });
+  function redistribute(pattern: 'halves' | 'four-ones' = 'halves'): void {
+    if (selectedHand === null) {
+      error = 'Select a 2GB or 4GB RAM stick before redistributing.';
+      return;
+    }
+
+    sendAction({ type: 'redistribute', source: selectedHand, pattern });
     selectedHand = null;
   }
 
@@ -110,23 +143,39 @@
 
     const targetPlayer = actor === 'p1' ? 'p2' : 'p1';
 
-    if (action.type === 'split') {
+    if (action.type === 'redistribute') {
       const hands = localState.hands[actor];
-      const liveValue = hands.find((value: number) => value > 0);
+      const source = Number(action.source);
+      const sourceValue = hands[source];
+      const emptySlots = hands
+        .map((value: number, index: number) => value === 0 ? index : -1)
+        .filter((index: number) => index >= 0);
 
-      if (!hands.includes(0) || !liveValue || liveValue % 2 !== 0) {
-        error = 'Split requires one empty hand and an even live hand.';
+      if (![2, 4].includes(sourceValue) || emptySlots.length === 0) {
+        error = 'Redistribution requires a 2GB or 4GB live stick and an empty RAM slot.';
         return;
       }
 
-      localState.hands[actor] = [liveValue / 2, liveValue / 2];
-      addLog(`${localState.players[actor].name} splits into two equal hands.`);
+      if (sourceValue === 4 && action.pattern === 'four-ones') {
+        if (hands.filter((value: number) => value > 0).length !== 1 || emptySlots.length !== 3) {
+          error = 'Four-way redistribution requires one live 4GB stick and three empty slots.';
+          return;
+        }
+
+        localState.hands[actor] = [1, 1, 1, 1];
+        addLog(`${localState.players[actor].name} redistributed 4GB across four 1GB sticks.`);
+      } else {
+        const nextValue = sourceValue / 2;
+        hands[source] = nextValue;
+        hands[emptySlots[0]] = nextValue;
+        addLog(`${localState.players[actor].name} redistributed ${sourceValue}GB into two ${nextValue}GB sticks.`);
+      }
     } else {
       const source = Number(action.source);
       const target = Number(action.target);
       const nextValue = localState.hands[targetPlayer][target] + localState.hands[actor][source];
       localState.hands[targetPlayer][target] = nextValue >= 5 ? 0 : nextValue;
-      addLog(`${localState.players[actor].name} attacks the ${target === 0 ? 'left' : 'right'} hand.`);
+      addLog(`${localState.players[actor].name} overclocked RAM-${target + 1} by ${localState.hands[actor][source]}GB.`);
     }
 
     error = '';
@@ -148,10 +197,20 @@
 
   function cpuTurn(): void {
     const hands = localState.hands.p2;
-    const canSplit = hands.includes(0) && hands.some((value: number) => value > 0 && value % 2 === 0);
+    const redistributable = hands
+      .map((value: number, index: number) => [value, index])
+      .filter(([value]: number[]) => value === 2 || value === 4);
 
-    if (canSplit && Math.random() < 0.35) {
-      applyLocalAction('p2', { type: 'split' });
+    if (hands.includes(0) && redistributable.length > 0 && Math.random() < 0.35) {
+      const [value, source] = redistributable[Math.floor(Math.random() * redistributable.length)];
+      const fourOnes = value === 4
+        && hands.filter((candidate: number) => candidate > 0).length === 1
+        && Math.random() < 0.5;
+      applyLocalAction('p2', {
+        type: 'redistribute',
+        source,
+        pattern: fourOnes ? 'four-ones' : 'halves'
+      });
       return;
     }
 
@@ -212,13 +271,26 @@
     mode = 'menu';
   }
 
-  function splitAvailable(): boolean {
+  function redistributeAvailable(): boolean {
     if (!state) {
       return false;
     }
 
     const hands = state.hands[playerId];
-    return hands.includes(0) && hands.some((value: number) => value > 0 && value % 2 === 0);
+    return selectedHand !== null
+      && hands.includes(0)
+      && [2, 4].includes(hands[selectedHand]);
+  }
+
+  function fourWayAvailable(): boolean {
+    if (!state || selectedHand === null) {
+      return false;
+    }
+
+    const hands = state.hands[playerId];
+    return hands[selectedHand] === 4
+      && hands.filter((value: number) => value > 0).length === 1
+      && hands.filter((value: number) => value === 0).length === 3;
   }
 
   function addLog(message: string): void {
@@ -249,7 +321,7 @@
 
 <section class="chopsticks" class:hide={$location !== 'chopsticks'}>
   <header>
-    <span>DEJAVU://CHOPSTICKS</span>
+    <span>DEJAVU://OVERCLOCK</span>
     <div class="header-actions">
       {#if mode === 'solo' || mode === 'multi'}<button on:click={openHelp}>HOW TO PLAY</button><button on:click={restart}>RESET</button>{/if}
       <button class="exit" on:click={requestExit}>EXIT</button>
@@ -260,11 +332,25 @@
     <div class="backdrop"><section class="reset-confirm" role="alertdialog" aria-modal="true"><h2>{resetShouldExit ? 'Exit this multiplayer game?' : 'Reset this multiplayer game?'}</h2><p>The other player will be notified that the shared session ended.</p><div><button on:click={() => showResetConfirmation = false}>CANCEL</button><button class="exit" on:click={confirmMultiplayerReset}>{resetShouldExit ? 'EXIT GAME' : 'RESET GAME'}</button></div></section></div>
   {/if}
 
+  {#if showWager}
+    <div class="backdrop">
+      <WagerPanel
+        bind:wager
+        balance={$netRunnersGameState.p1.money}
+        accent="#55f09a"
+        title="FUND THE OVERCLOCK"
+        actionLabel="LOCK WAGER & BOOT"
+        on:confirm={confirmWager}
+        on:cancel={() => { showWager = false; mode = 'menu'; }}
+      />
+    </div>
+  {/if}
+
   {#if mode === 'menu'}
     <div class="menu">
-      <p>HAND-TO-HAND LOGIC DUEL</p>
-      <h1>CHOPSTICKS</h1>
-      <span>Transfer signals between hands. Zero both enemy channels to win.</span>
+      <p>MEMORY PRESSURE DUEL</p>
+      <h1>OVERCLOCK</h1>
+      <span>Push hostile RAM to 5GB and burn every active stick.</span>
       <div><button on:click={() => openInstructions('solo')}>1P VS CPU</button><button on:click={() => openInstructions('multi')}>1P VS 2P</button></div>
     </div>
   {:else if mode === 'instructions'}
@@ -273,13 +359,15 @@
         <button class="close" on:click={closeHelp} aria-label="Close">×</button>
         <div>
           <p>TACTICAL BRIEF</p>
-          <h2>Transfer the signal</h2>
+          <h2>Overload the rival rig</h2>
           <ul>
-            <li>Both players begin with one point on each hand.</li>
-            <li>Select one of your live hands, then an enemy live hand. Your points are added to theirs.</li>
-            <li>A hand that reaches five or more becomes zero and is eliminated. Values never wrap around.</li>
-            <li>If one hand is empty and the other contains an even value (2 or 4), you may spend your turn splitting it equally.</li>
-            <li>Eliminate both opposing hands to win.</li>
+            <li>Both rigs begin with two active 1GB RAM sticks and two empty slots.</li>
+            <li>Select one of your live sticks, then an enemy live stick. Your GB value is added to theirs.</li>
+            <li>A stick that reaches 5GB or more overloads and becomes an empty 0GB slot. Values never wrap around.</li>
+            <li>Select a 2GB stick and choose <strong>REDISTRIBUTE 1+1</strong> to divide it across itself and the first empty slot.</li>
+            <li>Select a 4GB stick and choose <strong>REDISTRIBUTE 2+2</strong>. It uses the first empty slot.</li>
+            <li>If a 4GB stick is your only live stick, all three other slots are empty, and you may instead choose <strong>REDISTRIBUTE 1+1+1+1</strong>.</li>
+            <li>Redistribution consumes the turn. Overload every opposing RAM stick to win.</li>
           </ul>
         </div>
         <button class="primary" on:click={() => helpReturnMode ? closeHelp() : begin()}>{helpReturnMode ? 'RETURN TO GAME' : 'BEGIN DUEL'}</button>
@@ -296,29 +384,36 @@
         <div class="hands">
           {#each state.hands[opponentId] as value, index}
             <button class:dead={value === 0} class:targetable={canAct && selectedHand !== null && value > 0} on:click={() => attack(index)}>
-              <span>{index === 0 ? 'LEFT' : 'RIGHT'}</span><strong>{value}</strong><i style={`--fingers: ${value}`}></i>
+              <span>RAM-{index + 1}</span><strong>{value}<small>GB</small></strong><i></i>
             </button>
           {/each}
         </div>
       </section>
 
-      <div class="divider">NETWORK DIVIDE</div>
+      <div class="divider">MEMORY BUS</div>
 
       <section class="player-zone self">
         <h2>{state.players[playerId].name}</h2>
         <div class="hands">
           {#each state.hands[playerId] as value, index}
             <button class:selected={selectedHand === index} class:dead={value === 0} disabled={!canAct || value === 0} on:click={() => selectOwnHand(index)}>
-              <span>{index === 0 ? 'LEFT' : 'RIGHT'}</span><strong>{value}</strong><i style={`--fingers: ${value}`}></i>
+              <span>RAM-{index + 1}</span><strong>{value}<small>GB</small></strong><i></i>
             </button>
           {/each}
         </div>
-        <button class="split" disabled={!canAct || !splitAvailable()} on:click={split}>SPLIT SIGNAL</button>
+        <div class="redistribute-controls">
+          <button disabled={!canAct || !redistributeAvailable()} on:click={() => redistribute('halves')}>
+            {selectedHand !== null && state.hands[playerId][selectedHand] === 4 ? 'REDISTRIBUTE 2+2' : 'REDISTRIBUTE 1+1'}
+          </button>
+          {#if fourWayAvailable()}
+            <button on:click={() => redistribute('four-ones')}>REDISTRIBUTE 1+1+1+1</button>
+          {/if}
+        </div>
       </section>
 
       {#if state.status === 'finished'}
         <section class:lost={state.winner !== playerId} class="result">
-          <p>{state.winner === playerId ? 'VICTORY' : 'SIGNALS SEVERED'}</p>
+          <p>{state.winner === playerId ? 'VICTORY' : 'MEMORY FAILURE'}</p>
           <h2>{winnerName(state)} WINS</h2>
           {#if waitingForStoryPartner}
             <p>Waiting for your partner to close the duel…</p>
@@ -490,26 +585,33 @@
   }
 
   .hands {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(105px, 150px));
     justify-content: center;
     gap: 16px;
 
     button {
-      width: 150px;
+      width: 100%;
       height: 120px;
+      clip-path: polygon(0 0, 88% 0, 100% 14%, 100% 86%, 88% 100%, 0 100%);
 
       display: grid;
       place-items: center;
 
       strong {
         font-size: 2.5rem;
+
+        small {
+          margin-left: 3px;
+          font-size: 0.7rem;
+        }
       }
 
       i {
-        width: calc(var(--fingers) * 18px);
-        height: 8px;
-        max-width: 84px;
-        background: repeating-linear-gradient(90deg, #55f09a 0 11px, transparent 11px 18px);
+        width: 76%;
+        height: 12px;
+        border: 1px solid currentColor;
+        box-shadow: inset 0 0 10px currentColor;
       }
     }
 
@@ -525,14 +627,32 @@
     }
   }
 
+  .opponent .hands button:not(.dead) {
+    color: #ff8396;
+    background: #26090f;
+    border-color: #df3e56;
+    box-shadow: inset 0 0 18px #df3e5626;
+  }
+
+  .self .hands button:not(.dead) {
+    color: #8affb8;
+    background: #071c11;
+    border-color: #55f09a;
+    box-shadow: inset 0 0 18px #55f09a26;
+  }
+
   .divider {
     color: #477a5e;
     text-align: center;
     letter-spacing: 3px;
   }
 
-  .split {
+  .redistribute-controls {
     margin-top: 12px;
+
+    display: flex;
+    justify-content: center;
+    gap: 8px;
   }
 
   .log {
@@ -576,5 +696,11 @@
   .error {
     color: #ff6b7a;
     text-align: center;
+  }
+
+  @media (max-width: 680px) {
+    .hands {
+      grid-template-columns: repeat(2, minmax(105px, 150px));
+    }
   }
 </style>

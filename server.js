@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createServer } from 'node:http';
@@ -185,6 +185,57 @@ app.get('/api/story-assets/images', async (_request, response) => {
     console.error('Could not list story images.', error);
     response.status(500).json({
       error: 'The story image library could not be loaded.'
+    });
+  }
+});
+
+app.delete('/api/story-assets/images/:fileName', async (request, response) => {
+  const fileName = String(request.params.fileName ?? '');
+
+  if (basename(fileName) !== fileName
+    || !/\.(avif|gif|jpe?g|png|svg|webp)$/i.test(fileName)) {
+    response.status(400).json({
+      error: 'Choose a valid image from the story asset library.'
+    });
+    return;
+  }
+
+  const assetPath = `/uploads/stories/${fileName}`;
+  const references = storyRepository.listStories()
+    .filter((story) => {
+      const document = storyRepository.getStory(story.id);
+      return document && JSON.stringify(document).includes(assetPath);
+    })
+    .map((story) => ({
+      id: story.id,
+      title: story.title
+    }));
+
+  if (references.length > 0 && request.query.confirm !== 'true') {
+    response.status(409).json({
+      error: 'This image is still referenced by one or more stories.',
+      requiresConfirmation: true,
+      references
+    });
+    return;
+  }
+
+  try {
+    await unlink(join(storyImageDirectory, fileName));
+    response.json({
+      ok: true,
+      path: assetPath,
+      references
+    });
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      response.status(404).json({ error: 'That image no longer exists.' });
+      return;
+    }
+
+    console.error('Could not delete a story image.', error);
+    response.status(500).json({
+      error: 'The image could not be deleted from the host.'
     });
   }
 });
@@ -829,8 +880,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('packet-war:delete-card', (cardId, acknowledge = () => {}) => {
-    const result = deletePacketWarCard(packetWarState, cardId);
+  socket.on('packet-war:delete-card', (request, acknowledge = () => {}) => {
+    const result = deletePacketWarCard(packetWarState, request);
     acknowledge(result);
 
     if (result.ok) {

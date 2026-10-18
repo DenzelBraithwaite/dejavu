@@ -5,6 +5,10 @@
   import { sessionState } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { settleWager } from '../game/wager';
+  import WagerPanel from './WagerPanel.svelte';
 
   const factions = [
     { id: 'purple', name: 'Purple Cougar', short: 'PC', image: '/purple_cougar.png' },
@@ -33,6 +37,10 @@
   let eventNotice = '';
   let eventTone: 'success' | 'danger' | 'neutral' = 'neutral';
   let lastAnnouncedLogId = '';
+  let showWager = false;
+  let wager = 0;
+  let wagerSettled = false;
+  let wagerArmed = false;
 
   $: serverState = $arcadeStates['lo-hi'] ?? null;
   $: state = mode === 'solo' ? localState : serverState;
@@ -42,13 +50,13 @@
     && state.players[playerId]?.state === 'active';
   $: liveFaction = factionFor(state?.currentCard?.suit);
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'lo-hi';
+  $: setMinigameSessionActive(
+    'lo-hi',
+    (mode === 'solo' || mode === 'multi') && !state?.departureNotice
+  );
   $: if (launchedFromStory && mode === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
     mode = 'instructions';
-  }
-  $: if ($location !== 'lo-hi' && mode === 'multi') {
-    socket.emit('arcade:leave', 'lo-hi');
-    mode = 'menu';
   }
   $: if (mode === 'multi' && state?.log?.[0]?.id && state.log[0].id !== lastAnnouncedLogId) {
     lastAnnouncedLogId = state.log[0].id;
@@ -57,6 +65,17 @@
       message.includes('missed') ? `${state.log[0].message.split(' missed')[0].toUpperCase()} BUSTED` : 'SIGNAL RESOLVED',
       message.includes('missed') ? 'danger' : 'success'
     );
+  }
+  $: if ((mode === 'solo' || mode === 'multi') && state?.status === 'playing') {
+    wagerArmed = true;
+  }
+  $: if (state?.status === 'finished' && wagerArmed && !wagerSettled) {
+    settleWager(
+      wager,
+      state.winner === 'tie' ? 'draw' : state.winner === playerId ? 'win' : 'loss'
+    );
+    wagerSettled = true;
+    wagerArmed = false;
   }
 
   onDestroy(() => {
@@ -96,6 +115,14 @@
     }
 
     error = '';
+    showWager = true;
+  }
+
+  function confirmWager(event: CustomEvent<number>): void {
+    wager = event.detail;
+    wagerSettled = false;
+    wagerArmed = false;
+    showWager = false;
 
     if (pendingMode === 'solo') {
       localState = createLocalState();
@@ -395,6 +422,20 @@
         <p>This severs the shared session. The other player will be notified.</p>
         <div><button type="button" on:click={() => showResetConfirmation = false}>CANCEL</button><button class="danger" type="button" on:click={confirmMultiplayerReset}>{resetShouldExit ? 'EXIT GAME' : 'RESET GAME'}</button></div>
       </section>
+    </div>
+  {/if}
+
+  {#if showWager}
+    <div class="modal-backdrop">
+      <WagerPanel
+        bind:wager
+        balance={$netRunnersGameState.p1.money}
+        accent="#ff63bf"
+        title="STAKE THE SIGNAL"
+        actionLabel="LOCK WAGER & DEAL"
+        on:confirm={confirmWager}
+        on:cancel={() => { showWager = false; mode = 'menu'; }}
+      />
     </div>
   {/if}
 

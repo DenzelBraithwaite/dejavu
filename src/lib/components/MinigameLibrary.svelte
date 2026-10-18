@@ -1,7 +1,16 @@
 <script lang="ts">
   import location from '../stores/location';
+  import { minigameSessions, type MinigameId } from '../stores/minigameSessions';
 
-  const minigames = [
+  const minigames: Array<{
+    id: MinigameId;
+    title: string;
+    description: string;
+    playerCount: number;
+    playerLabel?: string;
+    status: string;
+    artwork: string;
+  }> = [
     {
       id: 'netrunners',
       title: 'NetRunners',
@@ -30,7 +39,7 @@
     },
     {
       id: 'trace-race',
-      title: 'Trace Race',
+      title: 'TracerT',
       description: 'Hunt a hidden rival signal through a neon network before they trace you first.',
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
@@ -39,7 +48,7 @@
     },
     {
       id: 'packet-war',
-      title: 'Packet War',
+      title: 'Packettack',
       description: 'Deploy tactical programs in a runner duel or breach hostile BLACK ICE together.',
       playerCount: 2,
       status: 'READY',
@@ -56,7 +65,7 @@
     },
     {
       id: 'mastermind',
-      title: 'Mastermind',
+      title: 'Cipher',
       description: 'Crack a hidden four-digit cipher alone or race another codebreaker round by round.',
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
@@ -65,8 +74,8 @@
     },
     {
       id: 'chopsticks',
-      title: 'Chopsticks',
-      description: 'Transfer points between hands in a deceptively deep zero-graphics strategy duel.',
+      title: 'Overclock',
+      description: 'Overload enemy RAM sticks while redistributing your own memory across four slots.',
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
@@ -128,15 +137,24 @@
                 <span class="packet-deck packet-deck--hostile">ICE</span>
               </div>
             {:else}
-              <div class="arcade-glyph arcade-glyph--{minigame.artwork}">
-                {#if minigame.artwork === 'lo-hi'}
-                  <span>HI</span><strong>07</strong><span>LO</span>
-                {:else if minigame.artwork === 'mastermind'}
+              {#if minigame.artwork === 'lo-hi'}
+                <div class="lohi-preview">
+                  <span class="lohi-card lohi-card--left"><small>YM</small><strong>03</strong><img src="/yellow_monkey.png" alt=""></span>
+                  <span class="lohi-card lohi-card--center"><small>BE</small><strong>07</strong><img src="/blue_eagle.png" alt=""></span>
+                  <span class="lohi-card lohi-card--right"><small>PC</small><strong>10</strong><img src="/purple_cougar.png" alt=""></span>
+                </div>
+              {:else if minigame.artwork === 'chopsticks'}
+                <div class="ram-preview">
+                  <span><i></i><strong>1<small>GB</small></strong></span>
+                  <span><i></i><strong>2<small>GB</small></strong></span>
+                  <span class="hot"><i></i><strong>4<small>GB</small></strong></span>
+                  <span class="empty"><i></i><strong>0<small>GB</small></strong></span>
+                </div>
+              {:else}
+                <div class="arcade-glyph arcade-glyph--{minigame.artwork}">
                   <span>•</span><span>4</span><span>?</span><span>1</span>
-                {:else}
-                  <span>Ⅰ</span><span>Ⅱ</span><strong>VS</strong><span>Ⅳ</span><span>Ⅰ</span>
-                {/if}
-              </div>
+                </div>
+              {/if}
             {/if}
           </div>
           <div class="module-copy">
@@ -147,7 +165,7 @@
             <h2>{minigame.title}</h2>
             <p>{minigame.description}</p>
             <button type="button" on:click={() => location.set(minigame.id)}>
-              Launch minigame
+              {$minigameSessions[minigame.id]?.active ? 'Resume' : 'Launch'}
             </button>
           </div>
         </article>
@@ -506,6 +524,120 @@
   .arcade-glyph--chopsticks strong {
     min-width: 34px;
     color: #55f09a;
+  }
+
+  .lohi-preview {
+    position: relative;
+    width: 250px;
+    height: 150px;
+  }
+
+  .lohi-card {
+    position: absolute;
+    top: 12px;
+    left: 75px;
+    width: 100px;
+    height: 132px;
+    overflow: hidden;
+    color: #02fbfb;
+    background: #071521;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    box-shadow: 0 0 18px currentColor;
+
+    display: grid;
+    place-items: center;
+
+    small {
+      position: absolute;
+      top: 7px;
+      left: 8px;
+      font-size: 0.56rem;
+    }
+
+    strong {
+      position: relative;
+      z-index: 2;
+      font-size: 1.7rem;
+      text-shadow: 0 0 10px #020617;
+    }
+
+    img {
+      position: absolute;
+      inset: 26px 8px 8px;
+      width: calc(100% - 16px);
+      height: calc(100% - 34px);
+      object-fit: contain;
+      opacity: 0.68;
+    }
+
+    &--left {
+      left: 22px;
+      color: #f2d40e;
+      transform: rotate(-10deg);
+    }
+
+    &--center {
+      z-index: 2;
+      color: #27a7ff;
+    }
+
+    &--right {
+      left: 128px;
+      color: #b45cff;
+      transform: rotate(10deg);
+    }
+  }
+
+  .ram-preview {
+    width: 86%;
+
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 9px;
+
+    > span {
+      position: relative;
+      height: 116px;
+      color: #55f09a;
+      background: #071c11;
+      border: 2px solid currentColor;
+      clip-path: polygon(0 0, 84% 0, 100% 13%, 100% 87%, 84% 100%, 0 100%);
+      box-shadow: inset 0 0 16px #55f09a30;
+
+      display: grid;
+      place-items: center;
+
+      i {
+        position: absolute;
+        right: 8px;
+        bottom: 9px;
+        left: 8px;
+        height: 8px;
+        border: 1px solid currentColor;
+      }
+
+      strong {
+        font-size: 1.5rem;
+
+        small {
+          margin-left: 2px;
+          font-size: 0.5rem;
+        }
+      }
+
+      &.hot {
+        color: #ff697f;
+        background: #26090f;
+        box-shadow: inset 0 0 16px #ff697f35;
+      }
+
+      &.empty {
+        color: #64748b;
+        background: #0c1117;
+        border-style: dashed;
+      }
+    }
   }
 
   .packet-route {

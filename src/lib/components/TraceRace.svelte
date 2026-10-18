@@ -6,6 +6,10 @@
   import location from '../stores/location';
   import { sessionState, type PlayerId } from '../stores/session';
   import { traceRaceServerState } from '../stores/traceRaceSession';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { settleWager } from '../game/wager';
+  import WagerPanel from './WagerPanel.svelte';
 
   type Mode = 'menu' | 'singleplayer' | 'multiplayer';
   type ActionType = 'move' | 'trace' | 'ping' | 'scan' | 'tracker' | 'scramble';
@@ -39,6 +43,10 @@
   let traceSelection: number[] = [];
   let errorMessage = '';
   let showInstructions = false;
+  let showWager = false;
+  let wager = 0;
+  let wagerSettled = false;
+  let wagerArmed = false;
   let waitingForStoryPartner = false;
   let localStatus: 'playing' | 'finished' = 'playing';
   let localActivePlayer: 'player' | 'cpu' = 'player';
@@ -53,6 +61,8 @@
   let localTrackers: Tracker[] = [];
   let localTurn = 1;
   let localIntel: string[] = [];
+  let localPlayerLastMove: string | null = null;
+  let localCpuLastMove: string | null = null;
   let cpuTimer: number | undefined;
 
   $: playerId = $sessionState.playerId;
@@ -78,6 +88,14 @@
   $: displayedIntel = mode === 'singleplayer'
     ? localIntel
     : serverPlayer?.intel ?? [];
+  $: displayedPlayerLastMove = mode === 'singleplayer'
+    ? localPlayerLastMove
+    : serverPlayer?.lastMove ?? null;
+  $: displayedRivalLastMove = mode === 'singleplayer'
+    ? localCpuLastMove
+    : playerId && $traceRaceServerState
+      ? $traceRaceServerState.players[playerId === 'p1' ? 'p2' : 'p1'].lastMove
+      : null;
   $: isMyTurn = mode === 'singleplayer'
     ? localStatus === 'playing' && localActivePlayer === 'player'
     : $traceRaceServerState?.status === 'playing'
@@ -85,13 +103,23 @@
   $: winner = mode === 'singleplayer'
     ? localWinner
     : $traceRaceServerState?.winner ?? null;
+  $: setMinigameSessionActive(
+    'trace-race',
+    mode === 'singleplayer' || (joined && !$traceRaceServerState?.departureNotice)
+  );
+  $: if ((mode === 'singleplayer' && localStatus === 'playing')
+    || (mode === 'multiplayer' && $traceRaceServerState?.status === 'playing')) {
+    wagerArmed = true;
+  }
+  $: if (winner && wagerArmed && !wagerSettled) {
+    const didWin = winner === 'player' || winner === playerId;
+    settleWager(wager, didWin ? 'win' : 'loss');
+    wagerSettled = true;
+    wagerArmed = false;
+  }
 
   $: if (launchedFromStory && mode === 'menu') {
     selectMultiplayer();
-  }
-
-  $: if ($location !== 'trace-race' && joined) {
-    leaveMultiplayer(false);
   }
 
   onDestroy(() => {
@@ -120,6 +148,15 @@
     if (!pendingMode) {
       return;
     }
+
+    showWager = true;
+  }
+
+  function confirmWager(event: CustomEvent<number>): void {
+    wager = event.detail;
+    wagerSettled = false;
+    wagerArmed = false;
+    showWager = false;
 
     const nextMode = pendingMode;
     pendingMode = null;
@@ -157,6 +194,8 @@
     localExposureRevealPosition = null;
     localSearchRevealNodes = [];
     localTrackers = [];
+    localPlayerLastMove = null;
+    localCpuLastMove = null;
     localTurn = 1;
     resetTargeting();
     errorMessage = '';
@@ -256,6 +295,7 @@
 
       localPlayerPosition = target as number;
       localPlayerExposure = Math.max(0, localPlayerExposure - 1);
+      localPlayerLastMove = `MOVE · NODE ${formatNode(localPlayerPosition)} · EXPOSURE -1`;
       addLocalIntel(`TURN ${localTurn}: Relocated to NODE ${formatNode(localPlayerPosition)}.`);
     }
 
@@ -263,6 +303,7 @@
       localPlayerExposure = Math.min(9, localPlayerExposure + 2);
       const foundSignal = targets.includes(localCpuPosition);
       localSearchRevealNodes = foundSignal ? [...targets] : [];
+      localPlayerLastMove = foundSignal ? 'TRACE · POSITIVE' : 'TRACE · CLEAR';
       addLocalIntel(foundSignal
         ? `TURN ${localTurn}: TRACE POSITIVE. Rival signal is inside nodes ${formatNodeList(targets)}.`
         : `TURN ${localTurn}: TRACE CLEAR. Rival signal is not inside nodes ${formatNodeList(targets)}.`);
@@ -272,11 +313,13 @@
       if (target === localCpuPosition) {
         localStatus = 'finished';
         localWinner = 'player';
+        localPlayerLastMove = `PING · LOCKED NODE ${formatNode(localCpuPosition)}`;
         addLocalIntel(`PING LOCKED: Rival found at NODE ${formatNode(localCpuPosition)}.`);
         return;
       }
 
       localPlayerExposure = Math.min(9, localPlayerExposure + 3);
+      localPlayerLastMove = `PING · MISS NODE ${formatNode(target as number)}`;
       addLocalIntel(`TURN ${localTurn}: NODE ${formatNode(target as number)} was empty.`);
     }
 
@@ -284,6 +327,7 @@
       const nearby = shortestDistance(target as number, localCpuPosition) <= 2;
       localPlayerExposure = Math.min(9, localPlayerExposure + 1);
       localSearchRevealNodes = nearby ? nodesWithinDistance(target as number, 2) : [];
+      localPlayerLastMove = nearby ? 'SCAN · POSITIVE' : 'SCAN · CLEAR';
       addLocalIntel(nearby
         ? `TURN ${localTurn}: SCAN POSITIVE. Rival signal detected within 2 hops of NODE ${formatNode(target as number)}.`
         : `TURN ${localTurn}: SCAN CLEAR. No rival signal within 2 hops of NODE ${formatNode(target as number)}.`);
@@ -301,6 +345,7 @@
         alertedNodes: []
       };
       localTrackers = [...localTrackers, tracker];
+      localPlayerLastMove = `TRACKER · NODE ${formatNode(target as number)}`;
       localPlayerExposure = Math.min(9, localPlayerExposure + 1);
       addLocalIntel(`TURN ${localTurn}: TRACKER armed at NODE ${formatNode(target as number)}. Exposure +1.`);
       updateLocalTrackers();
@@ -308,6 +353,7 @@
 
     if (type === 'scramble') {
       localPlayerExposure = Math.max(0, localPlayerExposure - 3);
+      localPlayerLastMove = 'SCRAMBLE · EXPOSURE -3';
       addLocalIntel(`TURN ${localTurn}: Signal signature scrambled.`);
     }
 
@@ -329,19 +375,23 @@
       if (Math.random() < 0.7) {
         localStatus = 'finished';
         localWinner = 'cpu';
+        localCpuLastMove = 'PING · TARGET LOCKED';
         addLocalIntel(`PING BREACH: CPU located you at NODE ${formatNode(localPlayerPosition)}.`);
         return;
       }
 
       localCpuExposure = Math.min(9, localCpuExposure + 3);
+      localCpuLastMove = 'PING · MISS';
       addLocalIntel('RIVAL PING MISSED: The CPU searched an empty node.');
     } else if (Math.random() < 0.42) {
       localCpuExposure = Math.min(9, localCpuExposure + 2);
+      localCpuLastMove = 'TRACE · NETWORK SWEEP';
       addLocalIntel('HOSTILE TRACE: The CPU sampled your signal range.');
     } else {
       const options = neighborsOf(localCpuPosition);
       localCpuPosition = options[Math.floor(Math.random() * options.length)];
       localCpuExposure = Math.max(0, localCpuExposure - 1);
+      localCpuLastMove = 'MOVE · SIGNAL SHIFT · EXPOSURE -1';
       addLocalIntel('SIGNAL SHIFT: The CPU moved through the network.');
     }
 
@@ -624,7 +674,7 @@
 
 <section class="trace-race" class:hide={$location !== 'trace-race'} aria-labelledby="trace-race-title">
   <header>
-    <span>DEJAVU://TRACE_RACE</span>
+    <span>DEJAVU://TRACERT</span>
     <div>
       <button type="button" on:click={() => showInstructions = true}>HOW TO PLAY</button>
       <button type="button" on:click={() => launchedFromStory ? cancelStoryGame() : leaveMultiplayer()}>
@@ -643,7 +693,7 @@
       >
         <header class="instruction-header">
           <div>
-            <p class="eyebrow">TRACE RACE FIELD MANUAL</p>
+            <p class="eyebrow">TRACERT FIELD MANUAL</p>
             <h2 id="trace-instructions-title">Find them before they find you</h2>
           </div>
           <button type="button" aria-label="Close instructions" on:click={closeInstructions}>×</button>
@@ -676,10 +726,24 @@
     </div>
   {/if}
 
+  {#if showWager}
+    <div class="instructions-backdrop">
+      <WagerPanel
+        bind:wager
+        balance={$netRunnersGameState.p1.money}
+        accent="#35e7ff"
+        title="FUND THE TRACE"
+        actionLabel="LOCK WAGER & CONNECT"
+        on:confirm={confirmWager}
+        on:cancel={() => { showWager = false; pendingMode = null; }}
+      />
+    </div>
+  {/if}
+
   {#if mode === 'menu'}
     <div class="menu-screen">
       <p class="eyebrow">STEALTH PURSUIT PROTOCOL</p>
-      <h1 id="trace-race-title">TRACE<span>RACE</span></h1>
+      <h1 id="trace-race-title">TRACER<span>T</span></h1>
       <p>
         Move unseen, read the signal echoes, and identify the rival node before
         your own position burns through the grid.
@@ -698,9 +762,12 @@
   {:else if mode === 'multiplayer' && $traceRaceServerState?.status === 'waiting'}
     <div class="waiting-screen">
       <div class="radar-ring"></div>
-      <p class="eyebrow">AWAITING SECOND SIGNAL</p>
+      <p class="eyebrow">{$traceRaceServerState.departureNotice ? 'CONNECTION SEVERED' : 'AWAITING SECOND SIGNAL'}</p>
       <h1>{$traceRaceServerState.participantCount}/2</h1>
-      <p>Keep this terminal open while the other player enters Trace Race.</p>
+      <p>{$traceRaceServerState.departureNotice ?? 'Keep this terminal open while the other player enters TracerT.'}</p>
+      {#if $traceRaceServerState.departureNotice}
+        <button type="button" on:click={() => leaveMultiplayer(false)}>RETURN TO MAIN MENU</button>
+      {/if}
     </div>
   {:else}
     <div class="game-layout">
@@ -715,7 +782,7 @@
         <div class="game-heading">
           <div>
             <p class="eyebrow">NETWORK MAP · TURN {mode === 'singleplayer' ? localTurn : $traceRaceServerState?.turn}</p>
-            <h1 id="trace-race-title">TRACE<span>RACE</span></h1>
+          <h1 id="trace-race-title">TRACER<span>T</span></h1>
           </div>
           <div class="exposure">
             <span>EXPOSURE</span>
@@ -723,7 +790,7 @@
           </div>
         </div>
 
-        <div class="network-grid" aria-label="Trace Race network map">
+        <div class="network-grid" aria-label="TracerT network map">
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {#each links as link}
               <line
@@ -791,7 +858,7 @@
               {/if}
             </p>
             <div class="action-grid">
-              <button class:action-active={selectedAction === 'move'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('move')}>MOVE</button>
+              <button class:action-active={selectedAction === 'move'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('move')}>MOVE <small class="exposure-relief">−1</small></button>
               <button class:action-active={selectedAction === 'trace'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('trace')}>TRACE <small class="exposure-cost">+2</small></button>
               <button class:action-active={selectedAction === 'ping'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('ping')}>PING <small class="exposure-cost">+3</small></button>
               <button class:action-active={selectedAction === 'scan'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('scan')}>SCAN <small class="exposure-cost">+1</small></button>
@@ -812,6 +879,17 @@
         {#if errorMessage}
           <p class="error" role="alert">{errorMessage}</p>
         {/if}
+
+        <div class="last-moves" aria-live="polite">
+          <article>
+            <span>YOUR LAST MOVE</span>
+            <strong>{displayedPlayerLastMove ?? 'NO ACTION YET'}</strong>
+          </article>
+          <article class="rival">
+            <span>RIVAL LAST MOVE</span>
+            <strong>{displayedRivalLastMove ?? 'NO ACTION YET'}</strong>
+          </article>
+        </div>
 
         <div class="intel-feed" aria-live="polite">
           <p class="eyebrow">INTEL FEED</p>
@@ -1288,8 +1366,46 @@
 
   .action-card,
   .result-card,
+  .last-moves,
   .intel-feed {
     padding: 18px;
+  }
+
+  .last-moves {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+
+    article {
+      min-width: 0;
+      padding: 10px;
+      background: #06161a;
+      border: 1px solid #00d7eb66;
+
+      display: grid;
+      gap: 6px;
+
+      span {
+        color: #6e9aa3;
+        font-size: 0.58rem;
+        letter-spacing: 1.4px;
+      }
+
+      strong {
+        overflow-wrap: anywhere;
+        color: #7ef9ff;
+        font-size: 0.7rem;
+        line-height: 1.35;
+      }
+
+      &.rival {
+        border-color: #ff4e9b66;
+
+        strong {
+          color: #ff9fc7;
+        }
+      }
+    }
   }
 
   .result-card {
@@ -1420,7 +1536,7 @@
   }
 
   .intel-feed {
-    flex: 1;
+    max-height: 220px;
     overflow-y: auto;
 
     p:not(.eyebrow) {

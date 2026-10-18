@@ -5,6 +5,10 @@
   import { sessionState } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { settleWager } from '../game/wager';
+  import WagerPanel from './WagerPanel.svelte';
 
   type Attempt = {
     guess: string;
@@ -28,6 +32,10 @@
   let helpReturnMode: Mode | null = null;
   let showResetConfirmation = false;
   let resetShouldExit = false;
+  let showWager = false;
+  let wager = 0;
+  let wagerSettled = false;
+  let wagerArmed = false;
 
   $: state = $arcadeStates.mastermind ?? null;
   $: playerId = $sessionState.playerId ?? 'p1';
@@ -40,13 +48,32 @@
   $: waitingForRival = mode === 'multi' && Boolean(state?.pendingGuesses?.[playerId]);
   $: canSubmit = mode !== 'coop' || state?.activePlayer === playerId;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'mastermind';
+  $: setMinigameSessionActive(
+    'mastermind',
+    (mode === 'solo' || mode === 'multi' || mode === 'coop') && !state?.departureNotice
+  );
   $: if (launchedFromStory && mode === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
     mode = 'instructions';
   }
-  $: if ($location !== 'mastermind' && (mode === 'multi' || mode === 'coop')) {
-    socket.emit('arcade:leave', 'mastermind');
-    mode = 'menu';
+  $: if ((mode === 'solo' && !localFinished && !localFailed)
+    || ((mode === 'multi' || mode === 'coop') && state?.status === 'playing')) {
+    wagerArmed = true;
+  }
+  $: if (!wagerSettled && wagerArmed && mode === 'solo' && (localFinished || localFailed)) {
+    settleWager(wager, localFinished ? 'win' : 'loss');
+    wagerSettled = true;
+    wagerArmed = false;
+  }
+  $: if (!wagerSettled && wagerArmed && mode !== 'solo' && state?.status === 'finished') {
+    settleWager(
+      wager,
+      state.winner === playerId || state.winner === 'players' || state.winner === 'tie'
+        ? 'win'
+        : 'loss'
+    );
+    wagerSettled = true;
+    wagerArmed = false;
   }
 
   onDestroy(() => {
@@ -67,6 +94,14 @@
       return;
     }
 
+    showWager = true;
+  }
+
+  function confirmWager(event: CustomEvent<number>): void {
+    wager = event.detail;
+    wagerSettled = false;
+    wagerArmed = false;
+    showWager = false;
     resetLocal();
 
     if (pendingMode === 'solo') {
@@ -240,7 +275,7 @@
 
 <section class="mastermind" class:hide={$location !== 'mastermind'}>
   <header>
-    <span>DEJAVU://MASTERMIND</span>
+    <span>DEJAVU://CIPHER</span>
     <div class="header-actions">
       {#if ['solo', 'multi', 'coop'].includes(mode)}
         <button type="button" on:click={openHelp}>HOW TO PLAY</button>
@@ -260,10 +295,24 @@
     </div>
   {/if}
 
+  {#if showWager}
+    <div class="backdrop">
+      <WagerPanel
+        bind:wager
+        balance={$netRunnersGameState.p1.money}
+        accent="#b37cff"
+        title="BACK THE DECRYPT"
+        actionLabel="LOCK WAGER & DECRYPT"
+        on:confirm={confirmWager}
+        on:cancel={() => { showWager = false; mode = 'menu'; }}
+      />
+    </div>
+  {/if}
+
   {#if mode === 'menu'}
     <div class="menu">
       <p>CODEBREAKER MODULE</p>
-      <h1>MASTERMIND</h1>
+      <h1>CIPHER</h1>
       <span>Break the four-digit cipher. Every digit is between 1 and 6.</span>
       <div><button on:click={() => openInstructions('solo')}>1P CODEBREAK</button><button on:click={() => openInstructions('multi')}>1P VS 2P</button><button on:click={() => openInstructions('coop')}>CO-OP CODEBREAK</button></div>
     </div>
@@ -272,7 +321,7 @@
       <section class="instructions">
         <button class="close" on:click={closeHelp} aria-label="Close">×</button>
         <div>
-          <p>CODEBREAKER BRIEF</p>
+          <p>CIPHER BRIEF</p>
           <h2>Crack the sequence</h2>
           <ul>
             <li>The hidden code contains four digits. Each is between 1 and 6, and digits may repeat.</li>

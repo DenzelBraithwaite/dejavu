@@ -9,10 +9,12 @@
   import { netRunnersServerState } from '../stores/netRunnersSession';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { socket } from '../socket';
 
   // Components
   import { NetRunnersCard, PlayerGamblingCard } from './';
+  import WagerPanel from './WagerPanel.svelte';
 
   const automaticDrawDelayMs = 2000;
   let automaticDrawTimer: number | undefined;
@@ -25,6 +27,7 @@
   $: multiplayerRematchVote = $sessionState.playerId && $netRunnersServerState
     ? $netRunnersServerState.rematchVotes[$sessionState.playerId]
     : null;
+  $: setMinigameSessionActive('netrunners', !$netRunnersGameState.menuVisible);
 
   $: if (!$netRunnersGameState.singleplayer && $netRunnersServerState) {
     synchronizeMultiplayerState();
@@ -47,6 +50,25 @@
     hideGameMenu();
     showColorSelectScreen();
     showColorOddsCards();
+  }
+
+  function confirmSharedWager(event: CustomEvent<number>): void {
+    netRunnersGameState.update((state) => ({
+      ...state,
+      p1: {
+        ...state.p1,
+        amountBet: event.detail
+      }
+    }));
+    placeBet();
+  }
+
+  function cancelSharedWager(): void {
+    if (!$netRunnersGameState.singleplayer) {
+      socket.emit('netrunners:leave');
+    }
+
+    resetGame();
   }
 
   // Ends game
@@ -802,36 +824,19 @@
         </div>
 
         <div class="netrunner-bet-screen" class:hide={!$netRunnersGameState.betSelectVisible}>
-          <div class="netrunner-bet-panel">
-            <p class="netrunner-bet-label">NETRUNNER EXCHANGE&gt; PLACE YOUR BET</p>
+          <div>
             <p class="netrunner-bet-context">
               Wagering on <strong class="color-{$netRunnersGameState.p1.colorBet}">{$netRunnersGameState.p1.colorBet}</strong> faction.
             </p>
-
-            <div class="netrunner-bet-display" aria-live="polite">
-              <span>WAGER</span>
-              <strong>{$netRunnersGameState.p1.amountBet}₭</strong>
-              <small>AVAILABLE {$netRunnersGameState.p1.money}₭</small>
-            </div>
-
-            <div class="netrunner-bet-controls" aria-label="Adjust wager">
-              <button type="button" on:click={() => updateBetAmount(-1000)}>-1000</button>
-              <button type="button" on:click={() => updateBetAmount(-100)}>-100</button>
-              <button type="button" on:click={() => updateBetAmount(-10)}>-10</button>
-              <button type="button" on:click={() => updateBetAmount(-1)}>-1</button>
-              <button type="button" on:click={() => updateBetAmount(1)}>+1</button>
-              <button type="button" on:click={() => updateBetAmount(10)}>+10</button>
-              <button type="button" on:click={() => updateBetAmount(100)}>+100</button>
-              <button type="button" on:click={() => updateBetAmount(1000)}>+1000</button>
-            </div>
-
-            <button
-              type="button"
-              class="netrunner-lock-bet"
-              on:click={placeBet}
-            >
-              LOCK BET
-            </button>
+            <WagerPanel
+              wager={$netRunnersGameState.p1.amountBet}
+              balance={$netRunnersGameState.p1.money}
+              accent="#b45cff"
+              title="NETRUNNER EXCHANGE"
+              actionLabel="LOCK BET"
+              on:confirm={confirmSharedWager}
+              on:cancel={cancelSharedWager}
+            />
           </div>
         </div>
 

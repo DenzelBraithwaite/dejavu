@@ -6,6 +6,8 @@
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { pigzServerState } from '../stores/pigzSession';
   import { sessionState } from '../stores/session';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import WagerPanel from './WagerPanel.svelte';
 
   type Mode = 'singleplayer' | 'multiplayer';
   type LocalPhase = 'menu' | 'betting' | 'playing' | 'finished';
@@ -77,14 +79,16 @@
   $: multiplayerRematchVote = playerId && $pigzServerState
     ? $pigzServerState.rematchVotes[playerId]
     : null;
+  $: setMinigameSessionActive(
+    'pigz',
+    mode === 'singleplayer'
+      ? localPhase !== 'menu'
+      : multiplayerJoined && !$pigzServerState?.departureNotice
+  );
 
   $: if (launchedFromStory && mode !== 'multiplayer') {
     mode = 'multiplayer';
     joinMultiplayer();
-  }
-
-  $: if ($location !== 'pigz' && multiplayerJoined) {
-    leaveMultiplayer(false);
   }
 
   $: if (mode === 'multiplayer' && $pigzServerState) {
@@ -173,6 +177,19 @@
     socket.emit('pigz:bet', wager, handleActionResult);
   }
 
+  function confirmSharedWager(event: CustomEvent<number>): void {
+    wager = event.detail;
+    lockWager();
+  }
+
+  function cancelSharedWager(): void {
+    if (mode === 'multiplayer') {
+      leaveMultiplayer(false);
+    }
+
+    returnToPigzMenu();
+  }
+
   function rollDice(): void {
     if (!isLocalTurn || rolling) {
       return;
@@ -242,7 +259,9 @@
       return;
     }
 
-    if (localCurrentPoints >= 20) {
+    const canWinNow = localScores[1] + localCurrentPoints >= winningScore;
+
+    if (canWinNow || localCurrentPoints >= 20) {
       bankLocalPoints();
       return;
     }
@@ -458,28 +477,16 @@
           <h2>Waiting for the other wager</h2>
         </div>
       {:else}
-        <div class="wager-panel panel">
-          <p class="terminal-label">PIGZ EXCHANGE&gt; PLACE YOUR BET</p>
-          <p>Even money. A free 0₭ wager awards 100₭ on a win and costs nothing on a loss.</p>
-
-          <div class="wager-display" aria-live="polite">
-            <span>WAGER</span>
-            <strong>{wager}₭</strong>
-            <small>AVAILABLE {activeBalance}₭</small>
-          </div>
-
-          <div class="wager-controls" aria-label="Adjust wager">
-            <button type="button" on:click={() => updateWager(-1000)}>-1000</button>
-            <button type="button" on:click={() => updateWager(-100)}>-100</button>
-            <button type="button" on:click={() => updateWager(-10)}>-10</button>
-            <button type="button" on:click={() => updateWager(-1)}>-1</button>
-            <button type="button" on:click={() => updateWager(1)}>+1</button>
-            <button type="button" on:click={() => updateWager(10)}>+10</button>
-            <button type="button" on:click={() => updateWager(100)}>+100</button>
-            <button type="button" on:click={() => updateWager(1000)}>+1000</button>
-          </div>
-
-          <button class="lock-button" type="button" on:click={lockWager}>LOCK BET</button>
+        <div class="wager-panel">
+          <WagerPanel
+            bind:wager
+            balance={activeBalance}
+            accent="#ff4db8"
+            title="PIGZ EXCHANGE"
+            actionLabel="LOCK BET"
+            on:confirm={confirmSharedWager}
+            on:cancel={cancelSharedWager}
+          />
         </div>
       {/if}
     {:else}
@@ -829,8 +836,7 @@
     }
   }
 
-  .primary-button,
-  .lock-button {
+  .primary-button {
     color: $background;
     background: $hotPink;
     box-shadow: 0 0 20px #ff75fd55;
@@ -862,42 +868,6 @@
     font-size: clamp(2.8rem, 8vw, 5rem);
     font-weight: 900;
     text-shadow: 0 0 22px #ff75fd88;
-  }
-
-  .wager-display {
-    margin: 26px 0 18px;
-    padding: 22px;
-    background: #09040d;
-    border: 1px solid $violet;
-    text-align: center;
-
-    display: grid;
-    gap: 8px;
-
-    span,
-    small {
-      color: #a78aaa;
-      font-size: 0.68rem;
-      letter-spacing: 2px;
-    }
-
-    strong {
-      color: $hotPink;
-      font-family: "Orbitron", "Space Mono", sans-serif;
-      font-size: clamp(2rem, 5vw, 3.5rem);
-      text-shadow: 0 0 16px #ff75fd77;
-    }
-  }
-
-  .wager-controls {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-  }
-
-  .lock-button {
-    width: 100%;
-    margin-top: 16px;
   }
 
   .game-board {
@@ -1092,10 +1062,6 @@
   }
 
   @media (max-width: 560px) {
-    .wager-controls {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
     .game-board {
       grid-template-columns: 1fr;
     }

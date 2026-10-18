@@ -527,9 +527,15 @@ defineScene({
 })
 ```
 
-For multiplayer stories, the runtime waits until both players launch the node and opens the selected module on both clients. Solo stories require only the owning player. NetRunners, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for the required completion signals before returning to the connected story destination. Available IDs are `netrunners`, `billywig`, `pigz`, `trace-race`, `packet-war`, `lo-hi`, `mastermind`, and `chopsticks`. New minigames must provide their own result IDs and server-owned completion handling.
+For multiplayer stories, the runtime waits until both players launch the node and opens the selected module on both clients. Solo stories require only the owning player. NetRunners, Pigz, TracerT, Packettack, Lo-Hi, Cipher, and Overclock resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for the required completion signals before returning to the connected story destination. The stable internal IDs remain `netrunners`, `billywig`, `pigz`, `trace-race`, `packet-war`, `lo-hi`, `mastermind`, and `chopsticks` for save compatibility. New minigames must provide their own result IDs and server-owned completion handling.
 
-Packet War card definitions are server-owned. The in-game card library edits built-in cards, creates custom runner or BLACK ICE cards, and writes runtime customizations to `data/packet-war-cards.json`. This file is intentionally ignored by Git so each installation can maintain its own card set. A card can contain up to three effects; deck `quantity` acts as its weighted draw frequency.
+Packettack card definitions are server-owned. The in-game card library edits built-in cards, creates custom runner or BLACK ICE cards, and writes runtime customizations to `data/packet-war-cards.json`. This file is intentionally ignored by Git so each installation can maintain its own card set. A card can contain up to three effects; deck `quantity` acts as its weighted draw frequency.
+
+Runner and BLACK ICE cards live in separate libraries. New cards are created only in the active library tab; create a separate card in each tab when both sides need similar behavior. BLACK ICE-only effects such as ally-telemetry blindness are available only in the BLACK ICE editor.
+
+All installed modules render `WagerPanel.svelte`, while `game/wager.ts` applies the standard local payout rule used by newer modules: a paid win earns the wager, a loss removes it, a draw leaves the balance unchanged, and a winning 0₭ wager awards 100₭. `stores/minigameSessions.ts` records whether each mounted module is resumable so the library can present **Launch** or **Resume** without coupling the catalog to eight separate game-state shapes.
+
+Story image assets are served from `public/uploads/stories`. `GET /api/story-assets/images` lists supported images, `POST` uploads them, and `DELETE /api/story-assets/images/:fileName` removes them. A referenced asset returns HTTP 409 with the referencing story IDs and titles until the request is repeated with `?confirm=true`; deletion intentionally does not rewrite story nodes, so designers can decide how to replace the missing reference.
 
 ## Typewriter configuration
 

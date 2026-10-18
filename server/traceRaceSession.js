@@ -23,6 +23,7 @@ export function createTraceRaceState() {
     },
     activePlayer: 'p1',
     winner: null,
+    departureNotice: null,
     turn: 1,
     rematchVotes: {
       p1: null,
@@ -40,7 +41,8 @@ function createPlayer(name) {
     exposureRevealPosition: null,
     searchRevealNodes: [],
     trackers: [],
-    intel: []
+    intel: [],
+    lastMove: null
   };
 }
 
@@ -58,9 +60,13 @@ export function joinTraceRace(state, playerId, playerName) {
 }
 
 export function leaveTraceRace(state, playerId) {
+  const sessionWasActive = ['playing', 'finished'].includes(state.status);
   state.participants[playerId] = false;
   resetRound(state);
   state.status = countParticipants(state) > 0 ? 'waiting' : 'menu';
+  state.departureNotice = sessionWasActive && countParticipants(state) > 0
+    ? `${state.players[playerId].name} left the trace. This session cannot be resumed.`
+    : null;
 }
 
 export function performTraceRaceAction(state, playerId, action) {
@@ -83,6 +89,7 @@ export function performTraceRaceAction(state, playerId, action) {
 
       player.position = target;
       player.exposure = Math.max(0, player.exposure - 1);
+      player.lastMove = `MOVE · NODE ${formatNode(target)} · EXPOSURE -1`;
       addIntel(player, `TURN ${state.turn}: Relocated to NODE ${formatNode(target)}.`);
       addIntel(opponent, `TURN ${state.turn}: Rival signal shifted through the grid.`);
       break;
@@ -99,6 +106,7 @@ export function performTraceRaceAction(state, playerId, action) {
       player.exposure = Math.min(9, player.exposure + 2);
       const foundSignal = targets.includes(opponent.position);
       player.searchRevealNodes = foundSignal ? [...targets] : [];
+      player.lastMove = foundSignal ? 'TRACE · POSITIVE' : 'TRACE · CLEAR';
       addIntel(player, foundSignal
         ? `TURN ${state.turn}: TRACE POSITIVE. Rival signal is inside nodes ${formatNodeList(targets)}.`
         : `TURN ${state.turn}: TRACE CLEAR. Rival signal is not inside nodes ${formatNodeList(targets)}.`);
@@ -111,6 +119,7 @@ export function performTraceRaceAction(state, playerId, action) {
       }
 
       if (target === opponent.position) {
+        player.lastMove = `PING · LOCKED NODE ${formatNode(target)}`;
         state.status = 'finished';
         state.winner = playerId;
         addIntel(player, `PING LOCKED: Rival found at NODE ${formatNode(target)}.`);
@@ -119,6 +128,7 @@ export function performTraceRaceAction(state, playerId, action) {
       }
 
       player.exposure = Math.min(9, player.exposure + 3);
+      player.lastMove = `PING · MISS NODE ${formatNode(target)}`;
       addIntel(player, `TURN ${state.turn}: NODE ${formatNode(target)} was empty.`);
       addIntel(opponent, `TURN ${state.turn}: Rival searched NODE ${formatNode(target)} and missed.`);
       break;
@@ -131,6 +141,7 @@ export function performTraceRaceAction(state, playerId, action) {
       const nearby = shortestDistance(target, opponent.position) <= 2;
       player.exposure = Math.min(9, player.exposure + 1);
       player.searchRevealNodes = nearby ? nodesWithinDistance(target, 2) : [];
+      player.lastMove = nearby ? 'SCAN · POSITIVE' : 'SCAN · CLEAR';
       addIntel(player, nearby
         ? `TURN ${state.turn}: SCAN POSITIVE. Rival signal detected within 2 hops of NODE ${formatNode(target)}.`
         : `TURN ${state.turn}: SCAN CLEAR. No rival signal within 2 hops of NODE ${formatNode(target)}.`);
@@ -152,6 +163,7 @@ export function performTraceRaceAction(state, playerId, action) {
         alertedNodes: []
       };
       player.trackers.push(tracker);
+      player.lastMove = `TRACKER · NODE ${formatNode(target)}`;
       player.exposure = Math.min(9, player.exposure + 1);
       addIntel(player, `TURN ${state.turn}: TRACKER armed at NODE ${formatNode(target)}. Exposure +1.`);
 
@@ -163,6 +175,7 @@ export function performTraceRaceAction(state, playerId, action) {
     }
     case 'scramble': {
       player.exposure = Math.max(0, player.exposure - 3);
+      player.lastMove = 'SCRAMBLE · EXPOSURE -3';
       addIntel(player, `TURN ${state.turn}: Signal signature scrambled.`);
       addIntel(opponent, `TURN ${state.turn}: Rival signal dissolved into network noise.`);
       break;
@@ -213,6 +226,7 @@ export function getTraceRaceSnapshot(state, viewerId) {
 
 function startRound(state) {
   resetRound(state);
+  state.departureNotice = null;
   state.status = 'playing';
   const firstPosition = randomInteger(0, NODE_COUNT - 1);
   let secondPosition = randomInteger(0, NODE_COUNT - 1);
@@ -244,6 +258,7 @@ function resetRound(state) {
     player.searchRevealNodes = [];
     player.trackers = [];
     player.intel = [];
+    player.lastMove = null;
   }
 }
 

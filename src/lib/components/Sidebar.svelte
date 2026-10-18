@@ -44,7 +44,7 @@
     <span slot="description">Browse coded game modules</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'mint'} iconType={'player'}>
+  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'green'} iconType={'player'}>
     <span slot="title">Character</span>
     <span slot="description">Check your stats</span>
   </Item>

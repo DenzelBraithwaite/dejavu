@@ -4,6 +4,8 @@
   import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import WagerPanel from './WagerPanel.svelte';
 
   type Phase = 'menu' | 'tutorial' | 'betting' | 'playing' | 'result';
   type Outcome = 'bust' | 'perfect' | 'six-card' | 'win' | 'loss' | 'tie';
@@ -67,6 +69,7 @@
   $: balance = $netRunnersGameState.p1.money;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'billywig';
   $: playerName = $localPlayer?.name ?? 'PLAYER';
+  $: setMinigameSessionActive('billywig', phase !== 'menu');
 
   function openBetting(): void {
     resetRound();
@@ -99,6 +102,11 @@
 
     phase = 'playing';
     statusLine = 'Tilda locks your wager into the table. Draw when ready.';
+  }
+
+  function handleBetConfirm(event: CustomEvent<number>): void {
+    bet = event.detail;
+    confirmBet();
   }
 
   function drawCard(): void {
@@ -291,26 +299,17 @@
         <button type="button" on:click={() => phase = 'menu'}>BACK</button>
       </div>
     {:else if phase === 'betting'}
-      <div class="betting panel">
-        <p class="speaker">TILDA&gt; PLACE YOUR BET</p>
+      <div class="betting">
         <p class="tip"><strong>TIP:</strong> {tip}</p>
-        <div class="bet-display" aria-live="polite">
-          <span>WAGER</span>
-          <strong>{bet}₭</strong>
-          <small>AVAILABLE {balance}₭</small>
-        </div>
-        <div class="bet-controls" aria-label="Adjust wager">
-          <button type="button" on:click={() => updateBet(-100)}>-100</button>
-          <button type="button" on:click={() => updateBet(-10)}>-10</button>
-          <button type="button" on:click={() => updateBet(-1)}>-1</button>
-          <button type="button" on:click={() => updateBet(1)}>+1</button>
-          <button type="button" on:click={() => updateBet(10)}>+10</button>
-          <button type="button" on:click={() => updateBet(100)}>+100</button>
-        </div>
-        <div class="button-row">
-          <button class="primary-button" type="button" on:click={confirmBet}>LOCK BET</button>
-          <button type="button" on:click={() => phase = 'menu'}>CANCEL</button>
-        </div>
+        <WagerPanel
+          bind:wager={bet}
+          balance={balance}
+          accent="#2ce4ff"
+          title="TILDA // PLACE YOUR BET"
+          actionLabel="LOCK BET"
+          on:confirm={handleBetConfirm}
+          on:cancel={() => phase = 'menu'}
+        />
       </div>
     {:else if phase === 'result' && result}
       <div class="result-stage result-stage--{result.outcome}" aria-live="polite">

@@ -10,6 +10,7 @@ export type PacketProgram = {
   quantity: number;
   builtIn: boolean;
   boss?: boolean;
+  availability?: 'runner' | 'boss';
   multiplayerOnly?: boolean;
   retainTurn?: boolean;
   effects: Array<{
@@ -55,6 +56,7 @@ export type PacketWarState = {
   activePlayer: PlayerId;
   round: number;
   winner: PlayerId | 'players' | 'breach' | null;
+  departureNotice: string | null;
   log: PacketWarLogEntry[];
   eventSequence: number;
   lastProgram: PacketWarLogEntry | null;

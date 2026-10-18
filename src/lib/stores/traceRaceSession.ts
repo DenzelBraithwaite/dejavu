@@ -14,6 +14,7 @@ export type TraceRacePlayer = {
     alertedNodes: number[];
   }>;
   intel: string[];
+  lastMove: string | null;
 };
 
 export type TraceRaceState = {
@@ -24,6 +25,7 @@ export type TraceRaceState = {
   players: Record<PlayerId, TraceRacePlayer>;
   activePlayer: PlayerId;
   winner: PlayerId | null;
+  departureNotice: string | null;
   turn: number;
   rematchVotes: Record<PlayerId, boolean | null>;
   networkLinks: [number, number][];

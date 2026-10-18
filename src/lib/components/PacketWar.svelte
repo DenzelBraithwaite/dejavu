@@ -6,6 +6,10 @@
   import location from '../stores/location';
   import { packetWarServerState } from '../stores/packetWarSession';
   import { sessionState, type PlayerId } from '../stores/session';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
+  import { settleWager } from '../game/wager';
+  import WagerPanel from './WagerPanel.svelte';
 
   type GameMode = 'duel' | 'coop';
 
@@ -15,6 +19,10 @@
   let errorMessage = '';
   let waitingForStoryPartner = false;
   let showInstructions = false;
+  let showWager = false;
+  let wager = 0;
+  let wagerSettled = false;
+  let wagerArmed = false;
   let libraryOpen = false;
   let librarySide: 'runner' | 'boss' = 'runner';
   let editingCard: Record<string, any> | null = null;
@@ -36,9 +44,17 @@
   $: localPlayerWon = $packetWarServerState?.mode === 'coop'
     ? $packetWarServerState?.winner === 'players'
     : $packetWarServerState?.winner === playerId;
-
-  $: if ($location !== 'packet-war' && joined) {
-    leaveGame(false);
+  $: setMinigameSessionActive(
+    'packet-war',
+    joined && !$packetWarServerState?.departureNotice
+  );
+  $: if (joined && $packetWarServerState?.status === 'playing') {
+    wagerArmed = true;
+  }
+  $: if ($packetWarServerState?.status === 'finished' && wagerArmed && !wagerSettled) {
+    settleWager(wager, localPlayerWon ? 'win' : 'loss');
+    wagerSettled = true;
+    wagerArmed = false;
   }
 
   onDestroy(() => {
@@ -61,6 +77,15 @@
       return;
     }
 
+    showWager = true;
+  }
+
+  function confirmWager(event: CustomEvent<number>): void {
+    wager = event.detail;
+    wagerSettled = false;
+    wagerArmed = false;
+    showWager = false;
+
     const mode = pendingMode;
     pendingMode = null;
     selectedMode = mode;
@@ -69,7 +94,7 @@
       if (!result.ok) {
         joined = false;
         selectedMode = null;
-        errorMessage = result.error ?? 'Could not join Packet War.';
+        errorMessage = result.error ?? 'Could not join Packettack.';
       }
     });
   }
@@ -175,6 +200,7 @@
   }
 
   function createCard(): void {
+    const availability = librarySide === 'boss' ? 'boss' : 'runner';
     editingCard = {
       id: '',
       name: '',
@@ -182,19 +208,46 @@
       description: '',
       color: 'cyan',
       quantity: 1,
-      boss: librarySide === 'boss',
+      boss: availability === 'boss',
+      availability,
       multiplayerOnly: false,
-      effects: [emptyEffect()]
+      effects: [{
+        ...emptyEffect(),
+        target: availability === 'boss' ? 'players' : 'enemy'
+      }]
     };
   }
 
   function editCard(card: Record<string, any>): void {
     editingCard = structuredClone(card);
+    editingCard.availability = librarySide;
+    editingCard.boss = librarySide === 'boss';
+    editingCard.effects = editingCard.effects.map((effect: Record<string, any>) => {
+      if (librarySide === 'boss') {
+        return {
+          ...effect,
+          target: ['self', 'players'].includes(effect.target)
+            ? effect.target
+            : 'players'
+        };
+      }
+
+      return {
+        ...effect,
+        type: effect.type === 'blind' ? 'damage' : effect.type,
+        target: ['self', 'ally', 'both-allies', 'enemy'].includes(effect.target)
+          ? effect.target
+          : 'enemy'
+      };
+    });
   }
 
   function addEffect(): void {
     if (editingCard && editingCard.effects.length < 3) {
-      editingCard.effects = [...editingCard.effects, emptyEffect()];
+      editingCard.effects = [...editingCard.effects, {
+        ...emptyEffect(),
+        target: librarySide === 'boss' ? 'players' : 'enemy'
+      }];
     }
   }
 
@@ -219,11 +272,14 @@
   }
 
   function deleteCard(card: Record<string, any>): void {
-    socket.emit('packet-war:delete-card', card.id, handleActionResult);
+    socket.emit('packet-war:delete-card', {
+      cardId: card.id,
+      librarySide
+    }, handleActionResult);
   }
 
-  function visibleLibraryCards(): Record<string, any>[] {
-    const library = librarySide === 'boss'
+  function visibleLibraryCards(side: 'runner' | 'boss'): Record<string, any>[] {
+    const library = side === 'boss'
       ? $packetWarServerState?.bossLibrary
       : $packetWarServerState?.cardLibrary;
 
@@ -255,7 +311,7 @@
 
 <section class="packet-war" class:hide={$location !== 'packet-war'} aria-labelledby="packet-war-title">
   <header>
-    <span>DEJAVU://PACKET_WAR</span>
+    <span>DEJAVU://PACKETTACK</span>
     <div>
       <button type="button" on:click={() => showInstructions = true}>HOW TO PLAY</button>
       <button type="button" on:click={() => launchedFromStory ? cancelStoryGame() : leaveGame()}>
@@ -274,7 +330,7 @@
       >
         <header class="instruction-header">
           <div>
-            <p class="eyebrow">PACKET WAR FIELD MANUAL</p>
+            <p class="eyebrow">PACKETTACK FIELD MANUAL</p>
             <h2 id="packet-instructions-title">Break their integrity</h2>
           </div>
           <button type="button" aria-label="Close instructions" on:click={closeInstructions}>×</button>
@@ -333,6 +389,20 @@
     </div>
   {/if}
 
+  {#if showWager}
+    <div class="instructions-backdrop">
+      <WagerPanel
+        bind:wager
+        balance={$netRunnersGameState.p1.money}
+        accent="#5cf6a5"
+        title="FUND THE ATTACK"
+        actionLabel="LOCK WAGER & CONNECT"
+        on:confirm={confirmWager}
+        on:cancel={() => { showWager = false; pendingMode = null; }}
+      />
+    </div>
+  {/if}
+
   {#if libraryOpen}
     <div class="card-library">
       <div class="library-heading">
@@ -352,15 +422,19 @@
             <label>COST<input type="number" min="0" max="20" bind:value={editingCard.cost}></label>
             <label>COLOR<select bind:value={editingCard.color}><option>pink</option><option>cyan</option><option>green</option><option>yellow</option><option>blue</option><option>purple</option></select></label>
             <label>DECK WEIGHT<input type="number" min="0" max="20" bind:value={editingCard.quantity}></label>
+            <label>DECK<input value={librarySide === 'boss' ? 'BLACK ICE' : 'RUNNER'} disabled></label>
             <label class="description-field">DESCRIPTION<input maxlength="140" bind:value={editingCard.description}></label>
-            {#if !editingCard.boss}<label class="check-field"><input type="checkbox" bind:checked={editingCard.multiplayerOnly}> CO-OP ONLY</label>{/if}
+            {#if editingCard.availability !== 'boss'}<label class="check-field"><input type="checkbox" bind:checked={editingCard.multiplayerOnly}> CO-OP ONLY</label>{/if}
           </div>
           <div class="effect-editor">
             <div class="effect-heading"><strong>EFFECTS · MAX 3</strong><button disabled={editingCard.effects.length >= 3} on:click={addEffect}>+ EFFECT</button></div>
             {#each editingCard.effects as effect, index}
               <div class="effect-row">
-                <select bind:value={effect.type}><option value="damage">Damage</option><option value="shield">Shield</option><option value="heal">Heal</option><option value="malware">Malware</option><option value="income">Income</option><option value="bandwidth">Bandwidth</option><option value="purge">Purge malware</option>{#if editingCard.boss}<option value="blind">Blind ally vision</option>{/if}</select>
-                <select bind:value={effect.target}>{#if editingCard.boss}<option value="players">All runners</option><option value="self">BLACK ICE</option>{:else}<option value="self">Self</option><option value="ally">Ally</option><option value="both-allies">Both allies</option><option value="enemy">Enemy</option>{/if}</select>
+                <select bind:value={effect.type}><option value="damage">Damage</option><option value="shield">Shield</option><option value="heal">Heal</option><option value="malware">Malware</option><option value="income">Income</option><option value="bandwidth">Bandwidth</option><option value="purge">Purge malware</option>{#if editingCard.availability === 'boss'}<option value="blind">Blind ally vision (BLACK ICE only)</option>{/if}</select>
+                <select bind:value={effect.target}>
+                  {#if editingCard.availability !== 'boss'}<option value="self">Self</option><option value="ally">Ally</option><option value="both-allies">Both allies</option><option value="enemy">Enemy</option>{/if}
+                  {#if editingCard.availability !== 'runner'}<option value="players">All runners</option>{#if editingCard.availability === 'boss'}<option value="self">BLACK ICE</option>{/if}{/if}
+                </select>
                 <input type="number" min="0" max="99" bind:value={effect.amount} aria-label="Effect amount">
                 <button class="remove-effect" on:click={() => removeEffect(index)} aria-label="Remove effect">×</button>
               </div>
@@ -371,9 +445,9 @@
       {/if}
 
       <div class="library-card-grid">
-        {#each visibleLibraryCards() as card}
+        {#each visibleLibraryCards(librarySide) as card}
           <article class="library-card library-card--{card.color}">
-            <span>{card.cost} ⚡</span><h2>{card.name}</h2><p>{card.description || 'Custom packet program.'}</p>
+            <span>{card.cost} ⚡ · {librarySide.toUpperCase()}</span><h2>{card.name}</h2><p>{card.description || 'Custom packet program.'}</p>
             <div>{#each card.effects as effect}<small>{effectLabel(effect)}</small>{/each}</div>
             <footer><span>WEIGHT {card.quantity}</span><button on:click={() => editCard(card)}>EDIT</button>{#if !card.builtIn}<button class="delete" on:click={() => deleteCard(card)}>DELETE</button>{/if}</footer>
           </article>
@@ -384,7 +458,7 @@
   {:else if !selectedMode}
     <div class="menu-screen">
       <p class="eyebrow">TACTICAL NETWORK COMBAT</p>
-      <h1 id="packet-war-title">PACKET<span>WAR</span></h1>
+      <h1 id="packet-war-title">PACKET<span>TACK</span></h1>
       <p>
         Spend bandwidth, deploy hostile programs, and protect your deck before
         the connection collapses.
@@ -404,7 +478,7 @@
         </button>
       </div>
       {#if !$sessionState.bothPlayersConnected}
-        <p class="connection-note">Both Packet War modes require two connected players.</p>
+        <p class="connection-note">Both Packettack modes require two connected players.</p>
       {/if}
       {#if errorMessage}
         <p class="error" role="alert">{errorMessage}</p>
@@ -415,16 +489,19 @@
       <div class="packet-loader">
         <i></i><i></i><i></i><i></i>
       </div>
-      <p class="eyebrow">{selectedMode === 'coop' ? 'OPENING SHARED BREACH' : 'AWAITING RIVAL DECK'}</p>
+      <p class="eyebrow">{$packetWarServerState.departureNotice ? 'CONNECTION SEVERED' : selectedMode === 'coop' ? 'OPENING SHARED BREACH' : 'AWAITING RIVAL DECK'}</p>
       <h1>{$packetWarServerState.participantCount}/2</h1>
-      <p>The second player must select the same mode.</p>
+      <p>{$packetWarServerState.departureNotice ?? 'The second player must select the same mode.'}</p>
+      {#if $packetWarServerState.departureNotice}
+        <button type="button" on:click={() => leaveGame(false)}>RETURN TO MAIN MENU</button>
+      {/if}
     </div>
   {:else if $packetWarServerState}
     <div class="battle-screen">
       <div class="battle-header">
         <div>
           <p class="eyebrow">{$packetWarServerState.mode === 'coop' ? 'CO-OP BREACH' : 'DUEL MODE'} · ROUND {$packetWarServerState.round}</p>
-          <h1 id="packet-war-title">PACKET<span>WAR</span></h1>
+          <h1 id="packet-war-title">PACKET<span>TACK</span></h1>
         </div>
         <div class="turn-indicator" class:turn-indicator--active={isMyTurn}>
           {isMyTurn ? 'YOUR TURN' : `${opponent?.name ?? 'RIVAL'} ACTIVE`}
