@@ -22,10 +22,15 @@
     type PacketWarState
   } from '../stores/packetWarSession';
   import { sessionState, type PlayerId } from '../stores/session';
+  import {
+    arcadeStates,
+    type ArcadeGameId,
+    type ArcadeState
+  } from '../stores/arcade';
   import ChatPanel from './ChatPanel.svelte';
   import Sidebar from './Sidebar.svelte';
 
-  let sidebarExpanded = false;
+  let sidebarExpanded = true;
   let minigameWasActive = false;
   let chatOpen = false;
   let unreadChatCount = 0;
@@ -53,6 +58,7 @@
     socket.on('pigz:state', handlePigzState);
     socket.on('trace-race:state', handleTraceRaceState);
     socket.on('packet-war:state', handlePacketWarState);
+    socket.on('arcade:state', handleArcadeState);
     socket.on('chat:history', handleChatHistory);
     socket.on('chat:message', handleChatMessage);
     socket.connect();
@@ -67,6 +73,7 @@
     socket.off('pigz:state', handlePigzState);
     socket.off('trace-race:state', handleTraceRaceState);
     socket.off('packet-war:state', handlePacketWarState);
+    socket.off('arcade:state', handleArcadeState);
     socket.off('chat:history', handleChatHistory);
     socket.off('chat:message', handleChatMessage);
     window.clearTimeout(chatToastTimer);
@@ -132,7 +139,16 @@
   }
 
   function handleLibraryState(state: LibraryState): void {
-    libraryState.set(state);
+    libraryState.set({
+      ...state,
+      selectionModes: state.selectionModes ?? {
+        p1: state.selections.p1 ? 'multiplayer' : null,
+        p2: state.selections.p2 ? 'multiplayer' : null
+      },
+      activeStoryMode: state.activeStoryMode
+        ?? (state.activeStoryId ? 'multiplayer' : null),
+      activeSoloPlayerId: state.activeSoloPlayerId ?? null
+    });
   }
 
   function handleNetRunnersState(state: NetRunnersServerState): void {
@@ -164,6 +180,17 @@
 
     if (state.participantCount === 2) {
       partneredMinigames.add('packet-war');
+    }
+  }
+
+  function handleArcadeState(payload: { game: ArcadeGameId; state: ArcadeState }): void {
+    arcadeStates.update((states) => ({
+      ...states,
+      [payload.game]: payload.state
+    }));
+
+    if (payload.state.participantCount === 2) {
+      partneredMinigames.add(payload.game);
     }
   }
 
@@ -214,9 +241,22 @@
   }
 
   function shouldConfirmMinigameExit(): boolean {
-    const minigameLocations = ['netrunners', 'billywig', 'pigz', 'trace-race', 'packet-war'];
+    const minigameLocations = [
+      'netrunners',
+      'billywig',
+      'pigz',
+      'trace-race',
+      'packet-war',
+      'lo-hi',
+      'mastermind',
+      'chopsticks'
+    ];
 
     if (!minigameLocations.includes($location)) {
+      return false;
+    }
+
+    if ($location === 'billywig' && $campaignState?.activeMinigame?.id !== 'billywig') {
       return false;
     }
 
@@ -234,6 +274,14 @@
 
     if ($location === 'netrunners' && $netRunnersServerState?.status === 'finished') {
       return false;
+    }
+
+    if (['lo-hi', 'mastermind', 'chopsticks'].includes($location)) {
+      const state = $arcadeStates[$location as ArcadeGameId];
+
+      if (!state?.participants[$sessionState.playerId as PlayerId] || state.status === 'finished') {
+        return false;
+      }
     }
 
     return true;
@@ -272,6 +320,10 @@
       return Boolean($packetWarServerState?.participants[playerId]);
     }
 
+    if (['lo-hi', 'mastermind', 'chopsticks'].includes($location)) {
+      return Boolean($arcadeStates[$location as ArcadeGameId]?.participants[playerId]);
+    }
+
     return false;
   }
 
@@ -294,6 +346,10 @@
 
     if ($location === 'packet-war') {
       return ($packetWarServerState?.participantCount ?? 0) < 2;
+    }
+
+    if (['lo-hi', 'mastermind', 'chopsticks'].includes($location)) {
+      return ($arcadeStates[$location as ArcadeGameId]?.participantCount ?? 0) < 2;
     }
 
     return false;

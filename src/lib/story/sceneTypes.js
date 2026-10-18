@@ -18,6 +18,7 @@
  * @property {string} id
  * @property {SceneType} type
  * @property {Audience} [audience]
+ * @property {'singleplayer' | 'multiplayer'} [map]
  * @property {string} [speaker]
  * @property {string} [portrait]
  * @property {string} [portraitAlt]
@@ -25,6 +26,7 @@
  * @property {string} [next]
  * @property {SceneChoice[]} [choices]
  * @property {string} [prompt]
+ * @property {string} [placeholder]
  * @property {number} [maxLength]
  * @property {string} [checkpointId]
  * @property {number} [messageCount]

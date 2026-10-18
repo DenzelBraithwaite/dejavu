@@ -16,17 +16,25 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 
 <div class="sidebar" class:sidebar-collapsed={!sidebarExpanded} class:sidebar-expanded={sidebarExpanded}>
-  <svg on:click={() => createEvent('toggle-sidebar')} class:rotate={!sidebarExpanded} class="icon collapse-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-    <path d="M19 15V9"/>
-    <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
-  </svg>
+  <button
+    class="collapse-button"
+    class:rotate={!sidebarExpanded}
+    type="button"
+    aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+    on:click={() => createEvent('toggle-sidebar')}
+  >
+    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M19 15V9"/>
+      <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
+    </svg>
+  </button>
   
   <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'white'} iconType={'terminal'}>
     <span slot="title">Story Mode</span>
     <span slot="description">Play the inserted story</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'}>
+  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'blue'} iconType={'library'}>
     <span slot="title">Library</span>
     <span slot="description">Select or create stories</span>
   </Item>
@@ -36,7 +44,7 @@
     <span slot="description">Browse coded game modules</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'}>
+  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'mint'} iconType={'player'}>
     <span slot="title">Character</span>
     <span slot="description">Check your stats</span>
   </Item>
@@ -59,7 +67,7 @@
     </Item>
   {/if}
 
-  <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'blue'} iconType={'editor'}>
+  <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'}>
     <span slot="title">Editor</span>
     <span slot="description">Build story flow charts</span>
   </Item>
@@ -93,27 +101,37 @@
     }
   }
 
-  .collapse-icon {
-    z-index: 201;
-    background-color: $backgroundColor;
-    cursor: pointer;
+  .collapse-button {
+    position: sticky;
+    z-index: 1000;
+    top: 0;
+    width: 100%;
     height: 42px;
-    width: 42px;
-    border-radius: 50%;
-    position: absolute;
-    right: 0px;
-    bottom: 40%;
-    transform: translateX(80%);
-    transition: all 0.3s ease-in-out;
+    margin-bottom: 10px;
+    color: var(--white);
+    background: #0f172a;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+    box-shadow: 0 5px 16px #020617aa;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+
+    display: grid;
+    place-items: center;
+
+    .icon {
+      width: 28px;
+      height: 28px;
+      stroke: #ffffff;
+      transition: transform 0.25s ease;
+    }
     
     &:hover {
-      // Can't use variables here, this is $backgroundColor
-      background-color: lighten(#1e293b, 10%);
-      scale: 1.05;
+      background: #334155;
+      border-color: #94a3b8;
     }
 
     &:active {
-      transition: all 0.1s ease-in-out;
       border: 2px solid var(--yellow);
     }
   }
@@ -128,6 +146,8 @@
   }
   
   .rotate {
-    transform: rotate(180deg);
+    .icon {
+      transform: rotate(180deg);
+    }
   }
 </style>

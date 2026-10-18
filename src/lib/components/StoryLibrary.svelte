@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { socket } from '../socket';
   import {
     libraryState,
@@ -10,6 +12,7 @@
 
   type EditorMode = 'library' | 'create' | 'editor';
   type LaneId = 'p1' | 'both' | 'p2';
+  type StoryPlayMode = 'singleplayer' | 'multiplayer';
   type LinkSelection = {
     sourceId: string;
     field?: string;
@@ -39,13 +42,13 @@
     { type: 'vote', label: 'Shared vote' },
     { type: 'timed-choice', label: 'Timed choice' },
     { type: 'condition', label: 'Condition' },
+    { type: 'image', label: 'Show image' },
     { type: 'minigame', label: 'Minigame' },
     { type: 'label', label: 'Visual label' },
     { type: 'ending', label: 'Ending' }
   ];
 
   const companionNodeTypes = [
-    { type: 'image', label: 'Show image' },
     { type: 'effect', label: 'Item / effect' },
     { type: 'ambience', label: 'Music / atmosphere' }
   ];
@@ -62,6 +65,11 @@
   let newTitle = '';
   let newDescription = '';
   let newAuthor = '';
+  let newPlayModes = {
+    singleplayer: false,
+    multiplayer: true
+  };
+  let activeStoryMap: StoryPlayMode = 'multiplayer';
   let editingStory: StoryDocument | null = null;
   let selectedNodeId = '';
   let selectedNode: any = null;
@@ -78,7 +86,14 @@
   let redoStack: EditorSnapshot[] = [];
   let tutorialOpen = false;
   let imageUploading = false;
+  let imageLibraryOpen = false;
+  let imageLibraryTarget: 'portrait' | 'image' = 'image';
+  let storyImages: string[] = [];
+  let toastTimer: number | undefined;
+  let lastToastKey = '';
   let lastLocation = '';
+  let dragTargetId = '';
+  let dragPlacement: 'before' | 'after' = 'before';
 
   $: playerId = $sessionState.playerId;
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
@@ -87,6 +102,12 @@
     : null;
   $: partnerSelection = partnerId
     ? $libraryState.selections[partnerId]
+    : null;
+  $: partnerSelectionMode = partnerId
+    ? $libraryState.selectionModes[partnerId]
+    : null;
+  $: localSelectionMode = playerId
+    ? $libraryState.selectionModes[playerId]
     : null;
   $: selectedNode = editingStory?.nodes.find(
     (node) => node.id === selectedNodeId
@@ -100,6 +121,22 @@
       mode = 'editor';
     }
   }
+  $: {
+    const toastKey = `${statusMessage}|${errorMessage}`;
+
+    if (toastKey !== lastToastKey) {
+      lastToastKey = toastKey;
+      window.clearTimeout(toastTimer);
+
+      if (statusMessage || errorMessage) {
+        toastTimer = window.setTimeout(clearMessages, 4200);
+      }
+    }
+  }
+
+  onDestroy(() => {
+    window.clearTimeout(toastTimer);
+  });
 
   function storyTitle(storyId: string | null): string {
     if (!storyId) {
@@ -108,6 +145,29 @@
 
     return $libraryState.stories.find((story) => story.id === storyId)?.title
       ?? storyId;
+  }
+
+  function storySupportsMode(story: { playModes?: StoryDocument['playModes'] }, map: StoryPlayMode): boolean {
+    const modes = story.playModes ?? {
+      singleplayer: false,
+      multiplayer: true
+    };
+
+    return Boolean(modes[map]);
+  }
+
+  function setNewStoryMode(map: StoryPlayMode, enabled: boolean): void {
+    newPlayModes = {
+      ...newPlayModes,
+      [map]: enabled
+    };
+
+    if (!newPlayModes.singleplayer && !newPlayModes.multiplayer) {
+      newPlayModes = {
+        ...newPlayModes,
+        [map === 'singleplayer' ? 'multiplayer' : 'singleplayer']: true
+      };
+    }
   }
 
   function clearMessages(): void {
@@ -125,11 +185,29 @@
     location.set('editor');
   }
 
-  function selectStory(storyId: string): void {
+  function closeStoryEditor(): void {
+    editingStory = null;
+    selectedNodeId = '';
+    mode = 'editor';
+    location.set('editor');
+  }
+
+  function selectStory(storyId: string, playMode: StoryPlayMode): void {
     clearMessages();
-    socket.emit('library:select-story', storyId, handleSimpleResult(
-      'Cartridge staged. Story Mode will unlock when both players match.'
-    ));
+    socket.emit('library:select-story', {
+      storyId,
+      mode: playMode
+    }, handleSimpleResult(playMode === 'singleplayer'
+      ? 'Solo cartridge staged. Story Mode is ready.'
+      : 'Cartridge staged. Story Mode will unlock when both players match.'));
+  }
+
+  function matchPartnerCartridge(): void {
+    if (!partnerSelection || !partnerSelectionMode) {
+      return;
+    }
+
+    selectStory(partnerSelection, partnerSelectionMode);
   }
 
   function createStory(): void {
@@ -137,7 +215,8 @@
     socket.emit('library:create-story', {
       title: newTitle,
       description: newDescription,
-      author: newAuthor
+      author: newAuthor,
+      playModes: newPlayModes
     }, (result: {
       ok: boolean;
       story?: StoryDocument;
@@ -151,8 +230,17 @@
       newTitle = '';
       newDescription = '';
       newAuthor = '';
-      editingStory = result.story;
-      selectedNodeId = result.story.initialSceneIds.p1;
+      newPlayModes = {
+        singleplayer: false,
+        multiplayer: true
+      };
+      editingStory = prepareStoryForEditor(result.story);
+      activeStoryMap = editingStory.playModes.singleplayer
+        ? 'singleplayer'
+        : 'multiplayer';
+      selectedNodeId = activeStoryMap === 'singleplayer'
+        ? result.story.singleplayerInitialSceneId
+        : result.story.initialSceneIds.p1;
       activeLane = 'p1';
       resetHistory();
       showEditor();
@@ -172,8 +260,13 @@
         return;
       }
 
-      editingStory = result.story;
-      selectedNodeId = result.story.initialSceneIds.p1;
+      editingStory = prepareStoryForEditor(result.story);
+      activeStoryMap = editingStory.playModes.multiplayer === false
+        ? 'singleplayer'
+        : 'multiplayer';
+      selectedNodeId = activeStoryMap === 'singleplayer'
+        ? editingStory.singleplayerInitialSceneId
+        : editingStory.initialSceneIds.p1;
       activeLane = 'p1';
       resetHistory();
       showEditor();
@@ -199,10 +292,60 @@
         return;
       }
 
-      editingStory = result.story;
+      editingStory = prepareStoryForEditor(result.story);
       resetHistory();
       statusMessage = `Saved version ${result.story.version}.`;
     });
+  }
+
+  function prepareStoryForEditor(story: StoryDocument): StoryDocument {
+    const prepared = structuredClone(story);
+    prepared.playModes ??= {
+      singleplayer: false,
+      multiplayer: true
+    };
+
+    if (!prepared.singleplayerInitialSceneId
+      || !prepared.nodes.some((node) => node.id === prepared.singleplayerInitialSceneId)) {
+      const startId = `${prepared.id}.solo.start`;
+      const endingId = `${prepared.id}.solo.ending`;
+      prepared.singleplayerInitialSceneId = startId;
+      prepared.nodes.push(
+        {
+          id: startId,
+          type: 'dialogue',
+          audience: 'p1',
+          map: 'singleplayer',
+          speaker: 'SYSTEM',
+          text: 'Your story begins here.',
+          next: endingId
+        },
+        {
+          id: endingId,
+          type: 'ending',
+          audience: 'p1',
+          map: 'singleplayer',
+          text: 'End of story.'
+        }
+      );
+    }
+
+    for (const imageNode of prepared.nodes.filter(
+      (node) => node.type === 'image' && node.attachedTo
+    )) {
+      const host = prepared.nodes.find((node) => node.id === imageNode.attachedTo);
+
+      if (host && supportsSimpleNext(host)) {
+        imageNode.map = host.map;
+        imageNode.audience = host.audience;
+        imageNode.next = host.next ?? '';
+        host.next = imageNode.id;
+      }
+
+      delete imageNode.attachedTo;
+    }
+
+    return prepared;
   }
 
   function duplicateStory(storyId: string): void {
@@ -358,6 +501,7 @@
     const nodeId = createUniqueNodeId(type);
     const node = createNode(type, nodeId);
     node.audience = insertionTarget.lane;
+    node.map = activeStoryMap;
 
     insertNode(node, insertionTarget);
     connectInsertionTarget(node.id, insertionTarget);
@@ -375,6 +519,7 @@
     const node = structuredClone(copiedNode);
     node.id = createUniqueNodeId(node.type);
     node.audience = insertionTarget.lane;
+    node.map = activeStoryMap;
     clearNodeRoutes(node);
     insertNode(node, insertionTarget);
     connectInsertionTarget(node.id, insertionTarget);
@@ -520,19 +665,39 @@
       return;
     }
 
-    if (Object.values(editingStory.initialSceneIds).includes(node.id)) {
+    if (
+      Object.values(editingStory.initialSceneIds).includes(node.id)
+      || editingStory.singleplayerInitialSceneId === node.id
+    ) {
       errorMessage = 'Choose a different start node before deleting this one.';
       return;
     }
 
     rememberForUndo();
+    const replacementId = supportsSimpleNext(node) ? node.next ?? '' : '';
+
+    for (const candidate of editingStory.nodes) {
+      for (const field of routeFields(candidate)) {
+        if (getRouteValue(candidate, field) === node.id) {
+          setRouteValue(candidate, field, replacementId);
+        }
+      }
+    }
+
+    for (const companion of editingStory.nodes.filter((candidate) => candidate.attachedTo === node.id)) {
+      companion.attachedTo = '';
+    }
+
     editingStory.nodes = editingStory.nodes.filter(
       (candidate) => candidate.id !== node.id
     );
-    selectedNodeId = editingStory.nodes[0]?.id ?? '';
+    selectedNodeId = selectedNodeId === node.id
+      ? replacementId || editingStory.nodes[0]?.id || ''
+      : selectedNodeId;
     editingStory = {
       ...editingStory
     };
+    statusMessage = `${displayNodeName(node)} deleted. Incoming routes were ${replacementId ? 'reconnected' : 'cleared'}.`;
   }
 
   function addChoice(): void {
@@ -562,7 +727,45 @@
   function getLaneNodes(lane: LaneId): StoryNode[] {
     return editingStory?.nodes.filter(
       (node) => (node.audience ?? 'both') === lane
+        && nodeMap(node) === activeStoryMap
     ) ?? [];
+  }
+
+  function nodeMap(node: StoryNode): StoryPlayMode {
+    return node.map === 'singleplayer' ? 'singleplayer' : 'multiplayer';
+  }
+
+  function selectStoryMap(map: StoryPlayMode): void {
+    if (!editingStory) {
+      return;
+    }
+
+    activeStoryMap = map;
+    selectedNodeId = map === 'singleplayer'
+      ? editingStory.singleplayerInitialSceneId
+      : editingStory.initialSceneIds.p1;
+    activeLane = 'p1';
+    linkSelection = null;
+    insertionTarget = null;
+  }
+
+  function setStoryModeEnabled(map: StoryPlayMode, enabled: boolean): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const otherMap = map === 'singleplayer' ? 'multiplayer' : 'singleplayer';
+    editingStory.playModes[map] = enabled;
+
+    if (!editingStory.playModes.singleplayer && !editingStory.playModes.multiplayer) {
+      editingStory.playModes[otherMap] = true;
+    }
+
+    if (!editingStory.playModes[activeStoryMap]) {
+      selectStoryMap(otherMap);
+    }
+
+    refreshStory();
   }
 
   function nodeOrdinal(node: StoryNode): string {
@@ -680,6 +883,37 @@
     errorMessage = '';
   }
 
+  function selectConnectedNode(nodeId: string): void {
+    const node = editingStory?.nodes.find((candidate) => candidate.id === nodeId);
+
+    if (node) {
+      selectedNodeId = node.id;
+      activeLane = (node.audience ?? 'both') as LaneId;
+      errorMessage = '';
+    }
+  }
+
+  function nodeIsIncomingConnection(node: StoryNode): boolean {
+    if (!selectedNode) {
+      return false;
+    }
+
+    return routeFields(node).some(
+      (field) => getRouteValue(node, field) === selectedNode.id
+    );
+  }
+
+  function nodeIsOutgoingConnection(node: StoryNode): boolean {
+    if (!selectedNode) {
+      return false;
+    }
+
+    return routeFields(selectedNode).some(
+      (field) => getRouteValue(selectedNode, field) === node.id
+    ) || (isCompanionNode(node) && node.attachedTo === selectedNode.id)
+      || (isCompanionNode(selectedNode) && selectedNode.attachedTo === node.id);
+  }
+
   function startLinkSelection(field: string, label: string): void {
     if (!selectedNode) {
       return;
@@ -736,6 +970,7 @@
     const fields = routeFields(source);
     return fields.find((field) => getRouteValue(source, field) === destination.id)
       ?? fields.find((field) => !getRouteValue(source, field))
+      ?? (fields.length === 1 ? fields[0] : '')
       ?? '';
   }
 
@@ -852,6 +1087,11 @@
     }
 
     const source = editingStory?.nodes.find((node) => node.id === sourceId);
+
+    if (!source || nodeMap(source) !== nodeMap(destination)) {
+      return false;
+    }
+
     const sourceLane = source?.audience ?? 'both';
     const destinationLane = destination.audience ?? 'both';
 
@@ -915,7 +1155,7 @@
   }
 
   function supportsSimpleNext(node: StoryNode): boolean {
-    return ['dialogue', 'input', 'checkpoint', 'conversation']
+    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image']
       .includes(node.type);
   }
 
@@ -942,7 +1182,8 @@
       return !host || !canAttachToNode(node, host);
     }
 
-    const isStartNode = Object.values(editingStory.initialSceneIds).includes(node.id);
+    const isStartNode = Object.values(editingStory.initialSceneIds).includes(node.id)
+      || editingStory.singleplayerInitialSceneId === node.id;
     const hasIncomingRoute = editingStory.nodes.some(
       (candidate) => routeFields(candidate).some(
         (field) => getRouteValue(candidate, field) === node.id
@@ -985,6 +1226,19 @@
 
   function startDragging(nodeId: string): void {
     draggedNodeId = nodeId;
+    dragTargetId = '';
+  }
+
+  function updateDragTarget(event: DragEvent, targetNode: StoryNode): void {
+    if (!draggedNodeId || draggedNodeId === targetNode.id) {
+      return;
+    }
+
+    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    dragTargetId = targetNode.id;
+    dragPlacement = event.clientY < bounds.top + bounds.height / 2
+      ? 'before'
+      : 'after';
   }
 
   function dropOnNode(targetNode: StoryNode): void {
@@ -1001,8 +1255,14 @@
       return;
     }
 
-    moveNodeBefore(draggedNode.id, targetNode.id);
+    if (dragPlacement === 'before') {
+      moveNodeBefore(draggedNode.id, targetNode.id);
+    } else {
+      moveNodeAfter(draggedNode.id, targetNode.id);
+    }
+
     draggedNodeId = '';
+    dragTargetId = '';
   }
 
   function dropOnLane(lane: LaneId): void {
@@ -1028,6 +1288,7 @@
     editingStory.nodes = remainingNodes;
     activeLane = lane;
     draggedNodeId = '';
+    dragTargetId = '';
     refreshStory();
   }
 
@@ -1047,6 +1308,82 @@
     rememberForUndo();
     remainingNodes.splice(targetIndex, 0, node);
     editingStory.nodes = remainingNodes;
+    refreshStory();
+  }
+
+  function moveNodeAfter(nodeId: string, targetId: string): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const node = editingStory.nodes.find((candidate) => candidate.id === nodeId);
+    const remainingNodes = editingStory.nodes.filter((candidate) => candidate.id !== nodeId);
+    const targetIndex = remainingNodes.findIndex((candidate) => candidate.id === targetId);
+
+    if (!node || targetIndex < 0) {
+      return;
+    }
+
+    rememberForUndo();
+    remainingNodes.splice(targetIndex + 1, 0, node);
+    editingStory.nodes = remainingNodes;
+    refreshStory();
+  }
+
+  function updateConversationCount(player: PlayerId, value: number): void {
+    if (!selectedNode?.messagesPerPlayer) {
+      return;
+    }
+
+    const count = Math.max(0, Math.floor(Number(value ?? 0)));
+    const otherPlayer = player === 'p1' ? 'p2' : 'p1';
+    selectedNode.messagesPerPlayer[player] = count;
+    const otherCount = Number(selectedNode.messagesPerPlayer[otherPlayer] ?? 0);
+
+    if (count > otherCount + 1) {
+      selectedNode.messagesPerPlayer[otherPlayer] = count - 1;
+    } else if (otherCount > count + 1) {
+      selectedNode.messagesPerPlayer[otherPlayer] = count + 1;
+    }
+
+    refreshStory();
+  }
+
+  async function openImageLibrary(target: 'portrait' | 'image'): Promise<void> {
+    imageLibraryTarget = target;
+    clearMessages();
+
+    try {
+      const response = await fetch('/api/story-assets/images');
+      const result = await response.json();
+
+      if (!response.ok || !Array.isArray(result.images)) {
+        throw new Error(result.error ?? 'The image library could not be loaded.');
+      }
+
+      storyImages = result.images;
+      imageLibraryOpen = true;
+    } catch (error) {
+      errorMessage = error instanceof Error
+        ? error.message
+        : 'The image library could not be loaded.';
+    }
+  }
+
+  function selectStoryImage(path: string): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    rememberForUndo();
+
+    if (imageLibraryTarget === 'portrait') {
+      selectedNode.portrait = path;
+    } else {
+      selectedNode.src = path;
+    }
+
+    imageLibraryOpen = false;
     refreshStory();
   }
 
@@ -1179,6 +1516,7 @@
         return {
           ...baseNode,
           prompt: 'Enter your response.',
+          placeholder: 'Type your response…',
           maxLength: 200
         };
       case 'conversation':
@@ -1227,11 +1565,8 @@
         };
       case 'image':
         return {
-          id,
-          type,
-          audience: 'both',
-          attachedTo: '',
-          text: '',
+          ...baseNode,
+          text: 'An image appears in the terminal.',
           src: '',
           alt: ''
         };
@@ -1294,7 +1629,7 @@
           <p class="eyebrow">STORY CARTRIDGES</p>
           <h1 id="library-title">Library</h1>
           <p class="introduction">
-            Both players must stage the same cartridge before Story Mode can run.
+            Solo cartridges launch immediately. Multiplayer cartridges activate when both players stage the same story and mode.
           </p>
         </div>
         <button class="primary-button" type="button" on:click={() => mode = 'create'}>
@@ -1305,15 +1640,23 @@
       <div class="selection-panel" class:matched={Boolean($libraryState.activeStoryId)}>
         <div>
           <span>YOUR CARTRIDGE</span>
-          <strong>{storyTitle(localSelection)}</strong>
+          <strong>{storyTitle(localSelection)}{localSelectionMode ? ` · ${localSelectionMode.toUpperCase()}` : ''}</strong>
         </div>
         <div>
           <span>PARTNER CARTRIDGE</span>
-          <strong>{storyTitle(partnerSelection)}</strong>
+          <strong>{storyTitle(partnerSelection)}{partnerSelectionMode ? ` · ${partnerSelectionMode.toUpperCase()}` : ''}</strong>
         </div>
+        {#if partnerSelection && (
+          partnerSelection !== localSelection
+          || partnerSelectionMode !== localSelectionMode
+        )}
+          <button type="button" on:click={matchPartnerCartridge}>Swap to partner cartridge</button>
+        {/if}
         <p>
           {$libraryState.activeStoryId
-            ? 'LINK ESTABLISHED — STORY MODE READY'
+            ? $libraryState.activeStoryMode === 'singleplayer'
+              ? 'SOLO CARTRIDGE ACTIVE — STORY MODE READY'
+              : 'LINK ESTABLISHED — STORY MODE READY'
             : 'WAITING FOR MATCHING CARTRIDGES'}
         </p>
       </div>
@@ -1322,7 +1665,7 @@
         {#each $libraryState.stories as story}
           <article class:selected={localSelection === story.id}>
             <div class="story-card-header">
-              <span>{story.status.toUpperCase()}</span>
+              <span>{story.builtIn ? 'BUILT-IN' : 'PLAYABLE'}</span>
               <span>V{story.version}</span>
             </div>
             <h2>{story.title}</h2>
@@ -1338,9 +1681,16 @@
               </div>
             </dl>
             <div class="card-actions">
-              <button type="button" on:click={() => selectStory(story.id)}>
-                {localSelection === story.id ? 'Selected' : 'Select story'}
-              </button>
+              {#if storySupportsMode(story, 'singleplayer')}
+                <button type="button" on:click={() => selectStory(story.id, 'singleplayer')}>
+                  {localSelection === story.id && localSelectionMode === 'singleplayer' ? 'Solo selected' : 'Play solo'}
+                </button>
+              {/if}
+              {#if storySupportsMode(story, 'multiplayer')}
+                <button type="button" on:click={() => selectStory(story.id, 'multiplayer')}>
+                  {localSelection === story.id && localSelectionMode === 'multiplayer' ? 'Linked selected' : 'Play multiplayer'}
+                </button>
+              {/if}
               <button type="button" on:click={() => openEditor(story.id)}>
                 Edit
               </button>
@@ -1387,6 +1737,27 @@
           rows="5"
         ></textarea>
 
+        <fieldset class="play-mode-fieldset">
+          <legend>Playable modes</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={newPlayModes.singleplayer}
+              on:change={(event) => setNewStoryMode('singleplayer', event.currentTarget.checked)}
+            >
+            Singleplayer map
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={newPlayModes.multiplayer}
+              on:change={(event) => setNewStoryMode('multiplayer', event.currentTarget.checked)}
+            >
+            Multiplayer map
+          </label>
+          <p>If both are enabled, the editor keeps a separate node map for each mode.</p>
+        </fieldset>
+
         <button
           class="primary-button"
           type="button"
@@ -1404,12 +1775,12 @@
       on:change={refreshStory}
     >
       <div class="editor-toolbar">
-        <button class="back-button" type="button" on:click={showLibrary}>
-          ← Library
+        <button class="back-button" type="button" on:click={closeStoryEditor}>
+          ← Editor
         </button>
         <div>
           <input aria-label="Story title" bind:value={editingStory.title} maxlength="80">
-          <span>VERSION {editingStory.version} · {editingStory.status.toUpperCase()}</span>
+          <span>VERSION {editingStory.version} · {editingStory.builtIn ? 'BUILT-IN' : 'PLAYABLE'}</span>
         </div>
         <div class="toolbar-actions">
           <button type="button" disabled={undoStack.length === 0} on:click={undo} aria-label="Undo last editor change">
@@ -1424,6 +1795,35 @@
           <button class="primary-button" type="button" on:click={saveStory}>
             Save story
           </button>
+        </div>
+      </div>
+
+      <div class="map-toolbar">
+        <div class="map-tabs" aria-label="Story map">
+          <button class:active={activeStoryMap === 'singleplayer'} type="button" on:click={() => selectStoryMap('singleplayer')}>
+            SINGLEPLAYER MAP
+          </button>
+          <button class:active={activeStoryMap === 'multiplayer'} type="button" on:click={() => selectStoryMap('multiplayer')}>
+            MULTIPLAYER MAP
+          </button>
+        </div>
+        <div class="mode-toggles">
+          <label>
+            <input
+              type="checkbox"
+              checked={editingStory.playModes.singleplayer}
+              on:change={(event) => setStoryModeEnabled('singleplayer', event.currentTarget.checked)}
+            >
+            Solo playable
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={editingStory.playModes.multiplayer}
+              on:change={(event) => setStoryModeEnabled('multiplayer', event.currentTarget.checked)}
+            >
+            Multiplayer playable
+          </label>
         </div>
       </div>
 
@@ -1447,6 +1847,7 @@
                 class="flow-lane"
                 class:active={activeLane === lane.id}
                 class:has-branches={getLaneNodes(lane.id).some((node) => node.type === 'condition')}
+                class:singleplayer-disabled={activeStoryMap === 'singleplayer' && lane.id !== 'p1'}
                 role="group"
                 aria-label={`${lane.label} lane`}
                 on:dragover|preventDefault
@@ -1455,6 +1856,7 @@
                 <button
                   class="lane-heading"
                   type="button"
+                  disabled={activeStoryMap === 'singleplayer' && lane.id !== 'p1'}
                   on:click|stopPropagation={() => activeLane = lane.id}
                 >
                   <span>{lane.label}</span>
@@ -1474,26 +1876,29 @@
                       class:branch-node={nodeHasBranches(node)}
                       class:companion-node={isCompanionNode(node)}
                       class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
-                      draggable="true"
-                      on:dragstart={() => startDragging(node.id)}
-                      on:dragover|preventDefault
+                      class:connected-before={nodeIsIncomingConnection(node)}
+                      class:connected-after={nodeIsOutgoingConnection(node)}
+                      class:drag-before={dragTargetId === node.id && dragPlacement === 'before'}
+                      class:drag-after={dragTargetId === node.id && dragPlacement === 'after'}
+                      draggable="false"
+                      on:dragover|preventDefault={(event) => updateDragTarget(event, node)}
                       on:drop|stopPropagation|preventDefault={() => dropOnNode(node)}
                     >
-                      <div class="node-quick-actions" aria-label={`Quick actions for ${displayNodeName(node)}`}>
-                        <button type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
+                      <div class="node-quick-actions" draggable="false" aria-label={`Quick actions for ${displayNodeName(node)}`}>
+                        <button draggable="false" type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="8" y="8" width="11" height="11" rx="2"></rect>
                             <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
                           </svg>
                         </button>
-                        <button type="button" aria-label={`Duplicate ${displayNodeName(node)}`} title="Duplicate" on:click|stopPropagation={() => duplicateNode(node)}>
+                        <button draggable="false" type="button" aria-label={`Duplicate ${displayNodeName(node)}`} title="Duplicate" on:click|stopPropagation={() => duplicateNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="5" y="5" width="10" height="10" rx="2"></rect>
                             <path d="M9 15v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2"></path>
                             <path d="M10 8v4M8 10h4"></path>
                           </svg>
                         </button>
-                        <button class="quick-delete" type="button" aria-label={`Delete ${displayNodeName(node)}`} title="Delete" on:click|stopPropagation={() => deleteNode(node)}>
+                        <button draggable="false" class="quick-delete" type="button" aria-label={`Delete ${displayNodeName(node)}`} title="Delete" on:click|stopPropagation={() => deleteNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M4 7h16M9 7V4h6v3M8 10v8M12 10v8M16 10v8M6 7l1 14h10l1-14"></path>
                           </svg>
@@ -1507,6 +1912,8 @@
                         class:valid-link-target={Boolean(linkSelection) && isValidLinkTarget(node)}
                         class:invalid-link-target={Boolean(linkSelection) && !isValidLinkTarget(node)}
                         type="button"
+                        draggable="true"
+                        on:dragstart={() => startDragging(node.id)}
                         on:click|stopPropagation={() => selectNode(node)}
                       >
                         <span>{nodeOrdinal(node)}</span>
@@ -1556,6 +1963,7 @@
                 <button
                   class="lane-add-button"
                   type="button"
+                  disabled={activeStoryMap === 'singleplayer' && lane.id !== 'p1'}
                   on:click|stopPropagation={() => openNodePicker({
                     lane: lane.id,
                     insertAfterId: getLaneNodes(lane.id).at(-1)?.id
@@ -1612,7 +2020,9 @@
                 {:else}
                   {#each incomingConnections(selectedNode) as connection}
                     <div>
-                      <span>{displayNodeName(connection.node)} · {routeFieldLabel(connection.node, connection.field)}</span>
+                      <button class="route-node-link" type="button" on:click={() => selectConnectedNode(connection.node.id)}>
+                        {displayNodeName(connection.node)} · {routeFieldLabel(connection.node, connection.field)}
+                      </button>
                       <button
                         type="button"
                         aria-label={`Disconnect ${displayNodeName(connection.node)}`}
@@ -1656,6 +2066,8 @@
             {#if selectedNode.type === 'input'}
               <label for="input-prompt">Player prompt</label>
               <textarea id="input-prompt" bind:value={selectedNode.prompt} rows="5"></textarea>
+              <label for="input-placeholder">Input placeholder</label>
+              <input id="input-placeholder" bind:value={selectedNode.placeholder} placeholder="Type your response…">
               <label for="input-max-length">Maximum response length</label>
               <input
                 id="input-max-length"
@@ -1674,9 +2086,12 @@
 
             {#if selectedNode.type === 'dialogue'}
               <label for="dialogue-portrait-upload">Speaker portrait</label>
-              <label class="upload-button" for="dialogue-portrait-upload">
-                {imageUploading ? 'Uploading portrait…' : 'Upload portrait'}
-              </label>
+              <div class="asset-actions">
+                <label class="upload-button" for="dialogue-portrait-upload">
+                  {imageUploading ? 'Uploading portrait…' : 'Upload portrait'}
+                </label>
+                <button type="button" on:click={() => openImageLibrary('portrait')}>Select from library</button>
+              </div>
               <input
                 class="visually-hidden"
                 id="dialogue-portrait-upload"
@@ -1704,7 +2119,13 @@
                 {isCompanionNode(selectedNode) ? 'Legacy return node' : 'Next node'}
               </div>
               <div class="route-control">
-                <span class:missing={!selectedNode.next}>{routeLabel(selectedNode, 'next')}</span>
+                <button
+                  class="route-node-link"
+                  class:missing={!selectedNode.next}
+                  type="button"
+                  disabled={!selectedNode.next}
+                  on:click={() => selectConnectedNode(selectedNode.next)}
+                >{routeLabel(selectedNode, 'next')}</button>
                 <button type="button" on:click={() => startLinkSelection('next', 'Next node')}>
                   {isCompanionNode(selectedNode) ? 'Select legacy return' : 'Select next node'}
                 </button>
@@ -1735,7 +2156,7 @@
               </div>
               <div class="route-label">Success node</div>
               <div class="route-control">
-                <span class:missing={!selectedNode.success}>{routeLabel(selectedNode, 'success')}</span>
+                <button class="route-node-link" type="button" disabled={!selectedNode.success} on:click={() => selectConnectedNode(selectedNode.success)}>{routeLabel(selectedNode, 'success')}</button>
                 <button type="button" on:click={() => startLinkSelection('success', 'Success node')}>Select node</button>
                 {#if selectedNode.success}
                   <button type="button" aria-label="Clear success node" on:click={() => clearRoute(selectedNode, 'success')}>×</button>
@@ -1743,7 +2164,7 @@
               </div>
               <div class="route-label">Failure node</div>
               <div class="route-control">
-                <span class:missing={!selectedNode.failure}>{routeLabel(selectedNode, 'failure')}</span>
+                <button class="route-node-link" type="button" disabled={!selectedNode.failure} on:click={() => selectConnectedNode(selectedNode.failure)}>{routeLabel(selectedNode, 'failure')}</button>
                 <button type="button" on:click={() => startLinkSelection('failure', 'Failure node')}>Select node</button>
                 {#if selectedNode.failure}
                   <button type="button" aria-label="Clear failure node" on:click={() => clearRoute(selectedNode, 'failure')}>×</button>
@@ -1766,11 +2187,23 @@
               <div class="field-grid">
                 <div>
                   <label for="p1-messages">Player 1 turns</label>
-                  <input id="p1-messages" type="number" min="0" bind:value={selectedNode.messagesPerPlayer.p1}>
+                  <input
+                    id="p1-messages"
+                    type="number"
+                    min="0"
+                    value={selectedNode.messagesPerPlayer.p1}
+                    on:change={(event) => updateConversationCount('p1', Number(event.currentTarget.value))}
+                  >
                 </div>
                 <div>
                   <label for="p2-messages">Player 2 turns</label>
-                  <input id="p2-messages" type="number" min="0" bind:value={selectedNode.messagesPerPlayer.p2}>
+                  <input
+                    id="p2-messages"
+                    type="number"
+                    min="0"
+                    value={selectedNode.messagesPerPlayer.p2}
+                    on:change={(event) => updateConversationCount('p2', Number(event.currentTarget.value))}
+                  >
                 </div>
               </div>
             {/if}
@@ -1790,7 +2223,7 @@
                     <input aria-label="Option ID" bind:value={choice.id} placeholder="option-id">
                     <input aria-label="Option label" bind:value={choice.label} placeholder="Player-facing label">
                     <div class="choice-route">
-                      <span class:missing={!choice.next}>{routeLabel(selectedNode, `choices.${index}.next`)}</span>
+                      <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
                       <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
                     </div>
                     <button type="button" on:click={() => removeChoice(index)}>×</button>
@@ -1834,7 +2267,7 @@
               {/if}
               <div class="route-label">When true</div>
               <div class="route-control">
-                <span class:missing={!selectedNode.trueNext}>{routeLabel(selectedNode, 'trueNext')}</span>
+                <button class="route-node-link" type="button" disabled={!selectedNode.trueNext} on:click={() => selectConnectedNode(selectedNode.trueNext)}>{routeLabel(selectedNode, 'trueNext')}</button>
                 <button type="button" on:click={() => startLinkSelection('trueNext', 'True branch')}>Select node</button>
                 {#if selectedNode.trueNext}
                   <button type="button" aria-label="Clear true branch" on:click={() => clearRoute(selectedNode, 'trueNext')}>×</button>
@@ -1842,7 +2275,7 @@
               </div>
               <div class="route-label">When false</div>
               <div class="route-control">
-                <span class:missing={!selectedNode.falseNext}>{routeLabel(selectedNode, 'falseNext')}</span>
+                <button class="route-node-link" type="button" disabled={!selectedNode.falseNext} on:click={() => selectConnectedNode(selectedNode.falseNext)}>{routeLabel(selectedNode, 'falseNext')}</button>
                 <button type="button" on:click={() => startLinkSelection('falseNext', 'False branch')}>Select node</button>
                 {#if selectedNode.falseNext}
                   <button type="button" aria-label="Clear false branch" on:click={() => clearRoute(selectedNode, 'falseNext')}>×</button>
@@ -1852,9 +2285,12 @@
 
             {#if selectedNode.type === 'image'}
               <label for="image-upload">Story image</label>
-              <label class="upload-button" for="image-upload">
-                {imageUploading ? 'Uploading image…' : 'Upload image'}
-              </label>
+              <div class="asset-actions">
+                <label class="upload-button" for="image-upload">
+                  {imageUploading ? 'Uploading image…' : 'Upload image'}
+                </label>
+                <button type="button" on:click={() => openImageLibrary('image')}>Select from library</button>
+              </div>
               <input
                 id="image-upload"
                 class="visually-hidden"
@@ -1895,6 +2331,9 @@
                 <option value="pigz">Pigz</option>
                 <option value="trace-race">Trace Race</option>
                 <option value="packet-war">Packet War</option>
+                <option value="lo-hi">Lo-Hi</option>
+                <option value="mastermind">Mastermind</option>
+                <option value="chopsticks">Chopsticks</option>
               </select>
               <p class="inspector-help">
                 <strong>Finished</strong> means the round reached a normal result,
@@ -1903,12 +2342,12 @@
               </p>
               <div class="route-label">Finished game destination</div>
               <div class="route-control">
-                <span class:missing={!selectedNode.resultNext.completed}>{routeLabel(selectedNode, 'resultNext.completed')}</span>
+                <button class="route-node-link" type="button" disabled={!selectedNode.resultNext.completed} on:click={() => selectConnectedNode(selectedNode.resultNext.completed)}>{routeLabel(selectedNode, 'resultNext.completed')}</button>
                 <button type="button" on:click={() => startLinkSelection('resultNext.completed', 'Finished game destination')}>Select node</button>
               </div>
               <div class="route-label">Exited early destination</div>
               <div class="route-control">
-                <span class:missing={!selectedNode.resultNext.cancelled}>{routeLabel(selectedNode, 'resultNext.cancelled')}</span>
+                <button class="route-node-link" type="button" disabled={!selectedNode.resultNext.cancelled} on:click={() => selectConnectedNode(selectedNode.resultNext.cancelled)}>{routeLabel(selectedNode, 'resultNext.cancelled')}</button>
                 <button type="button" on:click={() => startLinkSelection('resultNext.cancelled', 'Exited early destination')}>Select node</button>
               </div>
             {/if}
@@ -1996,7 +2435,7 @@
               <li><strong>Loops are supported.</strong> Make a Choice node the area's hub. Route Talk, Search, or Play branches through their scenes and connect their last nodes back to the hub. Route Leave forward to the next area. Backward routes are marked <strong>↻ LOOP</strong>.</li>
               <li>For a locked exit, route the hub's <strong>Leave</strong> choice into a Condition. Its true route leaves the area; its false route shows a denial message and returns to the hub. Conditions resolve immediately, so never point one directly to itself.</li>
               <li>For a repeatable minigame, connect its Finished and Exited Early routes back to the hub. The runtime resets its launch checkpoint each time the players return.</li>
-              <li><strong>Companion changes</strong> show images, update inventory, or change atmosphere with a main-flow node. They do not need their own previous or next route.</li>
+              <li><strong>Image nodes</strong> are part of the main terminal flow and use normal previous and next routes. <strong>Companion changes</strong> update inventory or atmosphere beside a host node without becoming its next destination.</li>
               <li>Red nodes have a missing or invalid connection. Save only after every playable route reaches another node or an Ending.</li>
             </ol>
             <button class="primary-button" type="button" on:click={() => tutorialOpen = false}>Got it</button>
@@ -2021,7 +2460,7 @@
         {#each $libraryState.stories as story}
           <button type="button" on:click={() => openEditor(story.id)}>
             <strong>{story.title}</strong>
-            <span>{story.status.toUpperCase()} · V{story.version}</span>
+            <span>{story.builtIn ? 'BUILT-IN' : 'PLAYABLE'} · V{story.version}</span>
           </button>
         {/each}
       </div>
@@ -2029,11 +2468,47 @@
     </div>
   {/if}
 
+  {#if imageLibraryOpen}
+    <div class="image-library-backdrop">
+      <section class="image-library-modal" role="dialog" aria-modal="true" aria-labelledby="image-library-title">
+        <header>
+          <div>
+            <p class="eyebrow">STORY ASSETS</p>
+            <h2 id="image-library-title">Image library</h2>
+          </div>
+          <button type="button" aria-label="Close image library" on:click={() => imageLibraryOpen = false}>×</button>
+        </header>
+
+        {#if storyImages.length === 0}
+          <p class="empty-inspector">
+            No images are available yet. Upload one or place a supported image
+            in public/uploads/stories.
+          </p>
+        {:else}
+          <div class="image-library-grid">
+            {#each storyImages as imagePath}
+              <button type="button" on:click={() => selectStoryImage(imagePath)}>
+                <img src={imagePath} alt="">
+                <span>{imagePath.split('/').at(-1)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    </div>
+  {/if}
+
   {#if statusMessage}
-    <p class="toast-message success-message" role="status">{statusMessage}</p>
+    <div class="toast-message success-message" role="status" transition:fade>
+      <span>{statusMessage}</span>
+      <button type="button" aria-label="Dismiss message" on:click={clearMessages}>×</button>
+    </div>
   {/if}
   {#if errorMessage}
-    <p class="toast-message error-message" role="alert">{errorMessage}</p>
+    <div class="toast-message error-message" role="alert" transition:fade>
+      <span>{errorMessage}</span>
+      <button type="button" aria-label="Dismiss error" on:click={clearMessages}>×</button>
+    </div>
   {/if}
 </section>
 
@@ -2288,7 +2763,68 @@
     height: calc(100% - 38px);
 
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .play-mode-fieldset {
+    margin: 16px 0;
+    padding: 14px;
+    border: 1px solid #2c3b54;
+
+    legend {
+      color: #6dc2fb;
+      font-size: 0.72rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    p {
+      margin: 8px 0 0;
+      color: #8893a2;
+      font-size: 0.72rem;
+    }
+  }
+
+  .map-toolbar {
+    padding: 8px 14px;
+    background: #080f1b;
+    border-bottom: 1px solid #2c3b54;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .map-tabs,
+  .mode-toggles {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .map-tabs button {
+    padding: 7px 10px;
+    color: #8893a2;
+    background: #0c1322;
+    border-color: #2c3b54;
+
+    &.active {
+      color: #07111d;
+      background: #02fbfb;
+      border-color: #ffffff;
+    }
+  }
+
+  .mode-toggles label {
+    color: #aeb9c9;
+    font-size: 0.68rem;
   }
 
   .editor-toolbar {
@@ -2421,6 +2957,12 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
+
+    &.singleplayer-disabled {
+      opacity: 0.32;
+      filter: grayscale(1);
+      pointer-events: none;
+    }
   }
 
   .lane-heading {
@@ -2498,6 +3040,38 @@
         border-style: dashed;
         border-color: #ad781c;
       }
+    }
+
+    &.connected-before .flow-node {
+      border-left: 3px solid #9dffa6;
+      box-shadow: -8px 0 18px #9dffa629;
+    }
+
+    &.connected-after .flow-node {
+      border-right: 3px solid #f8e69a;
+      box-shadow: 8px 0 18px #f8e69a24;
+    }
+
+    &.drag-before::before,
+    &.drag-after::after {
+      content: '';
+      position: absolute;
+      z-index: 8;
+      left: -4px;
+      right: -4px;
+      height: 4px;
+      background: #ffffff;
+      border-radius: 999px;
+      box-shadow: 0 0 14px #02fbfb;
+      pointer-events: none;
+    }
+
+    &.drag-before::before {
+      top: -12px;
+    }
+
+    &.drag-after::after {
+      bottom: -12px;
     }
   }
 
@@ -2710,6 +3284,12 @@
       font-size: 0.64rem;
     }
 
+    button:nth-child(-n + 2) {
+      font-size: 1.35rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
     .danger-button {
       grid-column: 1 / -1;
     }
@@ -2776,7 +3356,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 5px;
 
-    span {
+    .route-node-link {
       padding: 9px;
       overflow: hidden;
       color: #9dffa6;
@@ -2784,9 +3364,10 @@
       border: 1px solid #334155;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-align: left;
     }
 
-    span.missing {
+    .route-node-link:disabled {
       color: #e58271;
     }
   }
@@ -2796,7 +3377,8 @@
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 5px;
 
-    span {
+    span,
+    .route-node-link {
       min-width: 0;
       padding: 10px;
       overflow: hidden;
@@ -2805,9 +3387,11 @@
       border: 1px solid #334155;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-align: left;
     }
 
-    span.missing {
+    span.missing,
+    .route-node-link.missing {
       color: #e58271;
     }
   }
@@ -2832,10 +3416,15 @@
       align-items: center;
       gap: 5px;
 
-      span {
+      span,
+      .route-node-link {
         overflow: hidden;
+        color: #9dffa6;
+        background: transparent;
+        border: 0;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-align: left;
       }
 
       button {
@@ -2973,6 +3562,81 @@
     cursor: pointer;
     font-weight: 800;
     text-align: center;
+  }
+
+  .asset-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+
+    .upload-button,
+    button {
+      margin: 0;
+    }
+  }
+
+  .image-library-backdrop {
+    position: absolute;
+    z-index: 40;
+    inset: 38px 0 0;
+    padding: 24px;
+    background: #020617e8;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .image-library-modal {
+    width: min(900px, 100%);
+    max-height: 86vh;
+    padding: 22px;
+    overflow-y: auto;
+    background: #09111e;
+    border: 1px solid #4a98d9;
+    box-shadow: 0 0 45px #4a98d944;
+
+    > header {
+      margin-bottom: 18px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+
+      h2 {
+        margin-top: 5px;
+        font-family: "Orbitron", "Space Mono", sans-serif;
+      }
+    }
+  }
+
+  .image-library-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+
+    button {
+      min-width: 0;
+      padding: 8px;
+      text-align: left;
+
+      display: grid;
+      gap: 7px;
+    }
+
+    img {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      background: #020617;
+    }
+
+    span {
+      overflow: hidden;
+      color: #94a3b8;
+      font-size: 0.62rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   .visually-hidden {
@@ -3123,6 +3787,22 @@
     background: #111827;
     border: 1px solid;
     box-shadow: 0 8px 30px #00000099;
+
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    span {
+      color: inherit;
+    }
+
+    button {
+      min-height: 26px;
+      padding: 2px 7px;
+      color: inherit;
+      background: transparent;
+      border-color: currentColor;
+    }
   }
 
   .success-message {

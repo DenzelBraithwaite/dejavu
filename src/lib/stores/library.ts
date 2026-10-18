@@ -10,6 +10,7 @@ export type StoryNode = {
   portraitAlt?: string;
   text?: string;
   prompt?: string;
+  placeholder?: string;
   next?: string;
   choices?: Array<{
     id: string;
@@ -42,6 +43,7 @@ export type StoryNode = {
   trueNext?: string;
   falseNext?: string;
   [key: string]: unknown;
+  map?: 'singleplayer' | 'multiplayer';
 };
 
 export type StoryDocument = {
@@ -50,9 +52,14 @@ export type StoryDocument = {
   title: string;
   description: string;
   author: string;
-  status: 'draft' | 'published';
+  status: 'playable';
   version: number;
   builtIn: boolean;
+  playModes: {
+    singleplayer: boolean;
+    multiplayer: boolean;
+  };
+  singleplayerInitialSceneId: string;
   initialSceneIds: Record<PlayerId, string>;
   nodes: StoryNode[];
   theme: Record<string, unknown>;
@@ -61,7 +68,7 @@ export type StoryDocument = {
 
 export type StorySummary = Pick<
   StoryDocument,
-  'id' | 'title' | 'description' | 'author' | 'status' | 'version' | 'builtIn'
+  'id' | 'title' | 'description' | 'author' | 'status' | 'version' | 'builtIn' | 'playModes'
 > & {
   createdAt: string;
   updatedAt: string;
@@ -70,7 +77,10 @@ export type StorySummary = Pick<
 export type LibraryState = {
   stories: StorySummary[];
   selections: Record<PlayerId, string | null>;
+  selectionModes: Record<PlayerId, 'singleplayer' | 'multiplayer' | null>;
   activeStoryId: string | null;
+  activeStoryMode: 'singleplayer' | 'multiplayer' | null;
+  activeSoloPlayerId: PlayerId | null;
 };
 
 export const libraryState = writable<LibraryState>({
@@ -79,7 +89,13 @@ export const libraryState = writable<LibraryState>({
     p1: null,
     p2: null
   },
-  activeStoryId: null
+  selectionModes: {
+    p1: null,
+    p2: null
+  },
+  activeStoryId: null,
+  activeStoryMode: null,
+  activeSoloPlayerId: null
 });
 
 export const localStorySelection = derived(

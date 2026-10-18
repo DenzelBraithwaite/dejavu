@@ -26,6 +26,7 @@ export type PacketWarLogEntry = {
   id: number;
   type: 'system' | 'program';
   actor: string;
+  actorType: 'system' | 'ally' | 'runner' | 'black-ice';
   cardId: string | null;
   cardName: string | null;
   message: string;
@@ -45,6 +46,8 @@ export type PacketWarState = {
   log: PacketWarLogEntry[];
   eventSequence: number;
   lastProgram: PacketWarLogEntry | null;
+  lastAllyProgram: PacketWarLogEntry | null;
+  lastBreachProgram: PacketWarLogEntry | null;
   rematchVotes: Record<PlayerId, boolean | null>;
   programs: Record<string, PacketProgram>;
 };

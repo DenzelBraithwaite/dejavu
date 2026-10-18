@@ -1,6 +1,6 @@
 # Déjà Vu
 
-Déjà Vu is a two-player terminal-story runtime and the foundation of a visual game builder. Players experience branching stories from separate browser terminals on the same LAN. Stories can mix private perspectives, shared decisions, free-form conversation, dice checks, synchronized checkpoints, timers, images, and coded minigames.
+Déjà Vu is a one- or two-player terminal-story runtime and the foundation of a visual game builder. Players experience branching stories from browser terminals on the same LAN. Stories can mix private perspectives, shared decisions, free-form conversation, dice checks, synchronized checkpoints, timers, images, and coded minigames.
 
 The current playable story is based on the RAID, Spoofs, ACPU, Rammers, Zog, Nova, and Avona material in the local `Notes/` directory. The notes are intentionally excluded from Git.
 
@@ -11,7 +11,7 @@ The long-term product has two connected modes:
 - Build mode lets creators make stories as flowcharts without writing code.
 - Play mode runs those story graphs as synchronized two-player terminal games.
 
-Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. The installed catalog includes NetRunners, Billywig, Pigz, Trace Race, and Packet War.
+Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. The installed catalog includes NetRunners, Billywig, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks.
 
 Read the complete product direction in [Visual Story Builder Product Direction](docs/GAME_BUILDER_DIRECTION.md).
 
@@ -32,15 +32,16 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 
 - Story Mode starts without a cartridge selected.
 - The Library lists persistent story documents and shows each player's current cartridge.
-- Story Mode unlocks only when both players select the same story.
+- Solo cartridges launch for their selecting player. Multiplayer cartridges unlock when both players select the same story and mode.
 - Selecting a different matching story starts a fresh shared campaign for that story.
 - Stories are stored in `data/dejavu.sqlite`, so created stories survive server restarts.
 - Déjà Vu is seeded as the first built-in story and can be edited or duplicated.
-- Creators can create, read, edit, duplicate, and delete custom story drafts.
+- Creators can create, read, edit, duplicate, and delete custom playable stories.
 - The Editor is a dedicated sidebar destination, while every Library cartridge still links directly into it.
 - The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, previous/next click-to-connect routes, drag-and-drop organization, labels, validation, undo/redo, quick node actions, and a type-specific inspector.
-- Images, inventory/effect changes, and music/atmosphere changes are attached to main-flow nodes and presented as visually offset companions rather than playable steps with their own routes.
-- Story images can be uploaded as PNG, JPEG, WebP, GIF, AVIF, or SVG files up to 8 MB and are stored by the LAN host.
+- Inventory/effect and music/atmosphere changes are attached to main-flow nodes as visually offset companions. Image nodes are normal routed steps that display artwork inside the terminal.
+- Story images can be uploaded as PNG, JPEG, WebP, GIF, AVIF, or SVG files up to 8 MB and are stored by the LAN host. The editor asset picker also lists compatible files copied directly into `public/uploads/stories/`.
+- Stories may expose a solo map, a multiplayer map, or both. Disabling a mode preserves its nodes; the solo map greys out the Player 2 and Shared lanes.
 
 ### Server-authoritative campaign
 
@@ -105,7 +106,7 @@ Each browser stores independent music and sound-effect mute and volume settings.
 
 ### Minigame library
 
-The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners, Billywig, Pigz, Trace Race, and Packet War can be launched directly from this catalog or through a story minigame node. Trace Race supports a local CPU opponent and a hidden-information LAN duel. Packet War supports a two-player duel and a cooperative BLACK ICE breach. Story-launched sessions return through their configured completed or cancelled destination.
+The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners, Billywig, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks can be launched directly from this catalog or through a story minigame node. Trace Race supports a local CPU opponent and a hidden-information LAN duel. Packet War supports a two-player duel and a cooperative BLACK ICE breach. Lo-Hi, Mastermind, and Chopsticks each support solo and synchronized LAN play. Story-launched sessions return through their configured finished or exited-early destination.
 
 ### NetRunners
 

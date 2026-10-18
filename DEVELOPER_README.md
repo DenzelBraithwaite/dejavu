@@ -66,7 +66,7 @@ Use the plus control at the bottom of a lane to append a node. Empty normal and 
 
 The inspector can select routes in either direction. **Select next node** updates the selected node. **Select previous node** asks for an existing source node, finds an unused compatible route on it, and updates that source so it leads into the selected node. Nodes with several incoming routes display every source separately.
 
-Image, item/effect, and music/atmosphere nodes are grouped as companion changes and offset visually from the main flow. A companion stores the main-flow node ID in `attachedTo`; it has no incoming or outgoing route of its own and is rendered or applied when its host becomes active. Images are uploaded to `public/uploads/stories/` through the host's `/api/story-assets/images` endpoint; accepted formats are PNG, JPEG, WebP, GIF, AVIF, and SVG, with an 8 MB limit.
+Item/effect and music/atmosphere nodes are companion changes offset visually from the main flow. A companion stores the main-flow node ID in `attachedTo`; it has no incoming or outgoing route of its own and is applied when its host becomes active. Image nodes are routed main-flow nodes that render artwork in the terminal and may clear previous terminal output. Images are uploaded to `public/uploads/stories/` through the host's `/api/story-assets/images` endpoint; accepted formats are PNG, JPEG, WebP, GIF, AVIF, and SVG, with an 8 MB limit. Compatible images copied directly into that folder also appear in the editor asset library.
 
 Node cards show their type ordinal, such as `3rd dialogue node`, plus readable route destinations. Missing incoming routes, missing outgoing routes, broken destinations, and illegal cross-player links receive a red invalid border. Start nodes, endings, and visual labels have the expected validation exceptions.
 
@@ -193,7 +193,7 @@ defineScene({
 })
 ```
 
-The portrait belongs to the active Dialogue node only. Use a separate Image companion node for full terminal art, location imagery, or illustrations that should remain part of the scene presentation.
+The portrait is archived with completed Dialogue output and remains visible at a smaller size. Use a routed Image node for full terminal art, location imagery, or illustrations.
 
 ## Terminal history and clearing
 
@@ -527,7 +527,7 @@ defineScene({
 })
 ```
 
-The runtime waits until both players launch the node and opens the selected module on both clients. NetRunners, Pigz, Trace Race, and Packet War resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for both completion signals before returning to the connected story destination. Available IDs are `netrunners`, `billywig`, `pigz`, `trace-race`, and `packet-war`. New minigames must provide their own result IDs and server-owned completion handling.
+For multiplayer stories, the runtime waits until both players launch the node and opens the selected module on both clients. Solo stories require only the owning player. NetRunners, Pigz, Trace Race, Packet War, Lo-Hi, Mastermind, and Chopsticks resolve shared multiplayer rounds on the server. Billywig lets each player run a local player-versus-bank round, then waits for the required completion signals before returning to the connected story destination. Available IDs are `netrunners`, `billywig`, `pigz`, `trace-race`, `packet-war`, `lo-hi`, `mastermind`, and `chopsticks`. New minigames must provide their own result IDs and server-owned completion handling.
 
 ## Typewriter configuration
 

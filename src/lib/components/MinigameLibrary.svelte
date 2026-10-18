@@ -7,6 +7,7 @@
       title: 'NetRunners',
       description: 'Bet on rival hacker factions as they race across a volatile data grid.',
       playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
       status: 'READY',
       artwork: 'netrunners'
     },
@@ -23,6 +24,7 @@
       title: 'Pigz',
       description: 'Roll, bank, and push your luck in a neon-pink race to 100.',
       playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
       status: 'READY',
       artwork: 'pigz'
     },
@@ -31,6 +33,7 @@
       title: 'Trace Race',
       description: 'Hunt a hidden rival signal through a neon network before they trace you first.',
       playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
       status: 'READY',
       artwork: 'trace-race'
     },
@@ -41,6 +44,33 @@
       playerCount: 2,
       status: 'READY',
       artwork: 'packet-war'
+    },
+    {
+      id: 'lo-hi',
+      title: 'Lo-Hi',
+      description: 'Predict the next card, take calculated risks, and hold before the signal breaks.',
+      playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
+      status: 'READY',
+      artwork: 'lo-hi'
+    },
+    {
+      id: 'mastermind',
+      title: 'Mastermind',
+      description: 'Crack a hidden four-digit cipher alone or race another codebreaker round by round.',
+      playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
+      status: 'READY',
+      artwork: 'mastermind'
+    },
+    {
+      id: 'chopsticks',
+      title: 'Chopsticks',
+      description: 'Transfer points between hands in a deceptively deep zero-graphics strategy duel.',
+      playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
+      status: 'READY',
+      artwork: 'chopsticks'
     }
   ];
 </script>
@@ -91,18 +121,28 @@
                 <span class="trace-node trace-node--three">09</span>
                 <span class="trace-node trace-node--four">12</span>
               </div>
-            {:else}
+            {:else if minigame.artwork === 'packet-war'}
               <div class="packet-route">
                 <span class="packet-deck">P1</span>
                 <div class="packet-stream"><i></i><i></i><i></i></div>
                 <span class="packet-deck packet-deck--hostile">ICE</span>
+              </div>
+            {:else}
+              <div class="arcade-glyph arcade-glyph--{minigame.artwork}">
+                {#if minigame.artwork === 'lo-hi'}
+                  <span>HI</span><strong>07</strong><span>LO</span>
+                {:else if minigame.artwork === 'mastermind'}
+                  <span>•</span><span>4</span><span>?</span><span>1</span>
+                {:else}
+                  <span>Ⅰ</span><span>Ⅱ</span><strong>VS</strong><span>Ⅳ</span><span>Ⅰ</span>
+                {/if}
               </div>
             {/if}
           </div>
           <div class="module-copy">
             <div class="module-meta">
               <span>{minigame.status}</span>
-              <span>{minigame.playerCount} {minigame.playerCount === 1 ? 'PLAYER' : 'PLAYERS'}</span>
+              <span>{minigame.playerLabel ?? `${minigame.playerCount} ${minigame.playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`}</span>
             </div>
             <h2>{minigame.title}</h2>
             <p>{minigame.description}</p>
@@ -413,6 +453,59 @@
 
     display: grid;
     place-items: center;
+  }
+
+  .module-art--lo-hi,
+  .module-art--mastermind,
+  .module-art--chopsticks {
+    background:
+      linear-gradient(90deg, #ffffff0b 1px, transparent 1px),
+      linear-gradient(#ffffff0b 1px, transparent 1px),
+      radial-gradient(circle at center, #17344b, #050812 68%);
+    background-size: 22px 22px, 22px 22px, auto;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .module-art--mastermind {
+    background-image: radial-gradient(circle at center, #4f2f7c, #080610 70%);
+  }
+
+  .module-art--chopsticks {
+    background-image: radial-gradient(circle at center, #165435, #030905 70%);
+  }
+
+  .arcade-glyph {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    span,
+    strong {
+      min-width: 46px;
+      padding: 12px;
+      color: #02fbfb;
+      background: #071521;
+      border: 1px solid currentColor;
+      box-shadow: 0 0 15px #02fbfb44;
+      text-align: center;
+    }
+
+    strong {
+      color: #ff75fd;
+      font-size: 2rem;
+    }
+  }
+
+  .arcade-glyph--mastermind span {
+    color: #c9a7ff;
+  }
+
+  .arcade-glyph--chopsticks span,
+  .arcade-glyph--chopsticks strong {
+    min-width: 34px;
+    color: #55f09a;
   }
 
   .packet-route {

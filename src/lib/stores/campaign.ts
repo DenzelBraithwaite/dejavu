@@ -27,6 +27,8 @@ export type TerminalOutputEntry = {
   sceneId: string;
   speaker: string;
   text: string;
+  portrait?: string;
+  portraitAlt?: string;
   createdAt: string;
 };
 
@@ -34,6 +36,8 @@ export type CampaignState = {
   version: number;
   campaignId: string;
   story: StoryDocument | null;
+  sessionMode: 'singleplayer' | 'multiplayer';
+  soloPlayerId: PlayerId | null;
   currentScene: Record<PlayerId, string>;
   players: Record<PlayerId, CampaignPlayer>;
   installedMods: string[];

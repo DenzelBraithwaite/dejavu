@@ -101,6 +101,9 @@
     : null;
   $: localStoryTitle = getStoryTitle(localStoryId);
   $: partnerStoryTitle = getStoryTitle(partnerStoryId);
+  $: soloSpectator = $libraryState.activeStoryMode === 'singleplayer'
+    && Boolean(playerId)
+    && $libraryState.activeSoloPlayerId !== playerId;
   $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
 
   $: if (terminalScreenElement && scrollKey !== lastScrollKey) {
@@ -254,6 +257,15 @@
     });
   }
 
+  function resetStory(): void {
+    errorMessage = '';
+    socket.emit('campaign:reset', (result: { ok: boolean; error?: string }) => {
+      if (!result.ok) {
+        errorMessage = result.error ?? 'Story Mode could not be reset.';
+      }
+    });
+  }
+
   function skipTyping(): void {
     typedTextElement?.dispatchEvent(new CustomEvent('typewriterskip'));
   }
@@ -291,7 +303,10 @@
 >
   <header class="terminal-header">
     <span>DEJAVU://CAMPAIGN</span>
-    <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
+    <div>
+      <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
+      <button type="button" disabled={!$libraryState.activeStoryId} on:click={resetStory}>RESET STORY</button>
+    </div>
   </header>
 
   <div
@@ -332,15 +347,27 @@
           Open Library
         </button>
       </div>
+    {:else if soloSpectator}
+      <div class="cartridge-status" role="status">
+        <p class="scene-id">SOLO SESSION ACTIVE</p>
+        <h1>Your partner is playing this cartridge solo</h1>
+        <p>Select a solo cartridge from Library to take control, or choose the same multiplayer cartridge together.</p>
+        <button type="button" on:click={() => location.set('library')}>Open Library</button>
+      </div>
     {:else if !$campaignState || !scene}
       <p class="system-message">Synchronizing campaign state...</p>
     {:else}
       <div class="terminal-history" aria-label="Previous terminal output">
         {#each terminalEntries as entry}
-          <article class="terminal-history-entry">
-            <p class="history-scene-id">{entry.sceneId}</p>
-            <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
-            <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+          <article class="terminal-history-entry" class:terminal-history-entry--portrait={Boolean(entry.portrait)}>
+            {#if entry.portrait}
+              <img class="history-portrait" src={entry.portrait} alt={entry.portraitAlt ?? ''}>
+            {/if}
+            <div>
+              <p class="history-scene-id">{entry.sceneId}</p>
+              <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
+              <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+            </div>
           </article>
         {/each}
       </div>
@@ -439,6 +466,7 @@
           <input
             id="scene-input"
             bind:value={inputValue}
+            placeholder={scene.placeholder ?? ''}
             maxlength={scene.maxLength ?? 200}
             disabled={!typingComplete}
             on:keydown={(event) => handleInputKeydown(event, submitInput)}
@@ -574,6 +602,28 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+
+    div {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    button {
+      min-height: 28px;
+      padding: 4px 9px;
+      color: #f8e69a;
+      background: #28220b;
+      border: 1px solid #ad781c;
+      font: inherit;
+      font-size: 0.62rem;
+      cursor: pointer;
+
+      &:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+    }
   }
 
   .terminal-screen {
@@ -599,6 +649,23 @@
     margin-bottom: 32px;
     padding-bottom: 24px;
     border-bottom: 1px dashed #1e293b;
+  }
+
+  .terminal-history-entry--portrait {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 13px;
+    align-items: start;
+  }
+
+  .history-portrait {
+    width: 56px;
+    height: 68px;
+    object-fit: cover;
+    background: #07111d;
+    border: 1px solid #1472bf;
+    border-radius: 3px 10px;
+    opacity: 0.72;
   }
 
   .history-scene-id {

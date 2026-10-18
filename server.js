@@ -51,6 +51,14 @@ import {
   playPacketWarCard,
   votePacketWarRematch
 } from './server/packetWarSession.js';
+import {
+  createArcadeSessions,
+  getArcadeSnapshot,
+  joinArcadeGame,
+  leaveArcadeGame,
+  performArcadeAction,
+  restartArcadeGame
+} from './server/arcadeSessions.js';
 import { createStoryRepository } from './server/storyRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -89,23 +97,36 @@ const storySelections = {
   p1: null,
   p2: null
 };
+const storySelectionModes = {
+  p1: null,
+  p2: null
+};
 let activeStoryId = null;
+let activeStoryMode = null;
+let activeSoloPlayerId = null;
 let campaignState = createCampaignState();
 let netRunnersState = createNetRunnersState();
 let pigzState = createPigzState();
 let traceRaceState = createTraceRaceState();
 let packetWarState = createPacketWarState();
+const arcadeSessions = createArcadeSessions();
 let billywigCompletionSceneId = null;
 const billywigFinishedPlayers = new Set();
 let pigzCompletionSceneId = null;
 const pigzFinishedPlayers = new Set();
 const storyMinigameFinishedPlayers = {
   'trace-race': new Set(),
-  'packet-war': new Set()
+  'packet-war': new Set(),
+  'lo-hi': new Set(),
+  mastermind: new Set(),
+  chopsticks: new Set()
 };
 const storyMinigameCompletionScenes = {
   'trace-race': null,
-  'packet-war': null
+  'packet-war': null,
+  'lo-hi': null,
+  mastermind: null,
+  chopsticks: null
 };
 const chatMessages = [];
 
@@ -143,6 +164,29 @@ app.post(
   }
 );
 
+app.get('/api/story-assets/images', async (_request, response) => {
+  try {
+    await mkdir(storyImageDirectory, { recursive: true });
+    const entries = await readdir(storyImageDirectory, {
+      withFileTypes: true
+    });
+    const images = entries
+      .filter((entry) => entry.isFile())
+      .filter((entry) => /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(entry.name))
+      .map((entry) => `/uploads/stories/${entry.name}`)
+      .sort((left, right) => left.localeCompare(right));
+
+    response.json({
+      images
+    });
+  } catch (error) {
+    console.error('Could not list story images.', error);
+    response.status(500).json({
+      error: 'The story image library could not be loaded.'
+    });
+  }
+});
+
 app.use(express.static(join(__dirname, 'public')));
 
 app.get('/', (_request, response) => {
@@ -173,6 +217,7 @@ io.on('connection', (socket) => {
   socket.emit('pigz:state', getPigzSnapshot(pigzState));
   socket.emit('trace-race:state', getTraceRaceSnapshot(traceRaceState, playerId));
   socket.emit('packet-war:state', getPacketWarSnapshot(packetWarState, playerId));
+  emitAllArcadeStates(socket);
   if (hasInstalledMod('neuro-link-chat')) {
     socket.emit('chat:history', chatMessages);
   }
@@ -251,6 +296,7 @@ io.on('connection', (socket) => {
       for (const participantId of ['p1', 'p2']) {
         if (storySelections[participantId] === normalizedStoryId) {
           storySelections[participantId] = null;
+          storySelectionModes[participantId] = null;
         }
       }
 
@@ -268,10 +314,25 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('library:select-story', (storyId, acknowledge = () => {}) => {
-    const normalizedStoryId = storyId === null ? null : String(storyId ?? '');
+  socket.on('library:select-story', (selection, acknowledge = () => {}) => {
+    const requestedStoryId = typeof selection === 'object'
+      ? selection?.storyId
+      : selection;
+    const requestedMode = typeof selection === 'object'
+      ? selection?.mode
+      : 'multiplayer';
+    const normalizedStoryId = requestedStoryId === null
+      ? null
+      : String(requestedStoryId ?? '');
+    const normalizedMode = requestedMode === 'singleplayer'
+      ? 'singleplayer'
+      : 'multiplayer';
 
-    if (normalizedStoryId && !storyRepository.getStory(normalizedStoryId)) {
+    const story = normalizedStoryId
+      ? storyRepository.getStory(normalizedStoryId)
+      : null;
+
+    if (normalizedStoryId && !story) {
       acknowledge({
         ok: false,
         error: 'Story not found.'
@@ -279,8 +340,22 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const supportedModes = story?.playModes ?? {
+      singleplayer: false,
+      multiplayer: true
+    };
+
+    if (story && !supportedModes[normalizedMode]) {
+      acknowledge({
+        ok: false,
+        error: `This cartridge does not include a ${normalizedMode} map.`
+      });
+      return;
+    }
+
     storySelections[playerId] = normalizedStoryId;
-    synchronizeActiveStory();
+    storySelectionModes[playerId] = normalizedStoryId ? normalizedMode : null;
+    synchronizeActiveStory(playerId);
     acknowledge({
       ok: true
     });
@@ -337,6 +412,15 @@ io.on('connection', (socket) => {
         return;
       }
 
+      if (campaignState.sessionMode === 'singleplayer'
+        && campaignState.soloPlayerId !== playerId) {
+        acknowledge({
+          ok: false,
+          error: 'The other player owns this single-player Story Mode session.'
+        });
+        return;
+      }
+
       const result = handleCampaignAction(campaignState, playerId, action);
       acknowledge(result);
 
@@ -349,6 +433,44 @@ io.on('connection', (socket) => {
         error: error instanceof Error ? error.message : 'Campaign action failed.'
       });
     }
+  });
+
+  socket.on('campaign:reset', (acknowledge = () => {}) => {
+    if (!activeStoryId) {
+      acknowledge({
+        ok: false,
+        error: 'Select a story cartridge before resetting Story Mode.'
+      });
+      return;
+    }
+
+    const story = storyRepository.getStory(activeStoryId);
+
+    if (!story) {
+      acknowledge({
+        ok: false,
+        error: 'The active story cartridge could not be found.'
+      });
+      return;
+    }
+
+    campaignState = createCampaignState(story, {
+      mode: activeStoryMode,
+      soloPlayerId: activeSoloPlayerId
+    });
+    initializeDeadlines(campaignState);
+    resetBillywigCompletion();
+    resetPigzCompletion();
+
+    for (const minigameId of Object.keys(storyMinigameFinishedPlayers)) {
+      storyMinigameFinishedPlayers[minigameId].clear();
+      storyMinigameCompletionScenes[minigameId] = null;
+    }
+
+    io.emit('campaign:state', getCampaignSnapshot(campaignState));
+    acknowledge({
+      ok: true
+    });
   });
 
   socket.on('campaign:save', async (saveName, acknowledge = () => {}) => {
@@ -404,8 +526,18 @@ io.on('connection', (socket) => {
       const contents = await readFile(join(savesDirectory, safeFileName), 'utf8');
       campaignState = restoreCampaignState(JSON.parse(contents));
       activeStoryId = campaignState.story.id;
-      storySelections.p1 = activeStoryId;
-      storySelections.p2 = activeStoryId;
+      activeStoryMode = campaignState.sessionMode ?? 'multiplayer';
+      activeSoloPlayerId = campaignState.soloPlayerId ?? null;
+
+      if (activeStoryMode === 'singleplayer' && activeSoloPlayerId) {
+        storySelections[activeSoloPlayerId] = activeStoryId;
+        storySelectionModes[activeSoloPlayerId] = 'singleplayer';
+      } else {
+        storySelections.p1 = activeStoryId;
+        storySelections.p2 = activeStoryId;
+        storySelectionModes.p1 = 'multiplayer';
+        storySelectionModes.p2 = 'multiplayer';
+      }
       initializeDeadlines(campaignState);
       io.emit('campaign:state', getCampaignSnapshot(campaignState));
       broadcastLibraryState();
@@ -476,7 +608,9 @@ io.on('connection', (socket) => {
     synchronizeBillywigCompletionScene();
     billywigFinishedPlayers.add(playerId);
 
-    if (billywigFinishedPlayers.size < 2) {
+    const requiredPlayers = campaignState.sessionMode === 'singleplayer' ? 1 : 2;
+
+    if (billywigFinishedPlayers.size < requiredPlayers) {
       acknowledge({
         ok: true,
         waitingForPartner: true
@@ -574,7 +708,9 @@ io.on('connection', (socket) => {
     synchronizePigzCompletionScene();
     pigzFinishedPlayers.add(playerId);
 
-    if (pigzFinishedPlayers.size < 2) {
+    const requiredPlayers = campaignState.sessionMode === 'singleplayer' ? 1 : 2;
+
+    if (pigzFinishedPlayers.size < requiredPlayers) {
       acknowledge({
         ok: true,
         waitingForPartner: true
@@ -699,6 +835,52 @@ io.on('connection', (socket) => {
     cancelStoryMinigame('packet-war', acknowledge);
   });
 
+  socket.on('arcade:join', (gameId, acknowledge = () => {}) => {
+    const result = joinArcadeGame(
+      arcadeSessions,
+      gameId,
+      playerId,
+      campaignState.players[playerId].name
+    );
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastArcadeState(gameId);
+    }
+  });
+
+  socket.on('arcade:leave', (gameId) => {
+    leaveArcadeGame(arcadeSessions, gameId, playerId);
+    broadcastArcadeState(gameId);
+  });
+
+  socket.on('arcade:action', (request, acknowledge = () => {}) => {
+    const result = performArcadeAction(
+      arcadeSessions,
+      request?.game,
+      playerId,
+      request?.action ?? {}
+    );
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastArcadeState(request.game);
+    }
+  });
+
+  socket.on('arcade:restart', (gameId) => {
+    restartArcadeGame(arcadeSessions, gameId);
+    broadcastArcadeState(gameId);
+  });
+
+  socket.on('arcade:story-complete', (gameId, acknowledge = () => {}) => {
+    completeStoryMinigame(gameId, playerId, acknowledge);
+  });
+
+  socket.on('arcade:story-cancel', (gameId, acknowledge = () => {}) => {
+    cancelStoryMinigame(gameId, acknowledge);
+  });
+
   socket.on('disconnect', () => {
     const slot = playerSlots[playerId];
 
@@ -712,6 +894,11 @@ io.on('connection', (socket) => {
     leavePigz(pigzState, playerId);
     leaveTraceRace(traceRaceState, playerId);
     leavePacketWar(packetWarState, playerId);
+
+    for (const gameId of Object.keys(arcadeSessions)) {
+      leaveArcadeGame(arcadeSessions, gameId, playerId);
+      broadcastArcadeState(gameId);
+    }
 
     if (campaignState.activeMinigame?.id === 'netrunners') {
       const campaignResult = completeActiveMinigame(campaignState, 'cancelled');
@@ -863,6 +1050,23 @@ function broadcastPacketWarState() {
   }
 }
 
+function emitAllArcadeStates(socket) {
+  for (const gameId of Object.keys(arcadeSessions)) {
+    socket.emit('arcade:state', {
+      game: gameId,
+      state: getArcadeSnapshot(arcadeSessions, gameId)
+    });
+  }
+}
+
+function broadcastArcadeState(gameId) {
+  const state = getArcadeSnapshot(arcadeSessions, gameId);
+
+  if (state) {
+    io.emit('arcade:state', { game: gameId, state });
+  }
+}
+
 function countConnectedPlayers() {
   return Object.values(playerSlots).filter((slot) => slot.connected).length;
 }
@@ -882,6 +1086,7 @@ function scheduleSlotRelease(playerId, expectedToken) {
 
     playerSlots[playerId] = createEmptySlot();
     storySelections[playerId] = null;
+    storySelectionModes[playerId] = null;
     synchronizeActiveStory();
     broadcastSessionStatus();
     broadcastLibraryState();
@@ -894,7 +1099,12 @@ function createLibraryState() {
     selections: {
       ...storySelections
     },
-    activeStoryId
+    selectionModes: {
+      ...storySelectionModes
+    },
+    activeStoryId,
+    activeStoryMode,
+    activeSoloPlayerId
   };
 }
 
@@ -902,22 +1112,43 @@ function broadcastLibraryState() {
   io.emit('library:state', createLibraryState());
 }
 
-function synchronizeActiveStory() {
+function synchronizeActiveStory(preferredPlayerId = null) {
+  const soloPlayerId = preferredPlayerId
+    && storySelections[preferredPlayerId]
+    && storySelectionModes[preferredPlayerId] === 'singleplayer'
+    ? preferredPlayerId
+    : ['p1', 'p2'].find(
+        (playerId) => storySelections[playerId]
+          && storySelectionModes[playerId] === 'singleplayer'
+      );
+  const soloStoryId = soloPlayerId ? storySelections[soloPlayerId] : null;
   const matchingStoryId = storySelections.p1
     && storySelections.p1 === storySelections.p2
+    && storySelectionModes.p1 === 'multiplayer'
+    && storySelectionModes.p2 === 'multiplayer'
     ? storySelections.p1
     : null;
+  const nextStoryId = soloStoryId ?? matchingStoryId;
+  const nextMode = soloStoryId ? 'singleplayer' : matchingStoryId ? 'multiplayer' : null;
 
-  activeStoryId = matchingStoryId;
+  activeStoryId = nextStoryId;
+  activeStoryMode = nextMode;
+  activeSoloPlayerId = nextMode === 'singleplayer' ? soloPlayerId : null;
 
-  if (!matchingStoryId || campaignState.story?.id === matchingStoryId) {
+  if (!nextStoryId
+    || (campaignState.story?.id === nextStoryId
+      && campaignState.sessionMode === nextMode
+      && campaignState.soloPlayerId === activeSoloPlayerId)) {
     return;
   }
 
-  const story = storyRepository.getStory(matchingStoryId);
+  const story = storyRepository.getStory(nextStoryId);
 
   if (story) {
-    campaignState = createCampaignState(story);
+    campaignState = createCampaignState(story, {
+      mode: nextMode,
+      soloPlayerId: activeSoloPlayerId
+    });
     initializeDeadlines(campaignState);
   }
 }
@@ -985,7 +1216,9 @@ function completeStoryMinigame(minigameId, playerId, acknowledge) {
   const finishedPlayers = storyMinigameFinishedPlayers[minigameId];
   finishedPlayers.add(playerId);
 
-  if (finishedPlayers.size < 2) {
+  const requiredPlayers = campaignState.sessionMode === 'singleplayer' ? 1 : 2;
+
+  if (finishedPlayers.size < requiredPlayers) {
     acknowledge({
       ok: true,
       waitingForPartner: true

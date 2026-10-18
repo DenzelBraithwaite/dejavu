@@ -48,6 +48,8 @@
   let localPlayerExposure = 0;
   let localCpuExposure = 0;
   let localExposureRevealNodes: number[] = [];
+  let localExposureRevealPosition: number | null = null;
+  let localSearchRevealNodes: number[] = [];
   let localTracker: Tracker | null = null;
   let localTurn = 1;
   let localIntel: string[] = [];
@@ -67,6 +69,9 @@
   $: displayedExposureRevealNodes = mode === 'singleplayer'
     ? localExposureRevealNodes
     : serverPlayer?.exposureRevealNodes ?? [];
+  $: displayedSearchRevealNodes = mode === 'singleplayer'
+    ? localSearchRevealNodes
+    : serverPlayer?.searchRevealNodes ?? [];
   $: displayedTracker = mode === 'singleplayer'
     ? localTracker
     : serverPlayer?.tracker ?? null;
@@ -149,6 +154,8 @@
     localPlayerExposure = 0;
     localCpuExposure = 0;
     localExposureRevealNodes = [];
+    localExposureRevealPosition = null;
+    localSearchRevealNodes = [];
     localTracker = null;
     localTurn = 1;
     resetTargeting();
@@ -247,11 +254,13 @@
 
       localPlayerPosition = target as number;
       localPlayerExposure = Math.max(0, localPlayerExposure - 1);
+      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: Relocated to NODE ${formatNode(localPlayerPosition)}.`);
     }
 
     if (type === 'trace') {
       localPlayerExposure = Math.min(9, localPlayerExposure + 2);
+      localSearchRevealNodes = [...targets];
       addLocalIntel(targets.includes(localCpuPosition)
         ? `TURN ${localTurn}: TRACE POSITIVE. Rival signal is inside nodes ${formatNodeList(targets)}.`
         : `TURN ${localTurn}: TRACE CLEAR. Rival signal is not inside nodes ${formatNodeList(targets)}.`);
@@ -266,12 +275,14 @@
       }
 
       localPlayerExposure = Math.min(9, localPlayerExposure + 3);
+      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: NODE ${formatNode(target as number)} was empty.`);
     }
 
     if (type === 'scan') {
       const nearby = shortestDistance(target as number, localCpuPosition) <= 2;
       localPlayerExposure = Math.min(9, localPlayerExposure + 1);
+      localSearchRevealNodes = nodesWithinDistance(target as number, 2);
       addLocalIntel(nearby
         ? `TURN ${localTurn}: SCAN POSITIVE. Rival signal detected within 2 hops of NODE ${formatNode(target as number)}.`
         : `TURN ${localTurn}: SCAN CLEAR. No rival signal within 2 hops of NODE ${formatNode(target as number)}.`);
@@ -283,12 +294,14 @@
         turnsRemaining: 3,
         alertedNodes: []
       };
+      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: TRACKER armed at NODE ${formatNode(target as number)} for 3 rival turns.`);
       updateLocalTracker(false);
     }
 
     if (type === 'scramble') {
       localPlayerExposure = Math.max(0, localPlayerExposure - 3);
+      localSearchRevealNodes = [];
       addLocalIntel(`TURN ${localTurn}: Signal signature scrambled.`);
     }
 
@@ -392,6 +405,12 @@
     return visited.size === nodes.length;
   }
 
+  function nodesWithinDistance(center: number, maximumDistance: number): number[] {
+    return positions
+      .map((_, node) => node)
+      .filter((node) => shortestDistance(center, node) <= maximumDistance);
+  }
+
   function addLocalIntel(message: string): void {
     localIntel = [...localIntel, message];
   }
@@ -399,15 +418,19 @@
   function updateLocalExposureReveal(): void {
     if (localCpuExposure < 7) {
       localExposureRevealNodes = [];
+      localExposureRevealPosition = null;
+      return;
+    }
+
+    if (localExposureRevealPosition === localCpuPosition
+      && localExposureRevealNodes.length === 3) {
       return;
     }
 
     const nextReveal = createExposureCluster(localCpuPosition);
-
-    if (!sameNodes(localExposureRevealNodes, nextReveal)) {
-      localExposureRevealNodes = nextReveal;
-      addLocalIntel(`EXPOSURE LEAK: Rival occupies one of these 3 nodes: ${formatNodeList(nextReveal)}.`);
-    }
+    localExposureRevealNodes = nextReveal;
+    localExposureRevealPosition = localCpuPosition;
+    addLocalIntel(`EXPOSURE LEAK: Rival occupies one of these 3 nodes: ${formatNodeList(nextReveal)}.`);
   }
 
   function updateLocalTracker(advanceTurn: boolean): void {
@@ -460,11 +483,6 @@
     return shuffled;
   }
 
-  function sameNodes(left: number[], right: number[]): boolean {
-    return left.length === right.length
-      && left.every((node) => right.includes(node));
-  }
-
   function intelClass(message: string): string {
     if (message.includes('PING LOCKED') || message.includes('EXPOSURE LEAK') || message.includes('SCAN POSITIVE')) {
       return 'success';
@@ -492,6 +510,10 @@
 
   function nodeIsTrackerCandidate(node: number): boolean {
     return Boolean(displayedTracker?.alertedNodes.includes(node));
+  }
+
+  function nodeIsSearchCandidate(node: number): boolean {
+    return displayedSearchRevealNodes.includes(node);
   }
 
   function nodeIsExposureCandidate(node: number): boolean {
@@ -727,6 +749,7 @@
               class:network-node--current={displayedPosition === index}
               class:network-node--selected={traceSelection.includes(index)}
               class:network-node--targetable={nodeCanBeTargeted(index)}
+              class:network-node--search={nodeIsSearchCandidate(index)}
               class:network-node--tracker={nodeIsTrackerCandidate(index)}
               class:network-node--exposed={nodeIsExposureCandidate(index)}
               class:network-node--enemy={(mode === 'singleplayer' && localStatus === 'finished' && localCpuPosition === index)
@@ -747,8 +770,9 @@
       <aside>
         {#if (mode === 'singleplayer' && localStatus === 'finished')
           || (mode === 'multiplayer' && $traceRaceServerState?.status === 'finished')}
-          <div class="result-card">
+          <div class="result-card" class:result-card--victory={winner === 'player' || winner === playerId} class:result-card--defeat={winner !== 'player' && winner !== playerId}>
             <p class="eyebrow">TRACE CLOSED</p>
+            <strong class="result-verdict">{winner === 'player' || winner === playerId ? 'VICTORY' : 'DEFEAT'}</strong>
             <h2>{winner === 'player' || winner === playerId ? 'TARGET ACQUIRED' : 'SIGNAL COMPROMISED'}</h2>
             <p>{winner === 'player' || winner === playerId ? 'You found the rival signal first.' : 'The rival locked onto your position.'}</p>
 
@@ -1200,6 +1224,7 @@
       box-shadow: 0 0 24px #00d7eb;
     }
 
+    &--search:not(.network-node--exposed),
     &--tracker:not(.network-node--exposed) {
       color: #211200;
       background: #ff9d2e;
@@ -1240,6 +1265,51 @@
   .result-card,
   .intel-feed {
     padding: 18px;
+  }
+
+  .result-card {
+    min-height: 260px;
+    text-align: center;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+
+    h2 {
+      font-size: clamp(1.4rem, 3vw, 2.2rem);
+    }
+  }
+
+  .result-verdict {
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: clamp(2.4rem, 6vw, 4.7rem);
+    letter-spacing: 5px;
+  }
+
+  .result-card--victory {
+    background: radial-gradient(circle at 50% 25%, #53e6a129, transparent 62%), #061a14;
+    border-color: #53e6a1;
+    box-shadow: 0 0 34px #53e6a14a;
+
+    .result-verdict,
+    h2 {
+      color: #79f4b9;
+      text-shadow: 0 0 22px #53e6a188;
+    }
+  }
+
+  .result-card--defeat {
+    background: radial-gradient(circle at 50% 25%, #ff354f25, transparent 62%), #210a10;
+    border-color: #ff4f64;
+    box-shadow: 0 0 34px #ff354f42;
+
+    .result-verdict,
+    h2 {
+      color: #ff7788;
+      text-shadow: 0 0 22px #ff354f88;
+    }
   }
 
   .turn-status {

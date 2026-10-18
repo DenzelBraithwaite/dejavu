@@ -4,10 +4,13 @@ import Billywig from './Billywig.svelte';
 import Client from './Client.svelte';
 import CharacterMenu from './CharacterMenu.svelte';
 import ChatPanel from './ChatPanel.svelte';
+import Chopsticks from './Chopsticks.svelte';
 import Dice from './Dice.svelte';
 import DiceTerminal from './DiceTerminal.svelte';
 import Item from './Item.svelte';
 import Journal from './Journal.svelte';
+import LoHi from './LoHi.svelte';
+import Mastermind from './Mastermind.svelte';
 import MinigameLibrary from './MinigameLibrary.svelte';
 import NetRunners from './NetRunners.svelte';
 import NetRunnersCard from './NetRunnersCard.svelte';
@@ -27,10 +30,13 @@ export {
   BagMenu,
   Billywig,
   Client,
+  Chopsticks,
   Dice,
   DiceTerminal,
   Item,
   Journal,
+  LoHi,
+  Mastermind,
   MinigameLibrary,
   NetRunners,
   NetRunnersCard,

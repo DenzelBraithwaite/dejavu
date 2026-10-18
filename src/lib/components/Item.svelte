@@ -174,6 +174,14 @@
     background-color: #215798;
   }
 
+  .item-color__mint {
+    background-color: #5ee6c4;
+  }
+
+  .item-color__orange {
+    background-color: #e97932;
+  }
+
   .item-color__purple {
     background-color: #453b82;
   }

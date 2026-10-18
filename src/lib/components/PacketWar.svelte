@@ -159,7 +159,11 @@
       uplink: 'yellow',
       guardian: 'cyan',
       meshRepair: 'green',
-      darkMirror: 'purple'
+      darkMirror: 'purple',
+      iceStrike: 'pink',
+      iceInfect: 'yellow',
+      iceReboot: 'blue',
+      iceFirewall: 'cyan'
     };
 
     return accents[cardId] ?? 'cyan';
@@ -375,15 +379,28 @@
         </article>
       </div>
 
-      {#if $packetWarServerState.lastProgram}
-        <div class="last-transmission" aria-live="polite">
+      {#if $packetWarServerState.lastAllyProgram}
+        <div class="last-transmission last-transmission--ally" aria-live="polite">
           <div class="last-transmission__label">
-            <span>LAST TRANSMISSION</span>
-            <strong>{$packetWarServerState.lastProgram.actor}</strong>
+            <span>{$packetWarServerState.mode === 'coop' ? 'LAST ALLY PLAY' : 'LAST TRANSMISSION'}</span>
+            <strong>{$packetWarServerState.lastAllyProgram.actor}</strong>
           </div>
-          <div class="last-transmission__card last-transmission__card--{cardAccent($packetWarServerState.lastProgram.cardId ?? '')}">
-            <strong>{$packetWarServerState.lastProgram.cardName}</strong>
-            <span>{$packetWarServerState.programs[$packetWarServerState.lastProgram.cardId ?? '']?.description}</span>
+          <div class="last-transmission__card last-transmission__card--{cardAccent($packetWarServerState.lastAllyProgram.cardId ?? '')}">
+            <strong>{$packetWarServerState.lastAllyProgram.cardName}</strong>
+            <span>{$packetWarServerState.programs[$packetWarServerState.lastAllyProgram.cardId ?? '']?.description}</span>
+          </div>
+        </div>
+      {/if}
+
+      {#if $packetWarServerState.mode === 'coop' && $packetWarServerState.lastBreachProgram}
+        <div class="last-transmission last-transmission--hostile" aria-live="polite">
+          <div class="last-transmission__label">
+            <span>LAST BLACK ICE PLAY</span>
+            <strong>{$packetWarServerState.lastBreachProgram.actor}</strong>
+          </div>
+          <div class="last-transmission__card last-transmission__card--{cardAccent($packetWarServerState.lastBreachProgram.cardId ?? '')}">
+            <strong>{$packetWarServerState.lastBreachProgram.cardName}</strong>
+            <span>{$packetWarServerState.programs[$packetWarServerState.lastBreachProgram.cardId ?? '']?.description}</span>
           </div>
         </div>
       {/if}
@@ -447,7 +464,13 @@
               {:else}
                 <span class="log-marker">SYS</span>
               {/if}
-              <span>{event.message}</span>
+              <span>
+                {#if event.actor}
+                  <strong class:log-actor--hostile={event.actorType === 'black-ice'} class:log-actor--ally={event.actorType === 'ally'}>{event.actor}</strong>{event.message.slice(event.actor.length)}
+                {:else}
+                  {event.message}
+                {/if}
+              </span>
             </div>
           {/each}
         </div>
@@ -1148,6 +1171,18 @@
     }
   }
 
+  .last-transmission--ally {
+    border-color: #53e6a1;
+  }
+
+  .last-transmission--hostile {
+    border-color: #ff4e69;
+
+    .last-transmission__label strong {
+      color: #ff6f82;
+    }
+  }
+
   .hand-heading {
     margin-bottom: 16px;
 
@@ -1335,6 +1370,14 @@
       font-size: 0.7rem;
       line-height: 1.45;
     }
+  }
+
+  .log-actor--ally {
+    color: #65e9ae;
+  }
+
+  .log-actor--hostile {
+    color: #ff6479;
   }
 
   .log-marker,

@@ -6,9 +6,13 @@ export const dejaVuStoryDocument = {
   title: 'Déjà Vu',
   description: 'Two strangers wake after an experimental operation and discover that neither their memories nor their escorts can be trusted.',
   author: 'Denzel Braithwaite',
-  status: 'published',
+  status: 'playable',
   version: 2,
   builtIn: true,
+  playModes: {
+    singleplayer: false,
+    multiplayer: true
+  },
   initialSceneIds: {
     p1: 'prologue.p1.wake',
     p2: 'prologue.p2.wake'
@@ -23,6 +27,9 @@ export const dejaVuStoryDocument = {
     'billywig',
     'pigz',
     'trace-race',
-    'packet-war'
+    'packet-war',
+    'lo-hi',
+    'mastermind',
+    'chopsticks'
   ]
 };

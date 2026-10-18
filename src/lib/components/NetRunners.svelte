@@ -343,6 +343,9 @@
   }
 
   function setMultiplayer(): void {
+    // Mark the current snapshot as observed before changing local mode. Otherwise
+    // the stale menu snapshot can immediately switch the first click back to solo.
+    lastMultiplayerStatus = $netRunnersServerState?.status ?? '';
     netRunnersGameState.set({...$netRunnersGameState, singleplayer: false})
     socket.emit('netrunners:join');
   }

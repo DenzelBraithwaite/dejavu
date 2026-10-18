@@ -38,6 +38,7 @@ export function createStoryRepository(databasePath) {
           status,
           version,
           built_in AS builtIn,
+          document_json AS documentJson,
           created_at AS createdAt,
           updated_at AS updatedAt
         FROM stories
@@ -141,6 +142,8 @@ export function createStoryRepository(databasePath) {
         author: existing.author,
         nodes: existing.nodes,
         initialSceneIds: existing.initialSceneIds,
+        singleplayerInitialSceneId: existing.singleplayerInitialSceneId,
+        playModes: existing.playModes,
         theme: existing.theme,
         supportedMinigames: existing.supportedMinigames
       });
@@ -185,7 +188,10 @@ function seedBuiltInStory(database, document) {
       ])
     ];
 
-    if (supportedMinigames.length === storedDocument.supportedMinigames?.length) {
+    const requiresStatusMigration = storedDocument.status !== 'playable';
+
+    if (supportedMinigames.length === storedDocument.supportedMinigames?.length
+      && !requiresStatusMigration) {
       return;
     }
 
@@ -193,17 +199,20 @@ function seedBuiltInStory(database, document) {
     const migratedDocument = {
       ...storedDocument,
       version: nextVersion,
+      status: 'playable',
       supportedMinigames
     };
 
     database.prepare(`
       UPDATE stories
       SET
+        status = ?,
         version = ?,
         document_json = ?,
         updated_at = ?
       WHERE id = ?
     `).run(
+      'playable',
       nextVersion,
       JSON.stringify(migratedDocument),
       now,
@@ -242,6 +251,7 @@ function seedBuiltInStory(database, document) {
 function createStoryDocument(input) {
   const id = createStoryId(input.title);
   const startNodes = input.nodes ?? createStarterNodes(id);
+  const playModes = normalizePlayModes(input.playModes);
 
   return normalizeStoryDocument({
     schemaVersion: 1,
@@ -249,13 +259,15 @@ function createStoryDocument(input) {
     title: input.title,
     description: input.description,
     author: input.author,
-    status: 'draft',
+    status: 'playable',
     version: 1,
     builtIn: false,
     initialSceneIds: input.initialSceneIds ?? {
       p1: `${id}.p1.start`,
       p2: `${id}.p2.start`
     },
+    singleplayerInitialSceneId: input.singleplayerInitialSceneId ?? `${id}.solo.start`,
+    playModes,
     nodes: startNodes,
     theme: input.theme ?? {
       id: 'default-terminal',
@@ -284,9 +296,15 @@ function normalizeStoryDocument(document) {
     title,
     description: String(document.description ?? '').trim().slice(0, 500),
     author: String(document.author ?? '').trim().slice(0, 80),
-    status: document.status === 'published' ? 'published' : 'draft',
+    status: 'playable',
     version: Math.max(1, Number(document.version ?? 1)),
     builtIn: Boolean(document.builtIn),
+    playModes: normalizePlayModes(document.playModes),
+    singleplayerInitialSceneId: String(
+      document.singleplayerInitialSceneId
+        ?? document.initialSceneIds?.p1
+        ?? ''
+    ),
     supportedMinigames: Array.isArray(document.supportedMinigames)
       ? document.supportedMinigames
       : []
@@ -310,21 +328,69 @@ function validateStoryStructure(document) {
     nodeIds.add(nodeId);
   }
 
-  for (const playerId of ['p1', 'p2']) {
-    const startNodeId = document.initialSceneIds?.[playerId];
+  const playModes = normalizePlayModes(document.playModes);
 
-    if (!startNodeId || !nodeIds.has(startNodeId)) {
-      throw new Error(`The ${playerId.toUpperCase()} start node does not exist.`);
+  if (playModes.multiplayer) {
+    for (const playerId of ['p1', 'p2']) {
+      const startNodeId = document.initialSceneIds?.[playerId];
+
+      if (!startNodeId || !nodeIds.has(startNodeId)) {
+        throw new Error(`The ${playerId.toUpperCase()} start node does not exist.`);
+      }
     }
   }
+
+  if (playModes.singleplayer) {
+    const startNodeId = document.singleplayerInitialSceneId;
+
+    if (!startNodeId || !nodeIds.has(startNodeId)) {
+      throw new Error('The single-player start node does not exist.');
+    }
+  }
+}
+
+function normalizePlayModes(value) {
+  const singleplayer = Boolean(value?.singleplayer);
+  const multiplayer = value?.multiplayer === undefined
+    ? !singleplayer
+    : Boolean(value.multiplayer);
+
+  if (!singleplayer && !multiplayer) {
+    return {
+      singleplayer: false,
+      multiplayer: true
+    };
+  }
+
+  return {
+    singleplayer,
+    multiplayer
+  };
 }
 
 function createStarterNodes(storyId) {
   return [
     {
+      id: `${storyId}.solo.start`,
+      type: 'dialogue',
+      audience: 'p1',
+      map: 'singleplayer',
+      speaker: 'SYSTEM',
+      text: 'Your story begins here.',
+      next: `${storyId}.solo.ending`
+    },
+    {
+      id: `${storyId}.solo.ending`,
+      type: 'ending',
+      audience: 'p1',
+      map: 'singleplayer',
+      text: 'End of story.'
+    },
+    {
       id: `${storyId}.p1.start`,
       type: 'dialogue',
       audience: 'p1',
+      map: 'multiplayer',
       speaker: 'SYSTEM',
       text: 'Player 1 story begins here.',
       next: `${storyId}.ending`
@@ -333,6 +399,7 @@ function createStarterNodes(storyId) {
       id: `${storyId}.p2.start`,
       type: 'dialogue',
       audience: 'p2',
+      map: 'multiplayer',
       speaker: 'SYSTEM',
       text: 'Player 2 story begins here.',
       next: `${storyId}.ending`
@@ -341,6 +408,7 @@ function createStarterNodes(storyId) {
       id: `${storyId}.ending`,
       type: 'ending',
       audience: 'both',
+      map: 'multiplayer',
       text: 'End of story.'
     }
   ];
@@ -361,8 +429,12 @@ function createStoryId(title) {
 }
 
 function normalizeStorySummary(row) {
+  const document = JSON.parse(row.documentJson);
+  const { documentJson, ...summary } = row;
+
   return {
-    ...row,
-    builtIn: Boolean(row.builtIn)
+    ...summary,
+    builtIn: Boolean(row.builtIn),
+    playModes: normalizePlayModes(document.playModes)
   };
 }

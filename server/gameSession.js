@@ -28,11 +28,20 @@ const DEFAULT_STATS = {
   }
 };
 
-export function createCampaignState(story = null) {
+export function createCampaignState(story = null, options = {}) {
+  const sessionMode = options.mode === 'singleplayer'
+    ? 'singleplayer'
+    : 'multiplayer';
+  const soloPlayerId = sessionMode === 'singleplayer'
+    && PLAYER_IDS.includes(options.soloPlayerId)
+    ? options.soloPlayerId
+    : null;
   const state = {
     version: 1,
     campaignId: randomUUID(),
     story: story ? structuredClone(story) : null,
+    sessionMode,
+    soloPlayerId,
     currentScene: {
       p1: '',
       p2: ''
@@ -64,8 +73,16 @@ export function createCampaignState(story = null) {
   };
 
   if (story) {
-    for (const playerId of PLAYER_IDS) {
-      setPlayerScene(state, playerId, story.initialSceneIds[playerId]);
+    if (sessionMode === 'singleplayer' && soloPlayerId) {
+      setPlayerScene(
+        state,
+        soloPlayerId,
+        story.singleplayerInitialSceneId ?? story.initialSceneIds.p1
+      );
+    } else {
+      for (const playerId of PLAYER_IDS) {
+        setPlayerScene(state, playerId, story.initialSceneIds[playerId]);
+      }
     }
   }
 
@@ -97,7 +114,12 @@ export function restoreCampaignState(candidate) {
     throw new Error('Save does not contain a story cartridge.');
   }
 
-  for (const playerId of PLAYER_IDS) {
+  const restoredPlayerIds = candidate.sessionMode === 'singleplayer'
+    && PLAYER_IDS.includes(candidate.soloPlayerId)
+    ? [candidate.soloPlayerId]
+    : PLAYER_IDS;
+
+  for (const playerId of restoredPlayerIds) {
     if (!getScene(candidate, candidate.currentScene?.[playerId])) {
       throw new Error(`Save references an unknown scene for ${playerId}.`);
     }
@@ -105,6 +127,8 @@ export function restoreCampaignState(candidate) {
 
   return structuredClone({
     ...candidate,
+    sessionMode: candidate.sessionMode ?? 'multiplayer',
+    soloPlayerId: candidate.soloPlayerId ?? null,
     installedMods: candidate.installedMods ?? [],
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
@@ -125,6 +149,10 @@ export function handleCampaignAction(state, playerId, action) {
     return actionError('Only assigned players can interact with the campaign.');
   }
 
+  if (state.sessionMode === 'singleplayer' && state.soloPlayerId !== playerId) {
+    return actionError('The other player owns this single-player campaign.');
+  }
+
   const sceneId = state.currentScene[playerId];
   const scene = getScene(state, sceneId);
 
@@ -136,7 +164,10 @@ export function handleCampaignAction(state, playerId, action) {
     return actionError('That scene is no longer active.');
   }
 
-  if (scene.audience && scene.audience !== 'both' && scene.audience !== playerId) {
+  if (state.sessionMode !== 'singleplayer'
+    && scene.audience
+    && scene.audience !== 'both'
+    && scene.audience !== playerId) {
     return actionError('This scene belongs to the other player.');
   }
 
@@ -200,7 +231,7 @@ function handleMinigameLaunch(state, playerId, scene, action) {
   launchState.readyPlayers = [...readyPlayers];
   state.minigames[scene.id] = launchState;
 
-  if (readyPlayers.size === PLAYER_IDS.length) {
+  if (readyPlayers.size === activePlayerIds(state).length) {
     state.activeMinigame = {
       id: scene.minigameId,
       sceneId: scene.id,
@@ -313,7 +344,7 @@ function handleCheckpoint(state, playerId, scene, action) {
   arrivals.add(playerId);
   state.checkpoints[checkpointId] = [...arrivals];
 
-  if (arrivals.size === PLAYER_IDS.length) {
+  if (arrivals.size === activePlayerIds(state).length) {
     setSharedScene(state, scene.next);
   }
 
@@ -634,7 +665,9 @@ function archiveSceneForPlayer(state, playerId, scene, response = '') {
     appendTerminalEntry(state, playerId, {
       sceneId: scene.id,
       speaker: scene.speaker ?? 'SYSTEM',
-      text
+      text,
+      portrait: scene.portrait ?? '',
+      portraitAlt: scene.portraitAlt ?? ''
     });
   }
 
@@ -661,9 +694,15 @@ function formatDiceResult(result) {
 }
 
 function setSharedScene(state, nextSceneId) {
-  for (const playerId of PLAYER_IDS) {
+  for (const playerId of activePlayerIds(state)) {
     setPlayerScene(state, playerId, nextSceneId);
   }
+}
+
+function activePlayerIds(state) {
+  return state.sessionMode === 'singleplayer' && state.soloPlayerId
+    ? [state.soloPlayerId]
+    : PLAYER_IDS;
 }
 
 function applyEffects(state, playerId, effects) {

@@ -61,6 +61,10 @@
   $: displayedWinner = mode === 'singleplayer'
     ? (localWinner === null ? null : localWinner === 0 ? 'p1' : 'p2')
     : $pigzServerState?.winner ?? null;
+  $: localPlayerWon = displayedWinner === (mode === 'singleplayer' ? 'p1' : playerId);
+  $: displayedWinnerName = displayedWinner === 'p1'
+    ? (mode === 'singleplayer' ? 'YOU' : $pigzServerState?.players.p1.name ?? 'PLAYER 1')
+    : (mode === 'singleplayer' ? 'CPU' : $pigzServerState?.players.p2.name ?? 'PLAYER 2');
   $: displayRoll = rolling
     ? visibleRoll
     : mode === 'singleplayer'
@@ -444,6 +448,32 @@
         </div>
       {/if}
     {:else}
+      {#if displayedWinner}
+        <div class="result-backdrop">
+          <section class="result-panel" class:result-panel--victory={localPlayerWon} class:result-panel--defeat={!localPlayerWon} aria-live="polite">
+            <p class="terminal-label">PIGZ&gt; MATCH COMPLETE</p>
+            <strong class="result-verdict">{localPlayerWon ? 'VICTORY' : 'DEFEAT'}</strong>
+            <h2>{displayedWinnerName} WINS</h2>
+            <p>Final score {displayedScores[0]} — {displayedScores[1]}</p>
+
+            {#if launchedFromStory}
+              <button class="primary-button story-button" type="button" disabled={waitingForStoryPartner} on:click={returnToStory}>
+                {waitingForStoryPartner ? 'WAITING FOR PARTNER' : 'RETURN TO STORY'}
+              </button>
+            {:else if mode === 'singleplayer'}
+              <button class="primary-button story-button" type="button" on:click={restartRound}>PLAY AGAIN</button>
+            {:else if multiplayerRematchVote === true}
+              <p class="rematch-status">Waiting for opponent confirmation.</p>
+            {:else}
+              <div class="dice-actions">
+                <button class="primary-button" type="button" on:click={() => voteForRematch(true)}>PLAY AGAIN</button>
+                <button type="button" on:click={() => voteForRematch(false)}>EXIT</button>
+              </div>
+            {/if}
+          </section>
+        </div>
+      {/if}
+
       <div class="game-board">
         <article
           class="player-panel"
@@ -489,19 +519,6 @@
               <button type="button" disabled={!isLocalTurn || rolling || displayedCurrentPoints === 0} on:click={hold}>HOLD</button>
             </div>
             <button class="text-button" type="button" on:click={restartRound}>RESTART ROUND</button>
-          {:else if launchedFromStory}
-            <button class="primary-button story-button" type="button" disabled={waitingForStoryPartner} on:click={returnToStory}>
-              {waitingForStoryPartner ? 'WAITING FOR PARTNER' : 'RETURN TO STORY'}
-            </button>
-          {:else if mode === 'singleplayer'}
-            <button class="primary-button story-button" type="button" on:click={restartRound}>PLAY AGAIN</button>
-          {:else if multiplayerRematchVote === true}
-            <p class="rematch-status">Waiting for opponent confirmation.</p>
-          {:else}
-            <div class="dice-actions">
-              <button class="primary-button" type="button" on:click={() => voteForRematch(true)}>PLAY AGAIN</button>
-              <button type="button" on:click={() => voteForRematch(false)}>EXIT</button>
-            </div>
           {/if}
         </div>
 
@@ -598,6 +615,69 @@
   .error-message {
     position: relative;
     z-index: 1;
+  }
+
+  .result-backdrop {
+    position: absolute;
+    z-index: 10;
+    inset: 0;
+    padding: 24px;
+    background: #09040de6;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .result-panel {
+    width: min(620px, 100%);
+    min-height: 390px;
+    padding: clamp(26px, 6vw, 58px);
+    text-align: center;
+    border: 2px solid $hotPink;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+
+    h2 {
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: clamp(1.5rem, 4vw, 2.5rem);
+    }
+
+    > p:not(.terminal-label) {
+      color: $softPink;
+    }
+  }
+
+  .result-verdict {
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: clamp(3rem, 8vw, 6rem);
+    letter-spacing: 6px;
+  }
+
+  .result-panel--victory {
+    background: radial-gradient(circle at 50% 25%, #4ff6a526, transparent 60%), #071a14;
+    border-color: #53e6a1;
+    box-shadow: 0 0 45px #53e6a166;
+
+    .result-verdict {
+      color: #79f4b9;
+      text-shadow: 0 0 26px #53e6a1aa;
+    }
+  }
+
+  .result-panel--defeat {
+    background: radial-gradient(circle at 50% 25%, #ff3d6b26, transparent 60%), #260912;
+    border-color: #ff4f78;
+    box-shadow: 0 0 45px #ff3d6b55;
+
+    .result-verdict {
+      color: #ff7597;
+      text-shadow: 0 0 26px #ff3d6baa;
+    }
   }
 
   .title-row {

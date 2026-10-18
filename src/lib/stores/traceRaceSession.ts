@@ -6,6 +6,8 @@ export type TraceRacePlayer = {
   position: number | null;
   exposure: number;
   exposureRevealNodes: number[];
+  exposureRevealPosition: number | null;
+  searchRevealNodes: number[];
   tracker: {
     node: number;
     turnsRemaining: number;

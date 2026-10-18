@@ -67,6 +67,26 @@ const PROGRAMS = {
     name: 'DARK MIRROR',
     cost: 0,
     description: 'Hide ally telemetry until BLACK ICE acts again.'
+  },
+  iceStrike: {
+    name: 'NULL STRIKE',
+    cost: 0,
+    description: 'Damage both runners with a scaling hostile pulse.'
+  },
+  iceInfect: {
+    name: 'ROOT INFECTION',
+    cost: 0,
+    description: 'Install 2 malware on both runners.'
+  },
+  iceReboot: {
+    name: 'COLD REBOOT',
+    cost: 0,
+    description: 'Repair 8 integrity and purge hostile malware.'
+  },
+  iceFirewall: {
+    name: 'ICE WALL',
+    cost: 0,
+    description: 'Generate 8 persistent shield.'
   }
 };
 
@@ -99,6 +119,8 @@ export function createPacketWarState() {
     log: [],
     eventSequence: 0,
     lastProgram: null,
+    lastAllyProgram: null,
+    lastBreachProgram: null,
     rematchVotes: {
       p1: null,
       p2: null
@@ -283,6 +305,8 @@ function resetRound(state) {
   state.log = [];
   state.eventSequence = 0;
   state.lastProgram = null;
+  state.lastAllyProgram = null;
+  state.lastBreachProgram = null;
   state.breach = createBreach();
   state.rematchVotes = {
     p1: null,
@@ -352,11 +376,13 @@ function resolveProgram(state, playerId, cardId) {
     {
       type: 'program',
       actor: player.name,
+      actorType: state.mode === 'coop' ? 'ally' : 'runner',
       cardId,
       cardName: programName
     }
   );
   state.lastProgram = event;
+  state.lastAllyProgram = event;
 }
 
 function finishTurn(state, playerId) {
@@ -391,28 +417,67 @@ function preparePlayerTurn(player) {
 }
 
 function runBreachTurn(state) {
-  const attack = 3 + Math.min(3, Math.floor(state.round / 3));
-
-  for (const player of Object.values(state.players)) {
-    dealDamage(player, attack);
-  }
-
   if (state.breach.malware > 0) {
     dealDamage(state.breach, state.breach.malware);
   }
 
-  addLog(state, `BLACK ICE retaliated for ${attack} damage against both runners.`);
+  const roll = Math.random();
+  let cardId = 'iceStrike';
 
-  state.breach.teamStatsBlinded = Math.random() < 0.28;
+  if (state.breach.integrity <= 30 && roll < 0.22) {
+    cardId = 'iceReboot';
+  } else if (roll < 0.47) {
+    cardId = 'iceInfect';
+  } else if (roll < 0.65) {
+    cardId = 'iceFirewall';
+  } else if (roll < 0.8) {
+    cardId = 'darkMirror';
+  }
 
-  if (state.breach.teamStatsBlinded) {
-    addLog(state, 'BLACK ICE executed DARK MIRROR. Ally telemetry is hidden until its next action.', {
+  switch (cardId) {
+    case 'iceInfect':
+      for (const player of Object.values(state.players)) {
+        player.malware += 2;
+      }
+      state.breach.teamStatsBlinded = false;
+      break;
+    case 'iceReboot':
+      state.breach.integrity = Math.min(BREACH_INTEGRITY, state.breach.integrity + 8);
+      state.breach.malware = 0;
+      state.breach.teamStatsBlinded = false;
+      break;
+    case 'iceFirewall':
+      state.breach.shield += 8;
+      state.breach.teamStatsBlinded = false;
+      break;
+    case 'darkMirror':
+      state.breach.teamStatsBlinded = true;
+      break;
+    default: {
+      const attack = 3 + Math.min(3, Math.floor(state.round / 3));
+
+      for (const player of Object.values(state.players)) {
+        dealDamage(player, attack);
+      }
+
+      state.breach.teamStatsBlinded = false;
+      break;
+    }
+  }
+
+  const program = PROGRAMS[cardId];
+  const event = addLog(
+    state,
+    `BLACK ICE executed ${program.name}. ${program.description}`,
+    {
       type: 'program',
       actor: 'BLACK ICE',
-      cardId: 'darkMirror',
-      cardName: 'DARK MIRROR'
-    });
-  }
+      actorType: 'black-ice',
+      cardId,
+      cardName: program.name
+    }
+  );
+  state.lastBreachProgram = event;
 }
 
 function resolveWinner(state) {
@@ -496,6 +561,7 @@ function addLog(state, message, details = {}) {
     id: state.eventSequence,
     type: 'system',
     actor: '',
+    actorType: 'system',
     cardId: null,
     cardName: null,
     message,
