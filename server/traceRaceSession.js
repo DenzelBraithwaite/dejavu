@@ -99,8 +99,8 @@ export function performTraceRaceAction(state, playerId, action) {
         ? action.targets.map(Number)
         : [];
 
-      if (!isConnectedNodeGroup(targets, 5)) {
-        return errorResult('Trace requires exactly 5 unique connected nodes.');
+      if (!isTracePath(targets, player.position)) {
+        return errorResult('Trace must begin at your current node and follow exactly 5 unique connected nodes.');
       }
 
       player.exposure = Math.min(9, player.exposure + 2);
@@ -153,8 +153,8 @@ export function performTraceRaceAction(state, playerId, action) {
         return errorResult('Select a valid node for the tracker.');
       }
 
-      if (player.trackers.length >= 2) {
-        return errorResult('You already have two trackers active. Wait for one to expire.');
+      if (player.trackers.length >= 1) {
+        return errorResult('You already have a tracker active. Wait for it to expire.');
       }
 
       const tracker = {
@@ -314,8 +314,8 @@ function nodesWithinDistance(center, maximumDistance) {
   return nodes;
 }
 
-function isConnectedNodeGroup(nodes, requiredCount) {
-  if (nodes.length !== requiredCount || new Set(nodes).size !== requiredCount) {
+function isTracePath(nodes, startingNode) {
+  if (nodes.length !== 5 || nodes[0] !== startingNode || new Set(nodes).size !== 5) {
     return false;
   }
 
@@ -323,22 +323,9 @@ function isConnectedNodeGroup(nodes, requiredCount) {
     return false;
   }
 
-  const allowed = new Set(nodes);
-  const visited = new Set([nodes[0]]);
-  const queue = [nodes[0]];
-
-  while (queue.length > 0) {
-    const node = queue.shift();
-
-    for (const neighbor of neighborsOf(node)) {
-      if (allowed.has(neighbor) && !visited.has(neighbor)) {
-        visited.add(neighbor);
-        queue.push(neighbor);
-      }
-    }
-  }
-
-  return visited.size === requiredCount;
+  return nodes.slice(1).every(
+    (node, index) => neighborsOf(nodes[index]).includes(node)
+  );
 }
 
 function updateExposureReveals(state) {

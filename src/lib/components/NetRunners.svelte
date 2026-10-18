@@ -64,11 +64,17 @@
   }
 
   function cancelSharedWager(): void {
-    if (!$netRunnersGameState.singleplayer) {
-      socket.emit('netrunners:leave');
-    }
-
-    resetGame();
+    netRunnersGameState.update((state) => ({
+      ...state,
+      betSelectVisible: false,
+      colorSelectVisible: true,
+      colorOddsCardsVisible: true,
+      gamblingCardsVisible: false,
+      p1: {
+        ...state.p1,
+        amountBet: 0
+      }
+    }));
   }
 
   // Ends game
@@ -210,11 +216,6 @@
   }
 
   function avoidBankruptcy(): void {
-    if ($netRunnersGameState.p1.money <= 0) netRunnersGameState.update($netRunnersGameState => {
-      $netRunnersGameState.p1.money = 5;
-      return $netRunnersGameState;
-    });
-
     if ($netRunnersGameState.p2.money <= 0) netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.p2.money = 5;
       return $netRunnersGameState;
@@ -463,6 +464,7 @@
 
     if (serverState.status === 'racing' || serverState.status === 'finished') {
       const isFinished = serverState.status === 'finished';
+      const opponentId = playerId === 'p1' ? 'p2' : 'p1';
 
       netRunnersGameState.update((state) => ({
         ...state,
@@ -490,11 +492,11 @@
         roundStarted: true,
         p1: {
           ...state.p1,
-          ...serverState.players.p1
+          ...serverState.players[playerId]
         },
         p2: {
           ...state.p2,
-          ...serverState.players.p2
+          ...serverState.players[opponentId]
         },
         p3: {
           ...state.p3,

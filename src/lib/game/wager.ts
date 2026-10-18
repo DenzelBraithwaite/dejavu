@@ -13,7 +13,7 @@ export function settleWager(wager: number, outcome: WagerOutcome): number {
     ...state,
     p1: {
       ...state.p1,
-      money: Math.max(0, state.p1.money + balanceChange)
+      money: state.p1.money + balanceChange
     }
   }));
 

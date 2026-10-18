@@ -2,6 +2,7 @@
   import { blur } from 'svelte/transition';
   import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { sessionState } from '../stores/session';
   import { characterRegistry } from '../story/characters';
 </script>
@@ -23,6 +24,10 @@
 
     {#if $localPlayer}
       <dl class="stats-grid">
+        <div class="krypto-stat">
+          <dt>₭rypto</dt>
+          <dd>{$netRunnersGameState.p1.money}₭</dd>
+        </div>
         {#each Object.entries($localPlayer.stats) as [stat, value]}
           <div>
             <dt>{stat}</dt>
@@ -176,6 +181,14 @@
       color: #02fbfb;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 1.5rem;
+    }
+
+    .krypto-stat {
+      border-left-color: #55f09a;
+
+      dd {
+        color: #55f09a;
+      }
     }
   }
 

@@ -215,7 +215,9 @@
     }
 
     selectedAction = type;
-    traceSelection = [];
+    traceSelection = type === 'trace' && displayedPosition !== null
+      ? [displayedPosition]
+      : [];
   }
 
   function selectActionNode(node: number): void {
@@ -238,21 +240,25 @@
 
   function selectTraceNode(node: number): void {
     if (traceSelection.includes(node)) {
-      const nextSelection = traceSelection.filter((candidate) => candidate !== node);
-
-      if (!isConnectedSelection(nextSelection)) {
-        errorMessage = 'Remove an outside Trace node first so the group stays connected.';
+      if (node === displayedPosition) {
+        errorMessage = 'Trace is anchored to your current signal position.';
         return;
       }
 
-      traceSelection = nextSelection;
+      if (traceSelection.at(-1) !== node) {
+        errorMessage = 'Remove the end of the Trace path first.';
+        return;
+      }
+
+      traceSelection = traceSelection.slice(0, -1);
       errorMessage = '';
       return;
     }
 
-    if (traceSelection.length > 0
-      && !traceSelection.some((candidate) => neighborsOf(candidate).includes(node))) {
-      errorMessage = 'Each Trace node must connect to the selected group.';
+    const lastNode = traceSelection.at(-1);
+
+    if (lastNode === undefined || !neighborsOf(lastNode).includes(node)) {
+      errorMessage = 'Each Trace node must connect to the previous node in the path.';
       return;
     }
 
@@ -300,6 +306,11 @@
     }
 
     if (type === 'trace') {
+      if (!isTracePath(targets, localPlayerPosition)) {
+        errorMessage = 'Trace must begin at your current node and follow 5 connected nodes.';
+        return;
+      }
+
       localPlayerExposure = Math.min(9, localPlayerExposure + 2);
       const foundSignal = targets.includes(localCpuPosition);
       localSearchRevealNodes = foundSignal ? [...targets] : [];
@@ -334,8 +345,8 @@
     }
 
     if (type === 'tracker') {
-      if (localTrackers.length >= 2) {
-        errorMessage = 'You already have two trackers active. Wait for one to expire.';
+      if (localTrackers.length >= 1) {
+        errorMessage = 'You already have a tracker active. Wait for it to expire.';
         return;
       }
 
@@ -438,27 +449,14 @@
     return positions.length;
   }
 
-  function isConnectedSelection(nodes: number[]): boolean {
-    if (nodes.length < 2) {
-      return true;
+  function isTracePath(nodes: number[], startingNode: number): boolean {
+    if (nodes.length !== 5 || nodes[0] !== startingNode || new Set(nodes).size !== 5) {
+      return false;
     }
 
-    const allowed = new Set(nodes);
-    const visited = new Set([nodes[0]]);
-    const queue = [nodes[0]];
-
-    while (queue.length > 0) {
-      const currentNode = queue.shift() as number;
-
-      for (const neighbor of neighborsOf(currentNode)) {
-        if (allowed.has(neighbor) && !visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push(neighbor);
-        }
-      }
-    }
-
-    return visited.size === nodes.length;
+    return nodes.slice(1).every(
+      (node, index) => neighborsOf(nodes[index]).includes(node)
+    );
   }
 
   function nodesWithinDistance(center: number, maximumDistance: number): number[] {
@@ -573,7 +571,7 @@
 
     if (selectedAction === 'trace' && traceSelection.length > 0) {
       return traceSelection.includes(node)
-        || traceSelection.some((candidate) => neighborsOf(candidate).includes(node));
+        || neighborsOf(traceSelection.at(-1) as number).includes(node);
     }
 
     return selectedAction !== 'scramble';
@@ -706,15 +704,16 @@
           </p>
           <dl>
             <div><dt>MOVE</dt><dd>Select a directly connected node. Moving reduces exposure by 1.</dd></div>
-            <div><dt>TRACE</dt><dd>Select exactly 5 unique nodes that form one connected group. Trace reports whether the rival is somewhere inside that group.</dd></div>
+            <div><dt>TRACE</dt><dd>Beginning at your current position, build a path of exactly 5 unique connected nodes. Trace reports whether the rival is somewhere along that path.</dd></div>
             <div><dt>PING</dt><dd>Select one node to attack. An exact hit wins; a miss adds 3 exposure.</dd></div>
             <div><dt>SCAN</dt><dd>Select a center node. Scan reports whether the rival is within 2 hops of that node and adds 1 exposure.</dd></div>
-            <div><dt>TRACKER</dt><dd>Place up to 2 trackers. The node glows purple; if a rival enters its 1-hop radius, that radius glows pink. Trackers add 1 exposure.</dd></div>
+            <div><dt>TRACKER</dt><dd>Place one active tracker. The node glows purple; if a rival enters its 1-hop radius, that radius glows pink. Trackers add 1 exposure.</dd></div>
             <div><dt>SCRAMBLE</dt><dd>Requires no node. Spend the turn reducing exposure by 3.</dd></div>
           </dl>
           <p class="instruction-tip">
-            At 7 exposure, your opponent sees 2 connected red nodes—exactly one
-            contains your signal. Newer clues override older map highlights.
+            Once exposure reaches 7, your rival receives a red two-node clue.
+            The nodes are connected, and your signal is hidden in exactly one of
+            them. Each new clue replaces older map highlights.
           </p>
         </div>
         <footer class="instruction-footer">
@@ -862,7 +861,7 @@
               <button class:action-active={selectedAction === 'trace'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('trace')}>TRACE <small class="exposure-cost">+2</small></button>
               <button class:action-active={selectedAction === 'ping'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('ping')}>PING <small class="exposure-cost">+3</small></button>
               <button class:action-active={selectedAction === 'scan'} type="button" disabled={!isMyTurn} on:click={() => chooseAction('scan')}>SCAN <small class="exposure-cost">+1</small></button>
-              <button class:action-active={selectedAction === 'tracker'} type="button" disabled={!isMyTurn || displayedTrackers.length >= 2} on:click={() => chooseAction('tracker')}>TRACKER <small class="exposure-cost">+1</small></button>
+              <button class:action-active={selectedAction === 'tracker'} type="button" disabled={!isMyTurn || displayedTrackers.length >= 1} on:click={() => chooseAction('tracker')}>TRACKER <small class="exposure-cost">+1</small></button>
               <button type="button" disabled={!isMyTurn} on:click={() => chooseAction('scramble')}>SCRAMBLE <small class="exposure-relief">−3</small></button>
             </div>
             <p class="hint">Trace-positive nodes glow yellow, trackers purple, triggered tracker radii pink, and exposure clues red.</p>

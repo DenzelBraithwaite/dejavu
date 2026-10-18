@@ -115,6 +115,7 @@
     }
 
     error = '';
+    mode = 'menu';
     showWager = true;
   }
 
@@ -229,19 +230,12 @@
     const active = (['p1', 'p2'] as const).filter((id) => localState.players[id].state === 'active');
 
     if (!active.length) {
-      const eligible = (['p1', 'p2'] as const)
-        .filter((id) => localState.players[id].state !== 'lost')
+      const eligible = [...(['p1', 'p2'] as const)]
         .sort((left, right) => localState.players[right].score - localState.players[left].score);
 
-      if (eligible.length === 1) {
-        localState.winner = eligible[0];
-      } else if (eligible.length === 0) {
-        localState.winner = 'tie';
-      } else {
-        localState.winner = localState.players[eligible[0]].score === localState.players[eligible[1]].score
-          ? 'tie'
-          : eligible[0];
-      }
+      localState.winner = localState.players[eligible[0]].score === localState.players[eligible[1]].score
+        ? 'tie'
+        : eligible[0];
       localState.status = 'finished';
       localState = { ...localState };
       return;
@@ -483,7 +477,10 @@
         {/if}
         <div class="scoreboard">
           {#each ['p1', 'p2'] as id}
-            <div class:active={state.activePlayer === id}>
+            <div
+              class:active-self={state.activePlayer === id && id === playerId}
+              class:active-rival={state.activePlayer === id && id !== playerId}
+            >
               <span>{state.players[id].name}</span>
               <strong>{state.players[id].score ?? 0}</strong>
               <small>{state.players[id].state ?? 'ACTIVE'}</small>
@@ -500,7 +497,11 @@
         </div>
 
         {#if state.status === 'finished'}
-          <div class:lost={state.winner !== playerId && state.winner !== 'tie'} class="result-panel">
+          <div
+            class:draw={state.winner === 'tie'}
+            class:lost={state.winner !== playerId && state.winner !== 'tie'}
+            class="result-panel"
+          >
             <p>{state.winner === 'tie' ? 'SIGNAL DEADLOCK' : state.winner === playerId ? 'VICTORY' : 'CONNECTION LOST'}</p>
             <h2>{state.winner === 'tie' ? 'TIE GAME' : `${winnerName(state)} WINS`}</h2>
             {#if waitingForStoryPartner}
@@ -534,6 +535,11 @@
         {:else}
           <p class="turn-message">{state.players[playerId]?.state === 'active' ? 'WAITING FOR RIVAL MOVE…' : 'YOU ARE SAFE. OBSERVING REMAINING SIGNALS…'}</p>
         {/if}
+
+        <div class="last-move" aria-live="polite">
+          <span>LAST MOVE</span>
+          <strong>{state.log?.[0]?.message ?? 'No transmission resolved yet.'}</strong>
+        </div>
 
         <div class="game-log"><h3>TRANSMISSION LOG</h3>{#each state.log as entry}<p class="log--{logTone(entry.message)}">{entry.message}</p>{/each}</div>
       {/if}
@@ -720,8 +726,14 @@
       gap: 3px 12px;
     }
 
-    div.active {
+    div.active-self {
       border-color: #02fbfb;
+      box-shadow: 0 0 18px #02fbfb55;
+    }
+
+    div.active-rival {
+      border-color: #ff5875;
+      box-shadow: 0 0 18px #ff587566;
     }
 
     strong {
@@ -844,12 +856,29 @@
   }
 
   .controls,
+  .last-move,
   .game-log {
     max-width: 800px;
     margin: 0 auto 18px;
     padding: 14px;
     background: #071019;
     border: 1px solid #24394a;
+  }
+
+  .last-move {
+    display: grid;
+    gap: 5px;
+
+    span {
+      color: #8893a2;
+      font-size: 0.68rem;
+      letter-spacing: 2px;
+    }
+
+    strong {
+      color: #f8e69a;
+      font-size: 1rem;
+    }
   }
 
   .event-notice {
@@ -919,6 +948,13 @@
       color: #ff6b7a;
       background: #19090d;
       border-color: #ff6b7a;
+    }
+
+    &.draw {
+      color: #f8e69a;
+      background: #1a1607;
+      border-color: #e0ad03;
+      box-shadow: 0 0 24px #e0ad0340;
     }
   }
 

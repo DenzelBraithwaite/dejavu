@@ -28,7 +28,8 @@
 
   $: serverState = $arcadeStates.chopsticks ?? null;
   $: state = mode === 'solo' ? localState : serverState;
-  $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
+  $: networkPlayerId = ($sessionState.playerId ?? 'p1') as PlayerId;
+  $: playerId = (mode === 'solo' ? 'p1' : networkPlayerId) as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: canAct = state?.status === 'playing'
     && (mode === 'solo' ? state.activePlayer === 'p1' : state.activePlayer === playerId);
@@ -81,6 +82,7 @@
       return;
     }
 
+    mode = 'menu';
     showWager = true;
   }
 
@@ -106,7 +108,7 @@
       return;
     }
 
-    selectedHand = index;
+    selectedHand = selectedHand === index ? null : index;
   }
 
   function attack(target: number): void {
@@ -377,7 +379,14 @@
     <div class="waiting"><h2>{state.departureNotice ? 'CONNECTION SEVERED' : 'WAITING FOR SECOND PLAYER'}</h2><p>{state.departureNotice ?? `${state.participantCount}/2 CONNECTED`}</p>{#if state.departureNotice}<button on:click={returnToMenu}>RETURN TO MAIN MENU</button>{/if}</div>
   {:else if state}
     <div class="game">
-      <div class="turn"><span>TURN {state.turn}</span><strong>{state.players[state.activePlayer].name}'S MOVE</strong></div>
+      <div class="turn">
+        <span>TURN {state.turn}</span>
+        <strong>
+          {state.activePlayer === playerId
+            ? 'YOUR MOVE'
+            : `${state.players[state.activePlayer].name}'S MOVE`}
+        </strong>
+      </div>
 
       <section class="player-zone opponent">
         <h2>{state.players[opponentId].name}</h2>
@@ -401,14 +410,18 @@
             </button>
           {/each}
         </div>
-        <div class="redistribute-controls">
-          <button disabled={!canAct || !redistributeAvailable()} on:click={() => redistribute('halves')}>
-            {selectedHand !== null && state.hands[playerId][selectedHand] === 4 ? 'REDISTRIBUTE 2+2' : 'REDISTRIBUTE 1+1'}
-          </button>
-          {#if fourWayAvailable()}
-            <button on:click={() => redistribute('four-ones')}>REDISTRIBUTE 1+1+1+1</button>
-          {/if}
-        </div>
+        {#if redistributeAvailable()}
+          <div class="redistribute-controls">
+            <button on:click={() => redistribute('halves')}>
+              {selectedHand !== null && state.hands[playerId][selectedHand] === 4
+                ? 'REDISTRIBUTE 2+2'
+                : 'REDISTRIBUTE 1+1'}
+            </button>
+            {#if fourWayAvailable()}
+              <button on:click={() => redistribute('four-ones')}>REDISTRIBUTE 1+1+1+1</button>
+            {/if}
+          </div>
+        {/if}
       </section>
 
       {#if state.status === 'finished'}
@@ -639,6 +652,14 @@
     background: #071c11;
     border-color: #55f09a;
     box-shadow: inset 0 0 18px #55f09a26;
+  }
+
+  .self .hands button.selected:not(.dead) {
+    color: #06130b;
+    background: #f8e69a;
+    border-color: #ffffff;
+    box-shadow: 0 0 24px #f8e69a88, inset 0 0 16px #ffffff66;
+    transform: translateY(-3px);
   }
 
   .divider {

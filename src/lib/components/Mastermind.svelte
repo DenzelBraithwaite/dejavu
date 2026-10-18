@@ -68,9 +68,11 @@
   $: if (!wagerSettled && wagerArmed && mode !== 'solo' && state?.status === 'finished') {
     settleWager(
       wager,
-      state.winner === playerId || state.winner === 'players' || state.winner === 'tie'
-        ? 'win'
-        : 'loss'
+      state.winner === 'tie'
+        ? 'draw'
+        : state.winner === playerId || state.winner === 'players'
+          ? 'win'
+          : 'loss'
     );
     wagerSettled = true;
     wagerArmed = false;
@@ -94,6 +96,7 @@
       return;
     }
 
+    mode = 'menu';
     showWager = true;
   }
 
@@ -347,10 +350,18 @@
         {#each Array(4) as _, index}<span>{guess[index] ?? '·'}</span>{/each}
       </div>
 
+      {#if mode === 'coop' && state?.status === 'playing'}
+        <div class:active={canSubmit} class="coop-turn" role="status">
+          <span>CO-OP TURN</span>
+          <strong>{canSubmit ? 'YOUR DECRYPTION WINDOW' : `${state.players[state.activePlayer].name} IS DECRYPTING`}</strong>
+        </div>
+      {/if}
+
       {#if localFinished || localFailed || state?.status === 'finished'}
         {@const winner = mode === 'solo' ? (localFinished ? playerId : 'code') : state?.winner}
-        {@const won = winner === playerId || winner === 'players' || winner === 'tie'}
-        <section class:lost={!won} class="result">
+        {@const tied = winner === 'tie'}
+        {@const won = winner === playerId || winner === 'players'}
+        <section class:draw={tied} class:lost={!won && !tied} class="result">
           <p>{winner === 'tie' ? 'SIMULTANEOUS BREACH' : won ? 'CODE ACCEPTED' : 'BREACH LOST'}</p>
           <h2>{mode === 'solo' ? (localFinished ? `CRACKED IN ${localAttempts.length} TURNS` : '15 ATTEMPTS EXHAUSTED') : multiplayerResultTitle()}</h2>
           {#if waitingForStoryPartner}
@@ -359,7 +370,7 @@
             <button on:click={returnToStory}>RETURN TO STORY</button>
           {:else}
             <button on:click={restart}>NEW CODE</button>
-            <button on:click={returnToMenu}>MODE MENU</button>
+            <button on:click={returnToMenu}>MAIN MENU</button>
           {/if}
         </section>
       {:else}
@@ -561,6 +572,32 @@
     }
   }
 
+  .coop-turn {
+    max-width: 700px;
+    margin: 0 auto 20px;
+    padding: 12px 16px;
+    color: #ff9aac;
+    background: #210912;
+    border: 1px solid #b93555;
+    box-shadow: 0 0 18px #b9355533;
+
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+
+    span {
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+    }
+
+    &.active {
+      color: #bfffdc;
+      background: #071a10;
+      border-color: #55f09a;
+      box-shadow: 0 0 18px #55f09a33;
+    }
+  }
+
   .waiting-copy,
   .error {
     text-align: center;
@@ -601,6 +638,13 @@
       color: #ff6b7a;
       background: #19090d;
       border-color: #ff6b7a;
+    }
+
+    &.draw {
+      color: #f8e69a;
+      background: #1a1607;
+      border-color: #e0ad03;
+      box-shadow: 0 0 22px #e0ad0340;
     }
   }
 </style>

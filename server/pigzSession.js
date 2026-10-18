@@ -1,4 +1,4 @@
-const STARTING_MONEY = 1000;
+const STARTING_MONEY = 10000;
 const WINNING_SCORE = 100;
 
 export function createPigzState() {
@@ -69,7 +69,9 @@ export function submitPigzBet(state, playerId, amountValue) {
   const amount = Math.floor(Number(amountValue));
   const player = state.players[playerId];
 
-  if (!Number.isFinite(amount) || amount < 0 || amount > player.money) {
+  const availableBalance = Math.max(0, player.money);
+
+  if (!Number.isFinite(amount) || amount < 0 || amount > availableBalance) {
     return errorResult('Choose a wager within your available balance.');
   }
 
@@ -160,12 +162,6 @@ export function getPigzSnapshot(state) {
 function prepareBetting(state) {
   resetRound(state);
   state.status = 'betting';
-
-  for (const player of Object.values(state.players)) {
-    if (player.money <= 0) {
-      player.money = 5;
-    }
-  }
 }
 
 function resetRound(state) {
@@ -209,7 +205,7 @@ function finishRound(state, winnerId) {
     const balanceChange = playerId === winnerId
       ? (player.amountBet === 0 ? 100 : player.amountBet)
       : -player.amountBet;
-    player.money = Math.max(0, player.money + balanceChange);
+    player.money += balanceChange;
   }
 }
 

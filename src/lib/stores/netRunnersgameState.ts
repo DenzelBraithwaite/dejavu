@@ -93,7 +93,7 @@ export const netRunnersGameState = writable<NetRunnersGameState>({
   cardsDrawn: [],
   p1: {
     name: 'Kaz',
-    money: 1000,
+    money: 10000,
     amountBet: 0,
     colorBet: '',
     points: 0,

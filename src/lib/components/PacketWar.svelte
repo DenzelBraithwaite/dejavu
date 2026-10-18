@@ -4,7 +4,7 @@
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import location from '../stores/location';
-  import { packetWarServerState } from '../stores/packetWarSession';
+  import { packetWarServerState, type PacketWarState } from '../stores/packetWarSession';
   import { sessionState, type PlayerId } from '../stores/session';
   import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
@@ -278,10 +278,13 @@
     }, handleActionResult);
   }
 
-  function visibleLibraryCards(side: 'runner' | 'boss'): Record<string, any>[] {
+  function visibleLibraryCards(
+    side: 'runner' | 'boss',
+    currentState: PacketWarState | null
+  ): Record<string, any>[] {
     const library = side === 'boss'
-      ? $packetWarServerState?.bossLibrary
-      : $packetWarServerState?.cardLibrary;
+      ? currentState?.bossLibrary
+      : currentState?.cardLibrary;
 
     return Object.values(library ?? {});
   }
@@ -376,8 +379,8 @@
             <span><strong>MESH REPAIR · CO-OP</strong> repair both runners by 6</span>
           </div>
           <p class="instruction-tip">
-            In Co-op Breach, BLACK ICE retaliates after Player 2 acts. Its attack
-            becomes stronger as the rounds continue, so defensive cards matter.
+            In Co-op Breach, BLACK ICE draws from its configured deck after Player
+            2 acts. Review that deck in the Card Library before opening a breach.
           </p>
         </div>
         <footer class="instruction-footer">
@@ -445,7 +448,7 @@
       {/if}
 
       <div class="library-card-grid">
-        {#each visibleLibraryCards(librarySide) as card}
+        {#each visibleLibraryCards(librarySide, $packetWarServerState) as card (card.id)}
           <article class="library-card library-card--{card.color}">
             <span>{card.cost} ⚡ · {librarySide.toUpperCase()}</span><h2>{card.name}</h2><p>{card.description || 'Custom packet program.'}</p>
             <div>{#each card.effects as effect}<small>{effectLabel(effect)}</small>{/each}</div>
@@ -508,12 +511,14 @@
         </div>
       </div>
 
-      {#key `${$packetWarServerState.activePlayer}-${$packetWarServerState.round}`}
-        <div class="turn-announcement" class:turn-announcement--mine={isMyTurn}>
-          <strong>{isMyTurn ? 'EXECUTION WINDOW OPEN' : 'REMOTE PLAYER EXECUTING'}</strong>
-          <span>{isMyTurn ? 'Choose a program or pass the turn.' : 'Incoming network activity…'}</span>
-        </div>
-      {/key}
+      {#if $packetWarServerState.status !== 'finished'}
+        {#key `${$packetWarServerState.activePlayer}-${$packetWarServerState.round}`}
+          <div class="turn-announcement" class:turn-announcement--mine={isMyTurn}>
+            <strong>{isMyTurn ? 'EXECUTION WINDOW OPEN' : 'REMOTE PLAYER EXECUTING'}</strong>
+            <span>{isMyTurn ? 'Choose a program or pass the turn.' : 'Incoming network activity…'}</span>
+          </div>
+        {/key}
+      {/if}
 
       <div class="combatants">
         <article class="combatant combatant--player">

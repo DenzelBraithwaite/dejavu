@@ -1,6 +1,6 @@
 const COLORS = ['purple', 'pink', 'yellow', 'cyan', 'blue'];
 const DRAW_INTERVAL_MS = 2000;
-const STARTING_MONEY = 1000;
+const STARTING_MONEY = 10000;
 
 export function createNetRunnersState() {
   return {
@@ -97,7 +97,9 @@ export function submitNetRunnersBet(state, playerId, bet) {
   const amount = Math.floor(Number(bet.amount));
   const player = state.players[playerId];
 
-  if (!Number.isFinite(amount) || amount < 0 || amount > player.money) {
+  const availableBalance = Math.max(0, player.money);
+
+  if (!Number.isFinite(amount) || amount < 0 || amount > availableBalance) {
     return errorResult('Choose a bet within your available balance.');
   }
 
@@ -167,14 +169,14 @@ function prepareBettingRound(state) {
     p2: null
   };
 
-  for (const player of Object.values(state.players)) {
+  for (const [playerId, player] of Object.entries(state.players)) {
     player.amountBet = 0;
     player.colorBet = '';
     player.ready = false;
     player.points = 0;
     player.hasLost = false;
 
-    if (player.money <= 0) {
+    if ((playerId === 'p3' || playerId === 'p4') && player.money <= 0) {
       player.money = 5;
     }
   }

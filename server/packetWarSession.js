@@ -101,7 +101,7 @@ const PROGRAMS = {
   iceStrike: {
     name: 'NULL STRIKE',
     cost: 0,
-    description: 'Damage both runners with a scaling hostile pulse.',
+    description: 'Damage both runners with a hostile pulse.',
     color: 'pink', quantity: 5, builtIn: true, boss: true,
     effects: [{ type: 'damage', target: 'players', amount: 5 }]
   },

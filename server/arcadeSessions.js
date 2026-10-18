@@ -271,18 +271,11 @@ function settleOrAdvanceLoHi(state, playerId) {
 
   if (activePlayers.length === 0) {
     const eligibleScores = Object.entries(state.players)
-      .filter(([, player]) => player.state !== 'lost')
       .sort((a, b) => b[1].score - a[1].score);
 
-    if (eligibleScores.length === 1) {
-      state.winner = eligibleScores[0][0];
-    } else if (eligibleScores.length === 0) {
-      state.winner = 'tie';
-    } else {
-      state.winner = eligibleScores[0][1].score === eligibleScores[1][1].score
-        ? 'tie'
-        : eligibleScores[0][0];
-    }
+    state.winner = eligibleScores[0][1].score === eligibleScores[1][1].score
+      ? 'tie'
+      : eligibleScores[0][0];
     state.status = 'finished';
     return;
   }

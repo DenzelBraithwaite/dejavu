@@ -10,7 +10,8 @@
   const dispatch = createEventDispatcher<{ confirm: number; cancel: void }>();
 
   function adjust(amount: number): void {
-    wager = Math.min(balance, Math.max(0, wager + amount));
+    const availableBalance = Math.max(0, balance);
+    wager = Math.min(availableBalance, Math.max(0, wager + amount));
   }
 </script>
 
@@ -25,7 +26,7 @@
   <div class="readout" aria-live="polite">
     <span>WAGER</span>
     <strong>{wager}₭</strong>
-    <small>AVAILABLE {balance}₭</small>
+    <small>BALANCE {balance}₭</small>
   </div>
 
   <div class="controls" aria-label="Adjust wager">
