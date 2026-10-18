@@ -371,8 +371,8 @@
     return Math.floor(Math.random() * 6) + 1;
   }
 
-  function pipIsVisible(position: number): boolean {
-    return pipLayouts[displayRoll].includes(position);
+  function pipIsVisible(position: number, rollValue: number): boolean {
+    return pipLayouts[rollValue].includes(position);
   }
 </script>
 
@@ -478,7 +478,7 @@
           >
             <span class="pip-grid" aria-hidden="true">
               {#each Array(9) as _, position}
-                <i class:pip--visible={pipIsVisible(position)}></i>
+                <i class:pip--visible={pipIsVisible(position, displayRoll)}></i>
               {/each}
             </span>
           </button>

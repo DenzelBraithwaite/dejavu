@@ -142,6 +142,9 @@
     overflow: hidden;
     background: #100b1c;
     border: 1px solid #453b82;
+
+    display: flex;
+    flex-direction: column;
   }
 
   .module-art {
@@ -288,7 +291,11 @@
   }
 
   .module-copy {
+    flex: 1;
     padding: 20px;
+
+    display: flex;
+    flex-direction: column;
 
     h2 {
       margin: 12px 0 10px;
@@ -298,6 +305,7 @@
 
     > p {
       min-height: 3.2em;
+      margin-bottom: 20px;
       color: #aeb9c9;
       line-height: 1.55;
     }
@@ -305,7 +313,9 @@
     button {
       width: 100%;
       min-height: 46px;
-      margin-top: 20px;
+      margin-top: auto;
+      padding-top: 12px;
+      padding-bottom: 12px;
       color: #ffffff;
       background: #453b82;
       border: 1px solid #9962ff;
