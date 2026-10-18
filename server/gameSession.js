@@ -49,6 +49,10 @@ export function createCampaignState(story = null) {
     minigames: {},
     activeMinigame: null,
     pendingDice: {},
+    appliedCompanions: {
+      p1: [],
+      p2: []
+    },
     terminalOutput: {
       p1: [],
       p2: []
@@ -105,6 +109,10 @@ export function restoreCampaignState(candidate) {
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
     pendingDice: candidate.pendingDice ?? {},
+    appliedCompanions: candidate.appliedCompanions ?? {
+      p1: [],
+      p2: []
+    },
     terminalOutput: candidate.terminalOutput ?? {
       p1: [],
       p2: []
@@ -138,6 +146,7 @@ export function handleCampaignAction(state, playerId, action) {
     case 'dialogue':
     case 'image':
     case 'effect':
+    case 'ambience':
       result = handleAdvance(state, playerId, scene, action);
       break;
     case 'choice':
@@ -540,11 +549,35 @@ function setPlayerScene(state, playerId, nextSceneId) {
   }
 
   state.currentScene[playerId] = nextScene.id;
+  applyAttachedCompanions(state, playerId, nextScene);
   delete state.deadlines[playerId];
 
   if (nextScene.type === 'conversation') {
     initializeConversation(state, nextScene);
   }
+}
+
+function applyAttachedCompanions(state, playerId, scene) {
+  const applied = new Set(state.appliedCompanions?.[playerId] ?? []);
+  const companions = state.story?.nodes.filter(
+    (node) => node.attachedTo === scene.id
+      && (node.audience === 'both' || node.audience === playerId)
+  ) ?? [];
+
+  for (const companion of companions) {
+    if (companion.type !== 'effect' || applied.has(companion.id)) {
+      continue;
+    }
+
+    applyEffects(state, playerId, companion.effects ?? []);
+    applied.add(companion.id);
+  }
+
+  state.appliedCompanions ??= {
+    p1: [],
+    p2: []
+  };
+  state.appliedCompanions[playerId] = [...applied];
 }
 
 function resolveConditionNodes(state, playerId, startingSceneId) {

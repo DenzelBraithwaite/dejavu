@@ -60,6 +60,7 @@ export type CampaignState = {
     startedAt: string;
   } | null;
   pendingDice: Partial<Record<PlayerId, DiceRollResult>>;
+  appliedCompanions: Record<PlayerId, string[]>;
   terminalOutput: Record<PlayerId, TerminalOutputEntry[]>;
   deadlines: Partial<Record<PlayerId, number>>;
   transcript: Array<Record<string, unknown>>;

@@ -51,11 +51,15 @@ CRUD operations are server-owned. Do not write stories into browser storage or m
 
 ## Using the visual editor
 
-Open **Library**, then choose **Edit** on an existing cartridge or **Make new story**. A new story begins with separate Player 1 and Player 2 dialogue nodes leading to one shared ending.
+Open **Editor** from the sidebar, choose **Edit** on a Library cartridge, or create a new story from **Library**. The Editor is its own page, while Library remains the CRUD and cartridge-selection page. A new story begins with separate Player 1 and Player 2 dialogue nodes leading to one shared ending.
 
 The canvas is divided into Player 1, Shared, and Player 2 lanes. Select a node to edit it in the inspector. Route controls enter a temporary selection mode so the creator can click a destination node instead of handling internal IDs. Player routes can target their own lane or Shared; Shared routes stay in Shared.
 
-Use the plus control at the bottom of a lane to append a node. Empty normal and branch routes expose their own plus controls, which insert and connect a new node at that exact route. Appending after a node with an empty normal route connects it automatically. Nodes can be dragged within a lane to reorder them or dropped onto another lane to change their audience. The inspector also provides keyboard-accessible move, copy, duplicate, and delete controls.
+Use the plus control at the bottom of a lane to append a node. Empty normal and branch routes expose their own plus controls, which insert and connect a new node at that exact route. Appending after a node with an empty normal route connects it automatically. Nodes can be dragged within a lane to reorder them or dropped onto another lane to change their audience. The inspector also provides keyboard-accessible move controls, while each card exposes compact copy, duplicate, and delete actions. Undo and redo retain up to 100 editor snapshots between loads or saves.
+
+The inspector can select routes in either direction. **Select next node** updates the selected node. **Select previous node** asks for an existing source node, finds an unused compatible route on it, and updates that source so it leads into the selected node. Nodes with several incoming routes display every source separately.
+
+Image, item/effect, and music/atmosphere nodes are grouped as companion changes and offset visually from the main flow. A companion stores the main-flow node ID in `attachedTo`; it has no incoming or outgoing route of its own and is rendered or applied when its host becomes active. Images are uploaded to `public/uploads/stories/` through the host's `/api/story-assets/images` endpoint; accepted formats are PNG, JPEG, WebP, GIF, AVIF, and SVG, with an 8 MB limit.
 
 Node cards show their type ordinal, such as `3rd dialogue node`, plus readable route destinations. Missing incoming routes, missing outgoing routes, broken destinations, and illegal cross-player links receive a red invalid border. Start nodes, endings, and visual labels have the expected validation exceptions.
 
@@ -71,7 +75,7 @@ Available palette nodes are:
 - Image, NetRunners minigame, and ending.
 - Visual labels for chapters, locations, and other editor-only organization.
 
-Incomplete destination fields are allowed in drafts so creators can build a graph in any order. Full connection validation belongs to the next graph-editor milestone and must run before publication or playtest.
+Incomplete destination fields are allowed while creators build a draft, but the canvas marks missing, broken, self-referencing, and illegal cross-lane routes in red. Start nodes, endings, labels, and companion presentation nodes use their appropriate validation exceptions.
 
 ## Story document shape
 

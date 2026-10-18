@@ -31,6 +31,7 @@ export type StoryNode = {
   background?: string;
   music?: string | null;
   sound?: string;
+  attachedTo?: string;
   clearTerminal?: boolean;
   minigameId?: string;
   resultNext?: Record<string, string>;

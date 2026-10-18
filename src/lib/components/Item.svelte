@@ -77,6 +77,22 @@
       <rect x="4" y="4" width="16" height="16" rx="2"/>
       <rect x="8" y="8" width="8" height="8" rx="1"/>
     </svg>
+  {:else if iconType === 'gamepad'}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
+      <path d="M6 8h12a4 4 0 0 1 3.8 5.3l-1.4 4.2a2.2 2.2 0 0 1-3.6.9L14.5 16h-5l-2.3 2.4a2.2 2.2 0 0 1-3.6-.9l-1.4-4.2A4 4 0 0 1 6 8z"/>
+      <path d="M7 11v4"/>
+      <path d="M5 13h4"/>
+      <circle cx="16" cy="12" r=".7"/>
+      <circle cx="18" cy="14" r=".7"/>
+    </svg>
+  {:else if iconType === 'editor'}
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
+      <rect x="3" y="3" width="6" height="5" rx="1"/>
+      <rect x="15" y="16" width="6" height="5" rx="1"/>
+      <rect x="3" y="16" width="6" height="5" rx="1"/>
+      <path d="M9 5.5h3a3 3 0 0 1 3 3V16"/>
+      <path d="M9 18.5h6"/>
+    </svg>
 
   {:else}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
@@ -160,6 +176,10 @@
 
   .item-color__purple {
     background-color: #453b82;
+  }
+
+  .item-color__brown {
+    background-color: #7a4d2b;
   }
 
   .item-color__grey {

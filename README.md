@@ -37,7 +37,10 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - Stories are stored in `data/dejavu.sqlite`, so created stories survive server restarts.
 - Déjà Vu is seeded as the first built-in story and can be edited or duplicated.
 - Creators can create, read, edit, duplicate, and delete custom story drafts.
-- The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, click-to-connect routes, drag-and-drop organization, labels, validation, and a type-specific inspector.
+- The Editor is a dedicated sidebar destination, while every Library cartridge still links directly into it.
+- The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, previous/next click-to-connect routes, drag-and-drop organization, labels, validation, undo/redo, quick node actions, and a type-specific inspector.
+- Images, inventory/effect changes, and music/atmosphere changes are attached to main-flow nodes and presented as visually offset companions rather than playable steps with their own routes.
+- Story images can be uploaded as PNG, JPEG, WebP, GIF, AVIF, or SVG files up to 8 MB and are stored by the LAN host.
 
 ### Server-authoritative campaign
 

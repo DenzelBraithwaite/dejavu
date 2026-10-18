@@ -6,6 +6,7 @@
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import { libraryState } from '../stores/library';
+  import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
   import { interpolateSceneText } from '../story/sceneTypes.js';
@@ -23,6 +24,7 @@
   let lastScrollKey = '';
   let lastAudioSceneId = '';
   let diceTerminalOpen = false;
+  let scenePresentation: Pick<StoryNode, 'background' | 'music' | 'sound'> = {};
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -31,6 +33,31 @@
   $: scene = sceneId
     ? $campaignState?.story?.nodes.find((candidate) => candidate.id === sceneId)
     : undefined;
+  $: companionNodes = sceneId
+    ? $campaignState?.story?.nodes.filter((candidate) => candidate.attachedTo === sceneId) ?? []
+    : [];
+  $: companionImages = companionNodes.filter((candidate) => candidate.type === 'image' && candidate.src);
+  $: {
+    scenePresentation = {
+      background: scene?.background,
+      music: scene?.music,
+      sound: scene?.sound
+    };
+
+    for (const companion of companionNodes) {
+      if (companion.background !== undefined) {
+        scenePresentation.background = companion.background;
+      }
+
+      if (companion.music !== undefined) {
+        scenePresentation.music = companion.music;
+      }
+
+      if (companion.sound !== undefined) {
+        scenePresentation.sound = companion.sound;
+      }
+    }
+  }
   $: player = playerId && $campaignState
     ? $campaignState.players[playerId]
     : null;
@@ -83,7 +110,7 @@
 
   $: if (scene && sceneId !== lastAudioSceneId) {
     lastAudioSceneId = sceneId;
-    applySceneAudio(scene);
+    applySceneAudio(scenePresentation);
   }
 
   $: if (sceneId) {
@@ -267,7 +294,14 @@
     <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
   </header>
 
-  <div class="terminal-screen" bind:this={terminalScreenElement}>
+  <div
+    class="terminal-screen"
+    class:has-scene-background={Boolean(scenePresentation.background)}
+    style:background-image={scenePresentation.background
+      ? `linear-gradient(#070b16dd, #070b16ee), url(${scenePresentation.background})`
+      : undefined}
+    bind:this={terminalScreenElement}
+  >
     {#if !$libraryState.activeStoryId}
       <div class="cartridge-status" role="status">
         <p class="scene-id">STORY CARTRIDGE REQUIRED</p>
@@ -323,6 +357,12 @@
         </figure>
       {/if}
 
+      {#each companionImages as image}
+        <figure class="scene-image-wrapper">
+          <img class="scene-image" src={image.src} alt={image.alt ?? ''}>
+        </figure>
+      {/each}
+
       <p
         class="scene-text"
         class:scene-text-complete={typingComplete}
@@ -363,7 +403,7 @@
 
   {#if $campaignState && scene}
     <div class="terminal-controls">
-      {#if scene.type === 'dialogue' || scene.type === 'image' || scene.type === 'effect'}
+      {#if ['dialogue', 'image', 'effect', 'ambience'].includes(scene.type)}
         <button type="button" disabled={!typingComplete} on:click={advance}>
           Continue
         </button>
@@ -529,6 +569,11 @@
   .terminal-screen {
     padding: clamp(20px, 4vw, 52px);
     overflow-y: auto;
+
+    &.has-scene-background {
+      background-position: center;
+      background-size: cover;
+    }
   }
 
   .scene-id {

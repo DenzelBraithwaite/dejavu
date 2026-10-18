@@ -26,7 +26,7 @@
     <span slot="description">Play the inserted story</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'cpu'}>
+  <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'}>
     <span slot="title">Minigames</span>
     <span slot="description">Browse coded game modules</span>
   </Item>
@@ -36,7 +36,7 @@
     <span slot="description">Check your stats</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'purple'} iconType={'journal'}>
+  <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'brown'} iconType={'journal'}>
     <span slot="title">Journal</span>
     <span slot="description">Transcript and decisions</span>
   </Item>
@@ -54,14 +54,19 @@
     </Item>
   {/if}
 
+  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'}>
+    <span slot="title">Library</span>
+    <span slot="description">Select or create stories</span>
+  </Item>
+
+  <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'blue'} iconType={'editor'}>
+    <span slot="title">Editor</span>
+    <span slot="description">Build story flow charts</span>
+  </Item>
+
   <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'}>
     <span slot="title">Settings</span>
     <span slot="description">Music and sound controls</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'blue'} iconType={'library'}>
-    <span slot="title">Library</span>
-    <span slot="description">Select or create stories</span>
   </Item>
 </div>
 

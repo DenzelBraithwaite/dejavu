@@ -31,7 +31,16 @@ const port = Number(process.env.PORT ?? 6912);
 const host = process.env.HOST ?? '0.0.0.0';
 const savesDirectory = join(__dirname, 'data', 'saves');
 const storyDatabasePath = join(__dirname, 'data', 'dejavu.sqlite');
+const storyImageDirectory = join(__dirname, 'public', 'uploads', 'stories');
 const reconnectGraceMs = 60_000;
+const storyImageExtensions = new Map([
+  ['image/avif', 'avif'],
+  ['image/gif', 'gif'],
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/svg+xml', 'svg'],
+  ['image/webp', 'webp']
+]);
 
 const app = express();
 const server = createServer(app);
@@ -58,6 +67,38 @@ let netRunnersState = createNetRunnersState();
 const chatMessages = [];
 
 initializeDeadlines(campaignState);
+
+app.post(
+  '/api/story-assets/images',
+  express.raw({
+    type: [...storyImageExtensions.keys()],
+    limit: '8mb'
+  }),
+  async (request, response) => {
+    const extension = storyImageExtensions.get(request.headers['content-type']);
+
+    if (!extension || !Buffer.isBuffer(request.body) || request.body.length === 0) {
+      response.status(415).json({
+        error: 'Choose a PNG, JPEG, WebP, GIF, AVIF, or SVG image.'
+      });
+      return;
+    }
+
+    try {
+      await mkdir(storyImageDirectory, { recursive: true });
+      const fileName = `${randomUUID()}.${extension}`;
+      await writeFile(join(storyImageDirectory, fileName), request.body);
+      response.status(201).json({
+        path: `/uploads/stories/${fileName}`
+      });
+    } catch (error) {
+      console.error('Could not store a story image.', error);
+      response.status(500).json({
+        error: 'The image could not be stored on the host.'
+      });
+    }
+  }
+);
 
 app.use(express.static(join(__dirname, 'public')));
 

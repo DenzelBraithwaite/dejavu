@@ -12,8 +12,9 @@
   type LaneId = 'p1' | 'both' | 'p2';
   type LinkSelection = {
     sourceId: string;
-    field: string;
+    field?: string;
     label: string;
+    direction: 'attachment' | 'incoming' | 'outgoing';
   };
   type InsertionTarget = {
     lane: LaneId;
@@ -22,7 +23,13 @@
     insertAfterId?: string;
   };
 
-  const nodeTypes = [
+  type EditorSnapshot = {
+    story: StoryDocument;
+    selectedNodeId: string;
+    activeLane: LaneId;
+  };
+
+  const flowNodeTypes = [
     { type: 'dialogue', label: 'Dialogue' },
     { type: 'input', label: 'Player input' },
     { type: 'choice', label: 'Choice' },
@@ -31,13 +38,19 @@
     { type: 'dice-check', label: 'Dice check' },
     { type: 'vote', label: 'Shared vote' },
     { type: 'timed-choice', label: 'Timed choice' },
-    { type: 'effect', label: 'Item / effect' },
     { type: 'condition', label: 'Condition' },
-    { type: 'image', label: 'Image' },
     { type: 'minigame', label: 'Minigame' },
     { type: 'label', label: 'Visual label' },
     { type: 'ending', label: 'Ending' }
   ];
+
+  const companionNodeTypes = [
+    { type: 'image', label: 'Show image' },
+    { type: 'effect', label: 'Item / effect' },
+    { type: 'ambience', label: 'Music / atmosphere' }
+  ];
+
+  const nodeTypes = [...flowNodeTypes, ...companionNodeTypes];
 
   const lanes: Array<{ id: LaneId; label: string }> = [
     { id: 'p1', label: 'PLAYER 1' },
@@ -61,6 +74,11 @@
   let copiedNode: StoryNode | null = null;
   let draggedNodeId = '';
   let storyRevision = 0;
+  let undoStack: EditorSnapshot[] = [];
+  let redoStack: EditorSnapshot[] = [];
+  let tutorialOpen = false;
+  let imageUploading = false;
+  let lastLocation = '';
 
   $: playerId = $sessionState.playerId;
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
@@ -73,6 +91,15 @@
   $: selectedNode = editingStory?.nodes.find(
     (node) => node.id === selectedNodeId
   ) ?? null;
+  $: if ($location !== lastLocation) {
+    lastLocation = $location;
+
+    if ($location === 'library') {
+      mode = 'library';
+    } else if ($location === 'editor') {
+      mode = 'editor';
+    }
+  }
 
   function storyTitle(storyId: string | null): string {
     if (!storyId) {
@@ -86,6 +113,16 @@
   function clearMessages(): void {
     statusMessage = '';
     errorMessage = '';
+  }
+
+  function showLibrary(): void {
+    mode = 'library';
+    location.set('library');
+  }
+
+  function showEditor(): void {
+    mode = 'editor';
+    location.set('editor');
   }
 
   function selectStory(storyId: string): void {
@@ -116,7 +153,9 @@
       newAuthor = '';
       editingStory = result.story;
       selectedNodeId = result.story.initialSceneIds.p1;
-      mode = 'editor';
+      activeLane = 'p1';
+      resetHistory();
+      showEditor();
       statusMessage = 'Story created in the host library.';
     });
   }
@@ -135,7 +174,9 @@
 
       editingStory = result.story;
       selectedNodeId = result.story.initialSceneIds.p1;
-      mode = 'editor';
+      activeLane = 'p1';
+      resetHistory();
+      showEditor();
     });
   }
 
@@ -159,6 +200,7 @@
       }
 
       editingStory = result.story;
+      resetHistory();
       statusMessage = `Saved version ${result.story.version}.`;
     });
   }
@@ -197,6 +239,112 @@
     linkSelection = null;
   }
 
+  function createSnapshot(): EditorSnapshot | null {
+    if (!editingStory) {
+      return null;
+    }
+
+    return {
+      story: structuredClone(editingStory),
+      selectedNodeId,
+      activeLane
+    };
+  }
+
+  function snapshotKey(snapshot: EditorSnapshot): string {
+    return JSON.stringify(snapshot.story);
+  }
+
+  function rememberForUndo(): void {
+    const snapshot = createSnapshot();
+
+    if (!snapshot) {
+      return;
+    }
+
+    const previous = undoStack.at(-1);
+
+    if (!previous || snapshotKey(previous) !== snapshotKey(snapshot)) {
+      undoStack = [...undoStack.slice(-99), snapshot];
+    }
+
+    redoStack = [];
+  }
+
+  function resetHistory(): void {
+    undoStack = [];
+    redoStack = [];
+  }
+
+  function applySnapshot(snapshot: EditorSnapshot): void {
+    editingStory = structuredClone(snapshot.story);
+    selectedNodeId = snapshot.selectedNodeId;
+    activeLane = snapshot.activeLane;
+    linkSelection = null;
+    insertionTarget = null;
+    storyRevision += 1;
+  }
+
+  function undo(): void {
+    const previous = undoStack.at(-1);
+    const current = createSnapshot();
+
+    if (!previous || !current) {
+      return;
+    }
+
+    redoStack = [...redoStack, current];
+    undoStack = undoStack.slice(0, -1);
+    applySnapshot(previous);
+    statusMessage = 'Last editor change undone.';
+  }
+
+  function redo(): void {
+    const next = redoStack.at(-1);
+    const current = createSnapshot();
+
+    if (!next || !current) {
+      return;
+    }
+
+    undoStack = [...undoStack, current];
+    redoStack = redoStack.slice(0, -1);
+    applySnapshot(next);
+    statusMessage = 'Editor change restored.';
+  }
+
+  function rememberFieldEdit(event: FocusEvent): void {
+    const target = event.target;
+
+    if (
+      target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || target instanceof HTMLSelectElement
+    ) {
+      if (!target.disabled) {
+        rememberForUndo();
+      }
+    }
+  }
+
+  function handleEditorShortcut(event: KeyboardEvent): void {
+    if (
+      $location !== 'editor'
+      || !(event.metaKey || event.ctrlKey)
+      || event.key.toLowerCase() !== 'z'
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+  }
+
   function closeNodePicker(): void {
     insertionTarget = null;
   }
@@ -206,6 +354,7 @@
       return;
     }
 
+    rememberForUndo();
     const nodeId = createUniqueNodeId(type);
     const node = createNode(type, nodeId);
     node.audience = insertionTarget.lane;
@@ -222,6 +371,7 @@
       return;
     }
 
+    rememberForUndo();
     const node = structuredClone(copiedNode);
     node.id = createUniqueNodeId(node.type);
     node.audience = insertionTarget.lane;
@@ -238,10 +388,14 @@
       return;
     }
 
-    copiedNode = structuredClone(selectedNode);
+    duplicateNode(selectedNode);
+  }
+
+  function duplicateNode(node: StoryNode): void {
+    copiedNode = structuredClone(node);
     openNodePicker({
-      lane: (selectedNode.audience ?? 'both') as LaneId,
-      insertAfterId: selectedNode.id
+      lane: (node.audience ?? 'both') as LaneId,
+      insertAfterId: node.id
     });
     pasteNode();
   }
@@ -251,8 +405,13 @@
       return;
     }
 
-    copiedNode = structuredClone(selectedNode);
-    statusMessage = `${displayNodeName(selectedNode)} copied.`;
+    copyNode(selectedNode);
+  }
+
+  function copyNode(node: StoryNode): void {
+    copiedNode = structuredClone(node);
+    selectedNodeId = node.id;
+    statusMessage = `${displayNodeName(node)} copied.`;
   }
 
   function insertNode(node: StoryNode, target: InsertionTarget): void {
@@ -272,6 +431,23 @@
 
   function connectInsertionTarget(nodeId: string, target: InsertionTarget): void {
     if (!editingStory) {
+      return;
+    }
+
+    const insertedNode = editingStory.nodes.find((node) => node.id === nodeId);
+
+    if (insertedNode && isCompanionNode(insertedNode)) {
+      const requestedHost = editingStory.nodes.find(
+        (node) => node.id === (target.sourceId ?? target.insertAfterId)
+      );
+      const host = requestedHost && isCompanionNode(requestedHost)
+        ? editingStory.nodes.find((node) => node.id === requestedHost.attachedTo)
+        : requestedHost;
+
+      if (host && !isCompanionNode(host) && host.type !== 'label') {
+        insertedNode.attachedTo = host.id;
+      }
+
       return;
     }
 
@@ -336,13 +512,22 @@
       return;
     }
 
-    if (Object.values(editingStory.initialSceneIds).includes(selectedNode.id)) {
+    deleteNode(selectedNode);
+  }
+
+  function deleteNode(node: StoryNode): void {
+    if (!editingStory) {
+      return;
+    }
+
+    if (Object.values(editingStory.initialSceneIds).includes(node.id)) {
       errorMessage = 'Choose a different start node before deleting this one.';
       return;
     }
 
+    rememberForUndo();
     editingStory.nodes = editingStory.nodes.filter(
-      (node) => node.id !== selectedNode.id
+      (candidate) => candidate.id !== node.id
     );
     selectedNodeId = editingStory.nodes[0]?.id ?? '';
     editingStory = {
@@ -355,6 +540,7 @@
       return;
     }
 
+    rememberForUndo();
     selectedNode.choices ??= [];
     selectedNode.choices = [
       ...selectedNode.choices,
@@ -367,6 +553,7 @@
   }
 
   function removeChoice(index: number): void {
+    rememberForUndo();
     selectedNode.choices = selectedNode.choices.filter(
       (_choice: unknown, choiceIndex: number) => choiceIndex !== index
     );
@@ -432,22 +619,58 @@
 
   function selectNode(node: StoryNode): void {
     if (linkSelection) {
-      if (!canLinkToNode(linkSelection.sourceId, node)) {
+      const currentNode = editingStory?.nodes.find(
+        (candidate) => candidate.id === linkSelection?.sourceId
+      );
+
+      if (!currentNode) {
+        cancelLinkSelection();
+        return;
+      }
+
+      if (linkSelection.direction === 'attachment') {
+        if (!canAttachToNode(currentNode, node)) {
+          errorMessage = 'Choose a main-flow node in the same lane.';
+          return;
+        }
+
+        rememberForUndo();
+        currentNode.attachedTo = node.id;
+        statusMessage = `${displayNodeName(currentNode)} is now attached to ${displayNodeName(node)}.`;
+        linkSelection = null;
+        selectedNodeId = currentNode.id;
+        refreshStory();
+        return;
+      }
+
+      if (linkSelection.direction === 'incoming') {
+        const availableField = findAvailableRouteField(node, currentNode);
+
+        if (!availableField) {
+          errorMessage = 'That node has no available route that can lead here.';
+          return;
+        }
+
+        rememberForUndo();
+        setRouteValue(node, availableField, currentNode.id);
+        statusMessage = `${displayNodeName(node)} now leads to ${displayNodeName(currentNode)}.`;
+        linkSelection = null;
+        selectedNodeId = currentNode.id;
+        refreshStory();
+        return;
+      }
+
+      if (!canLinkToNode(linkSelection.sourceId, node) || !linkSelection.field) {
         errorMessage = 'Choose a node in the same player lane or the Shared lane.';
         return;
       }
 
-      const source = editingStory?.nodes.find(
-        (candidate) => candidate.id === linkSelection?.sourceId
-      );
-
-      if (source) {
-        setRouteValue(source, linkSelection.field, node.id);
-        statusMessage = `${linkSelection.label} now leads to ${displayNodeName(node)}.`;
-        linkSelection = null;
-        selectedNodeId = source.id;
-        refreshStory();
-      }
+      rememberForUndo();
+      setRouteValue(currentNode, linkSelection.field, node.id);
+      statusMessage = `${linkSelection.label} now leads to ${displayNodeName(node)}.`;
+      linkSelection = null;
+      selectedNodeId = currentNode.id;
+      refreshStory();
 
       return;
     }
@@ -465,9 +688,59 @@
     linkSelection = {
       sourceId: selectedNode.id,
       field,
-      label
+      label,
+      direction: 'outgoing'
     };
     statusMessage = `Select a destination node for ${label.toLowerCase()}.`;
+  }
+
+  function startPreviousSelection(): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    linkSelection = {
+      sourceId: selectedNode.id,
+      label: 'Previous node',
+      direction: 'incoming'
+    };
+    statusMessage = 'Select the node that should lead into this one.';
+  }
+
+  function startAttachmentSelection(): void {
+    if (!selectedNode || !isCompanionNode(selectedNode)) {
+      return;
+    }
+
+    linkSelection = {
+      sourceId: selectedNode.id,
+      label: 'Companion host',
+      direction: 'attachment'
+    };
+    statusMessage = 'Select the main-flow node that this companion should modify.';
+  }
+
+  function incomingConnections(node: StoryNode): Array<{ node: StoryNode; field: string }> {
+    return editingStory?.nodes.flatMap((candidate) => (
+      routeFields(candidate)
+        .filter((field) => getRouteValue(candidate, field) === node.id)
+        .map((field) => ({ node: candidate, field }))
+    )) ?? [];
+  }
+
+  function findAvailableRouteField(source: StoryNode, destination: StoryNode): string {
+    if (!canLinkToNode(source.id, destination)) {
+      return '';
+    }
+
+    const fields = routeFields(source);
+    return fields.find((field) => getRouteValue(source, field) === destination.id)
+      ?? fields.find((field) => !getRouteValue(source, field))
+      ?? '';
+  }
+
+  function clearIncomingRoute(source: StoryNode, field: string): void {
+    clearRoute(source, field);
   }
 
   function cancelLinkSelection(): void {
@@ -476,6 +749,7 @@
   }
 
   function clearRoute(node: StoryNode, field: string): void {
+    rememberForUndo();
     setRouteValue(node, field, '');
     refreshStory();
   }
@@ -485,6 +759,12 @@
     const destination = editingStory?.nodes.find((candidate) => candidate.id === destinationId);
 
     return destination ? displayNodeName(destination) : 'Not connected';
+  }
+
+  function attachedHostLabel(node: StoryNode): string {
+    const host = editingStory?.nodes.find((candidate) => candidate.id === node.attachedTo);
+
+    return host ? displayNodeName(host) : 'Not attached';
   }
 
   function routeFieldLabel(node: StoryNode, field: string): string {
@@ -512,7 +792,7 @@
       return 'CANCEL';
     }
 
-    return 'NEXT';
+    return isCompanionNode(node) ? 'RETURNS' : 'NEXT';
   }
 
   function getRouteValue(node: StoryNode, field: string): string {
@@ -539,7 +819,11 @@
   }
 
   function canLinkToNode(sourceId: string, destination: StoryNode): boolean {
-    if (destination.type === 'label' || destination.id === sourceId) {
+    if (
+      destination.type === 'label'
+      || destination.id === sourceId
+      || (isCompanionNode(destination) && destination.attachedTo !== undefined)
+    ) {
       return false;
     }
 
@@ -553,12 +837,36 @@
   }
 
   function isValidLinkTarget(node: StoryNode): boolean {
-    return linkSelection
-      ? canLinkToNode(linkSelection.sourceId, node)
-      : false;
+    if (!linkSelection || !editingStory) {
+      return false;
+    }
+
+    if (linkSelection.direction === 'incoming') {
+      const destination = editingStory.nodes.find(
+        (candidate) => candidate.id === linkSelection?.sourceId
+      );
+
+      return destination ? Boolean(findAvailableRouteField(node, destination)) : false;
+    }
+
+    if (linkSelection.direction === 'attachment') {
+      const companion = editingStory.nodes.find(
+        (candidate) => candidate.id === linkSelection?.sourceId
+      );
+
+      return companion ? canAttachToNode(companion, node) : false;
+    }
+
+    return canLinkToNode(linkSelection.sourceId, node);
   }
 
   function routeFields(node: StoryNode): string[] {
+    if (isCompanionNode(node)) {
+      return node.attachedTo === undefined && node.next !== undefined
+        ? ['next']
+        : [];
+    }
+
     if (supportsSimpleNext(node)) {
       return ['next'];
     }
@@ -583,13 +891,31 @@
   }
 
   function supportsSimpleNext(node: StoryNode): boolean {
-    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'effect']
+    return ['dialogue', 'input', 'checkpoint', 'conversation']
       .includes(node.type);
+  }
+
+  function isCompanionNode(node: StoryNode): boolean {
+    return companionNodeTypes.some((nodeType) => nodeType.type === node.type);
+  }
+
+  function canAttachToNode(companion: StoryNode, host: StoryNode): boolean {
+    if (host.type === 'label' || isCompanionNode(host) || host.id === companion.id) {
+      return false;
+    }
+
+    return (companion.audience ?? 'both') === (host.audience ?? 'both');
   }
 
   function nodeIsInvalid(node: StoryNode): boolean {
     if (!editingStory || node.type === 'label') {
       return false;
+    }
+
+    if (isCompanionNode(node) && node.attachedTo !== undefined) {
+      const host = editingStory.nodes.find((candidate) => candidate.id === node.attachedTo);
+
+      return !host || !canAttachToNode(node, host);
     }
 
     const isStartNode = Object.values(editingStory.initialSceneIds).includes(node.id);
@@ -622,6 +948,12 @@
   }
 
   function clearNodeRoutes(node: StoryNode): void {
+    if (isCompanionNode(node)) {
+      node.attachedTo = '';
+      delete node.next;
+      return;
+    }
+
     for (const field of routeFields(node)) {
       setRouteValue(node, field, '');
     }
@@ -660,6 +992,7 @@
       return;
     }
 
+    rememberForUndo();
     draggedNode.audience = lane;
     const remainingNodes = editingStory.nodes.filter((node) => node.id !== draggedNode.id);
     const lastLaneIndex = remainingNodes.reduce(
@@ -687,6 +1020,7 @@
       return;
     }
 
+    rememberForUndo();
     remainingNodes.splice(targetIndex, 0, node);
     editingStory.nodes = remainingNodes;
     refreshStory();
@@ -720,6 +1054,56 @@
         errorMessage = result.error ?? 'The library operation failed.';
       }
     };
+  }
+
+  async function uploadImage(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file || !selectedNode || selectedNode.type !== 'image') {
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      errorMessage = 'Images must be 8 MB or smaller.';
+      input.value = '';
+      return;
+    }
+
+    const imageNodeId = selectedNode.id;
+    imageUploading = true;
+    clearMessages();
+
+    try {
+      const response = await fetch('/api/story-assets/images', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type
+        },
+        body: file
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.path) {
+        throw new Error(result.error ?? 'The image upload failed.');
+      }
+
+      const imageNode = editingStory?.nodes.find((node) => node.id === imageNodeId);
+
+      if (imageNode) {
+        rememberForUndo();
+        imageNode.src = result.path;
+        refreshStory();
+        statusMessage = 'Image uploaded to the story host.';
+      }
+    } catch (error) {
+      errorMessage = error instanceof Error
+        ? error.message
+        : 'The image upload failed.';
+    } finally {
+      imageUploading = false;
+      input.value = '';
+    }
   }
 
   function createNode(type: string, id: string): StoryNode {
@@ -782,7 +1166,10 @@
         };
       case 'effect':
         return {
-          ...baseNode,
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
           text: 'You acquired a new item.',
           effects: [
             {
@@ -805,9 +1192,24 @@
         };
       case 'image':
         return {
-          ...baseNode,
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          text: '',
           src: '',
           alt: ''
+        };
+      case 'ambience':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          text: 'The atmosphere changes.',
+          background: '',
+          music: null,
+          sound: ''
         };
       case 'minigame':
         return {
@@ -838,17 +1240,19 @@
   }
 </script>
 
+<svelte:window on:keydown={handleEditorShortcut} />
+
 <section
   class="story-library"
-  class:hide={$location !== 'library'}
-  aria-labelledby="library-title"
+  class:hide={!['library', 'editor'].includes($location)}
+  aria-label={$location === 'editor' ? 'Story editor' : 'Library'}
 >
   <header>
-    <span>DEJAVU://STORY_LIBRARY</span>
+    <span>{$location === 'editor' ? 'DEJAVU://STORY_EDITOR' : 'DEJAVU://STORY_LIBRARY'}</span>
     <span>{mode.toUpperCase()}</span>
   </header>
 
-  {#if mode === 'library'}
+  {#if $location === 'library' && mode === 'library'}
     <div class="library-content">
       <div class="library-heading">
         <div>
@@ -922,9 +1326,9 @@
         {/each}
       </div>
     </div>
-  {:else if mode === 'create'}
+  {:else if $location === 'library' && mode === 'create'}
     <div class="form-screen">
-      <button class="back-button" type="button" on:click={() => mode = 'library'}>
+      <button class="back-button" type="button" on:click={showLibrary}>
         ← Back to library
       </button>
       <p class="eyebrow">NEW CARTRIDGE</p>
@@ -958,19 +1362,34 @@
         </button>
       </div>
     </div>
-  {:else if editingStory}
-    <div class="editor-shell">
+  {:else if $location === 'editor' && editingStory}
+    <div
+      class="editor-shell"
+      on:focusin={rememberFieldEdit}
+      on:change={refreshStory}
+    >
       <div class="editor-toolbar">
-        <button class="back-button" type="button" on:click={() => mode = 'library'}>
+        <button class="back-button" type="button" on:click={showLibrary}>
           ← Library
         </button>
         <div>
           <input aria-label="Story title" bind:value={editingStory.title} maxlength="80">
           <span>VERSION {editingStory.version} · {editingStory.status.toUpperCase()}</span>
         </div>
-        <button class="primary-button" type="button" on:click={saveStory}>
-          Save story
-        </button>
+        <div class="toolbar-actions">
+          <button type="button" disabled={undoStack.length === 0} on:click={undo} aria-label="Undo last editor change">
+            ↶ Undo
+          </button>
+          <button type="button" disabled={redoStack.length === 0} on:click={redo} aria-label="Redo editor change">
+            ↷ Redo
+          </button>
+          <button class="tutorial-button" type="button" on:click={() => tutorialOpen = true} aria-label="Open editor tutorial">
+            ⓘ Guide
+          </button>
+          <button class="primary-button" type="button" on:click={saveStory}>
+            Save story
+          </button>
+        </div>
       </div>
 
       <div class="editor-workspace">
@@ -1004,7 +1423,10 @@
                   on:click|stopPropagation={() => activeLane = lane.id}
                 >
                   <span>{lane.label}</span>
-                  <strong>{getLaneNodes(lane.id).filter((node) => node.type !== 'label').length} NODES</strong>
+                  <strong>
+                    {getLaneNodes(lane.id).filter((node) => node.type !== 'label' && !isCompanionNode(node)).length} FLOW
+                    · {getLaneNodes(lane.id).filter(isCompanionNode).length} COMPANION
+                  </strong>
                 </button>
 
                 <div class="lane-node-grid">
@@ -1015,12 +1437,33 @@
                       class="node-wrapper"
                       data-revision={storyRevision}
                       class:branch-node={nodeHasBranches(node)}
+                      class:companion-node={isCompanionNode(node)}
                       class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
                       draggable="true"
                       on:dragstart={() => startDragging(node.id)}
                       on:dragover|preventDefault
                       on:drop|stopPropagation|preventDefault={() => dropOnNode(node)}
                     >
+                      <div class="node-quick-actions" aria-label={`Quick actions for ${displayNodeName(node)}`}>
+                        <button type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+                            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+                          </svg>
+                        </button>
+                        <button type="button" aria-label={`Duplicate ${displayNodeName(node)}`} title="Duplicate" on:click|stopPropagation={() => duplicateNode(node)}>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="5" y="5" width="10" height="10" rx="2"></rect>
+                            <path d="M9 15v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2"></path>
+                            <path d="M10 8v4M8 10h4"></path>
+                          </svg>
+                        </button>
+                        <button class="quick-delete" type="button" aria-label={`Delete ${displayNodeName(node)}`} title="Delete" on:click|stopPropagation={() => deleteNode(node)}>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 7h16M9 7V4h6v3M8 10v8M12 10v8M16 10v8M6 7l1 14h10l1-14"></path>
+                          </svg>
+                        </button>
+                      </div>
                       <button
                         class="flow-node"
                         class:selected={selectedNodeId === node.id}
@@ -1032,15 +1475,24 @@
                         on:click|stopPropagation={() => selectNode(node)}
                       >
                         <span>{nodeOrdinal(node)}</span>
+                        {#if isCompanionNode(node)}
+                          <span class="companion-badge">COMPANION</span>
+                        {/if}
                         <strong>{displayNodeName(node)}</strong>
                         {#if node.type !== 'label'}
-                          <small>{nodeIsInvalid(node) ? 'INCOMPLETE ROUTE' : node.id}</small>
+                          <small>{nodeIsInvalid(node) ? 'INCOMPLETE CONNECTION' : node.id}</small>
                           <span class="node-route-list">
-                            {#each routeFields(node).filter((field) => getRouteValue(node, field)) as field}
+                            {#if isCompanionNode(node) && node.attachedTo !== undefined}
                               <span>
-                                {routeFieldLabel(node, field)} → {routeLabel(node, field)}
+                                WITH → {attachedHostLabel(node).toUpperCase()}
                               </span>
-                            {/each}
+                            {:else}
+                              {#each routeFields(node).filter((field) => getRouteValue(node, field)) as field}
+                                <span>
+                                  {routeFieldLabel(node, field)} → {routeLabel(node, field)}
+                                </span>
+                              {/each}
+                            {/if}
                           </span>
                         {/if}
                       </button>
@@ -1114,7 +1566,49 @@
               <option value="p2">Player 2</option>
             </select>
 
-            {#if selectedNode.type !== 'condition' && selectedNode.type !== 'input'}
+            {#if selectedNode.type !== 'label' && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
+              <div class="route-label">Previous node</div>
+              <div class="previous-route-list">
+                {#if incomingConnections(selectedNode).length === 0}
+                  <span class="missing">No incoming connection</span>
+                {:else}
+                  {#each incomingConnections(selectedNode) as connection}
+                    <div>
+                      <span>{displayNodeName(connection.node)} · {routeFieldLabel(connection.node, connection.field)}</span>
+                      <button
+                        type="button"
+                        aria-label={`Disconnect ${displayNodeName(connection.node)}`}
+                        on:click={() => clearIncomingRoute(connection.node, connection.field)}
+                      >×</button>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+              <button class="select-previous-button" type="button" on:click={startPreviousSelection}>
+                Select previous node
+              </button>
+            {/if}
+
+            {#if isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined}
+              <div class="route-label">Attached to story node</div>
+              <div class="route-control">
+                <span class:missing={!selectedNode.attachedTo}>
+                  {attachedHostLabel(selectedNode)}
+                </span>
+                <button type="button" on:click={startAttachmentSelection}>Select host node</button>
+                {#if selectedNode.attachedTo}
+                  <button type="button" aria-label="Clear companion host" on:click={() => {
+                    rememberForUndo();
+                    selectedNode.attachedTo = '';
+                    refreshStory();
+                  }}>×</button>
+                {/if}
+              </div>
+            {/if}
+
+            {#if selectedNode.type !== 'condition'
+              && selectedNode.type !== 'input'
+              && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
               <label for="node-text">
                 {selectedNode.type === 'label' ? 'Label title' : 'Terminal text'}
               </label>
@@ -1134,17 +1628,20 @@
               >
             {/if}
 
-            {#if selectedNode.type === 'dialogue' || selectedNode.type === 'effect'}
+            {#if selectedNode.type === 'dialogue'
+              || (selectedNode.type === 'effect' && selectedNode.attachedTo === undefined)}
               <label for="node-speaker">Speaker</label>
               <input id="node-speaker" bind:value={selectedNode.speaker}>
             {/if}
 
-            {#if ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'effect'].includes(selectedNode.type)}
-              <div class="route-label">Next node</div>
+            {#if routeFields(selectedNode).includes('next')}
+              <div class="route-label">
+                {isCompanionNode(selectedNode) ? 'Legacy return node' : 'Next node'}
+              </div>
               <div class="route-control">
                 <span class:missing={!selectedNode.next}>{routeLabel(selectedNode, 'next')}</span>
                 <button type="button" on:click={() => startLinkSelection('next', 'Next node')}>
-                  Select next node
+                  {isCompanionNode(selectedNode) ? 'Select legacy return' : 'Select next node'}
                 </button>
                 {#if selectedNode.next}
                   <button type="button" aria-label="Clear next node" on:click={() => clearRoute(selectedNode, 'next')}>×</button>
@@ -1289,10 +1786,40 @@
             {/if}
 
             {#if selectedNode.type === 'image'}
-              <label for="image-source">Image path</label>
-              <input id="image-source" bind:value={selectedNode.src} placeholder="/scene-image.png">
+              <label for="image-upload">Story image</label>
+              <label class="upload-button" for="image-upload">
+                {imageUploading ? 'Uploading image…' : 'Upload image'}
+              </label>
+              <input
+                id="image-upload"
+                class="visually-hidden"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml"
+                disabled={imageUploading}
+                on:change={uploadImage}
+              >
+              {#if selectedNode.src}
+                <div class="image-preview">
+                  <img src={selectedNode.src} alt={selectedNode.alt || 'Story image preview'}>
+                  <span>{selectedNode.src}</span>
+                  <button type="button" on:click={() => {
+                    rememberForUndo();
+                    selectedNode.src = '';
+                    refreshStory();
+                  }}>Remove image</button>
+                </div>
+              {/if}
               <label for="image-alt">Alternative text</label>
               <input id="image-alt" bind:value={selectedNode.alt}>
+            {/if}
+
+            {#if selectedNode.type === 'ambience'}
+              <label for="background-source">Background image path</label>
+              <input id="background-source" bind:value={selectedNode.background} placeholder="/backgrounds/location.webp">
+              <label for="music-source">Music path</label>
+              <input id="music-source" bind:value={selectedNode.music} placeholder="/audio/music/theme.mp3">
+              <label for="sound-source">Sound effect path</label>
+              <input id="sound-source" bind:value={selectedNode.sound} placeholder="/audio/sounds/door.mp3">
             {/if}
 
             {#if selectedNode.type === 'minigame'}
@@ -1312,7 +1839,9 @@
               </div>
             {/if}
 
-            {#if selectedNode.type !== 'label' && selectedNode.type !== 'condition'}
+            {#if selectedNode.type !== 'label'
+              && selectedNode.type !== 'condition'
+              && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
               <label class="checkbox-row">
                 <input type="checkbox" bind:checked={selectedNode.clearTerminal}>
                 Clear terminal when this node begins
@@ -1350,8 +1879,22 @@
               </button>
             {/if}
 
+            <p class="node-group-label">MAIN STORY FLOW</p>
             <div class="node-type-grid">
-              {#each nodeTypes as nodeType}
+              {#each flowNodeTypes as nodeType}
+                <button type="button" on:click={() => addNode(nodeType.type)}>
+                  <span>＋</span>
+                  <strong>{nodeType.label}</strong>
+                </button>
+              {/each}
+            </div>
+
+            <p class="node-group-label companion-group-label">COMPANION CHANGES</p>
+            <p class="node-group-description">
+              Presentation and state changes attach to a main-flow node instead of becoming another step.
+            </p>
+            <div class="node-type-grid companion-type-grid">
+              {#each companionNodeTypes as nodeType}
                 <button type="button" on:click={() => addNode(nodeType.type)}>
                   <span>＋</span>
                   <strong>{nodeType.label}</strong>
@@ -1362,11 +1905,50 @@
         </div>
       {/if}
 
+      {#if tutorialOpen}
+        <div class="node-picker-backdrop" role="presentation">
+          <section class="editor-tutorial" role="dialog" aria-modal="true" aria-labelledby="editor-guide-title">
+            <header>
+              <div>
+                <p>QUICK START</p>
+                <h2 id="editor-guide-title">How the story editor works</h2>
+              </div>
+              <button type="button" aria-label="Close editor tutorial" on:click={() => tutorialOpen = false}>×</button>
+            </header>
+            <ol>
+              <li><strong>Add to Player</strong> appends a new node to the bottom of that lane. It only auto-connects when the previous node has an unused normal route.</li>
+              <li><strong>+ next, + yes, or + no</strong> creates a node directly on that exact route. Use these when building a connected sequence or branch.</li>
+              <li><strong>Select next node</strong> connects to an existing node. <strong>Select previous node</strong> makes an existing node lead into the selected node.</li>
+              <li><strong>Companion changes</strong> show images, update inventory, or change atmosphere with a main-flow node. They do not need their own previous or next route.</li>
+              <li>Red nodes have a missing or invalid connection. Save only after every playable route reaches another node or an Ending.</li>
+            </ol>
+            <button class="primary-button" type="button" on:click={() => tutorialOpen = false}>Got it</button>
+          </section>
+        </div>
+      {/if}
+
       <datalist id="story-node-ids">
         {#each editingStory.nodes as node}
           <option value={node.id}></option>
         {/each}
       </datalist>
+    </div>
+  {:else if $location === 'editor'}
+    <div class="editor-empty-state">
+      <p class="eyebrow">STORY EDITOR</p>
+      <h1 id="library-title">Choose a story to edit</h1>
+      <p class="introduction">
+        Open an existing cartridge in the editor, or create a new story from the Library.
+      </p>
+      <div class="editor-story-list">
+        {#each $libraryState.stories as story}
+          <button type="button" on:click={() => openEditor(story.id)}>
+            <strong>{story.title}</strong>
+            <span>{story.status.toUpperCase()} · V{story.version}</span>
+          </button>
+        {/each}
+      </div>
+      <button class="back-button" type="button" on:click={showLibrary}>Open Library</button>
     </div>
   {/if}
 
@@ -1657,6 +2239,25 @@
     }
   }
 
+  .toolbar-actions {
+    display: flex !important;
+    grid-template-columns: none !important;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px !important;
+
+    button {
+      min-height: 34px;
+      padding: 6px 10px;
+      font-size: 0.67rem;
+    }
+
+    .tutorial-button {
+      color: #f8e69a;
+      border-color: #ad781c;
+    }
+  }
+
   .editor-workspace {
     min-height: 0;
 
@@ -1801,6 +2402,60 @@
       background: linear-gradient(#02fbfb, #1472bf55);
       box-shadow: 0 0 7px #02fbfb;
     }
+
+    &.companion-node {
+      width: calc(100% - 24px);
+      margin-left: 24px;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 28px;
+        left: -24px;
+        width: 22px;
+        border-top: 1px dashed #e0ad03;
+      }
+
+      .flow-node {
+        background: #17150d;
+        border-style: dashed;
+        border-color: #ad781c;
+      }
+    }
+  }
+
+  .node-quick-actions {
+    position: absolute;
+    z-index: 4;
+    top: 5px;
+    right: 5px;
+
+    display: flex;
+    gap: 3px;
+
+    button {
+      width: 24px;
+      height: 24px;
+      min-height: 24px;
+      padding: 4px;
+      background: #050912e8;
+      border-color: #334155;
+    }
+
+    svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: #94a3b8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.7;
+    }
+
+    .quick-delete:hover svg,
+    .quick-delete:focus-visible svg {
+      stroke: #e58271;
+    }
   }
 
   .flow-node {
@@ -1808,6 +2463,7 @@
     height: auto;
     min-height: 94px;
     margin: 0;
+    padding-top: 34px;
     text-align: left;
 
     display: grid;
@@ -1849,6 +2505,16 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+    }
+
+    .companion-badge {
+      width: max-content;
+      padding: 2px 5px;
+      color: #f8e69a;
+      background: #332b0a;
+      border: 1px solid #ad781c;
+      font-size: 0.52rem;
+      letter-spacing: 1px;
     }
   }
 
@@ -2045,6 +2711,48 @@
     }
   }
 
+  .previous-route-list {
+    display: grid;
+    gap: 5px;
+
+    > span,
+    > div {
+      min-width: 0;
+      min-height: 38px;
+      padding: 8px 10px;
+      color: #9dffa6;
+      background: #07111d;
+      border: 1px solid #334155;
+    }
+
+    > div {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+
+      span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      button {
+        min-height: 28px;
+        padding: 3px 8px;
+      }
+    }
+
+    .missing {
+      color: #e58271;
+    }
+  }
+
+  .select-previous-button {
+    width: 100%;
+    margin-top: 5px;
+  }
+
   .node-picker-backdrop {
     position: absolute;
     z-index: 20;
@@ -2122,6 +2830,160 @@
 
       span {
         color: #02fbfb;
+      }
+    }
+  }
+
+  .node-group-label {
+    margin: 8px 0 10px;
+    color: #6dc2fb;
+    font-size: 0.64rem;
+    letter-spacing: 1.4px;
+  }
+
+  .companion-group-label {
+    margin-top: 22px;
+    color: #f8e69a;
+  }
+
+  .node-group-description {
+    margin: -4px 0 10px;
+    color: #94a3b8;
+    font-size: 0.7rem;
+    line-height: 1.5;
+  }
+
+  .companion-type-grid button {
+    border-color: #ad781c;
+
+    span {
+      color: #f8e69a;
+    }
+  }
+
+  .upload-button {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    color: #07111d !important;
+    background: #6dc2fb;
+    border: 1px solid #6dc2fb;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .image-preview {
+    margin-top: 8px;
+    padding: 8px;
+    background: #07111d;
+    border: 1px solid #334155;
+
+    display: grid;
+    gap: 7px;
+
+    img {
+      width: 100%;
+      max-height: 170px;
+      object-fit: contain;
+      background: #020617;
+    }
+
+    span {
+      overflow: hidden;
+      color: #94a3b8;
+      font-size: 0.62rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .editor-tutorial {
+    width: min(680px, 100%);
+    max-height: 85%;
+    padding: 24px;
+    overflow-y: auto;
+    background: #09111e;
+    border: 1px solid #02fbfb;
+    box-shadow: 0 0 48px #02fbfb33;
+
+    header {
+      margin-bottom: 18px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+
+      p {
+        color: #4a98d9;
+        font-size: 0.65rem;
+        letter-spacing: 1px;
+      }
+
+      h2 {
+        margin-top: 5px;
+        font-family: "Orbitron", "Space Mono", sans-serif;
+      }
+    }
+
+    ol {
+      margin: 0 0 20px 20px;
+
+      display: grid;
+      gap: 12px;
+    }
+
+    li {
+      padding-left: 5px;
+      color: #b7c2d3;
+      line-height: 1.55;
+
+      strong {
+        color: #f8e69a;
+      }
+    }
+  }
+
+  .editor-empty-state {
+    height: calc(100% - 38px);
+    padding: clamp(24px, 5vw, 64px);
+    overflow-y: auto;
+  }
+
+  .editor-story-list {
+    width: min(760px, 100%);
+    margin: 26px 0;
+
+    display: grid;
+    gap: 8px;
+
+    button {
+      text-align: left;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+
+      strong {
+        color: #02fbfb;
+      }
+
+      span {
+        color: #8893a2;
+        font-size: 0.65rem;
       }
     }
   }
