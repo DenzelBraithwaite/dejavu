@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    Billywig,
     CharacterMenu,
     Journal,
     MinigameLibrary,
@@ -16,6 +17,7 @@
   <Journal />
   <MinigameLibrary />
   <NetRunners />
+  <Billywig />
   <SettingsMenu />
   <StoryLibrary />
 </div>

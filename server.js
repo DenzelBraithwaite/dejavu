@@ -64,6 +64,8 @@ const storySelections = {
 let activeStoryId = null;
 let campaignState = createCampaignState();
 let netRunnersState = createNetRunnersState();
+let billywigCompletionSceneId = null;
+const billywigFinishedPlayers = new Set();
 const chatMessages = [];
 
 initializeDeadlines(campaignState);
@@ -418,6 +420,53 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('billywig:complete', (acknowledge = () => {}) => {
+    if (campaignState.activeMinigame?.id !== 'billywig') {
+      acknowledge({
+        ok: false,
+        error: 'No story-launched Billywig round is active.'
+      });
+      return;
+    }
+
+    synchronizeBillywigCompletionScene();
+    billywigFinishedPlayers.add(playerId);
+
+    if (billywigFinishedPlayers.size < 2) {
+      acknowledge({
+        ok: true,
+        waitingForPartner: true
+      });
+      return;
+    }
+
+    const result = completeActiveMinigame(campaignState, 'completed');
+    acknowledge(result);
+
+    if (result.ok) {
+      resetBillywigCompletion();
+      io.emit('campaign:state', getCampaignSnapshot(campaignState));
+    }
+  });
+
+  socket.on('billywig:cancel', (acknowledge = () => {}) => {
+    if (campaignState.activeMinigame?.id !== 'billywig') {
+      acknowledge({
+        ok: false,
+        error: 'No story-launched Billywig round is active.'
+      });
+      return;
+    }
+
+    const result = completeActiveMinigame(campaignState, 'cancelled');
+    acknowledge(result);
+
+    if (result.ok) {
+      resetBillywigCompletion();
+      io.emit('campaign:state', getCampaignSnapshot(campaignState));
+    }
+  });
+
   socket.on('disconnect', () => {
     const slot = playerSlots[playerId];
 
@@ -623,4 +672,18 @@ function createSaveFileName(value) {
   }
 
   return `${normalized}.json`;
+}
+
+function synchronizeBillywigCompletionScene() {
+  const activeSceneId = campaignState.activeMinigame?.sceneId ?? null;
+
+  if (billywigCompletionSceneId !== activeSceneId) {
+    billywigCompletionSceneId = activeSceneId;
+    billywigFinishedPlayers.clear();
+  }
+}
+
+function resetBillywigCompletion() {
+  billywigCompletionSceneId = null;
+  billywigFinishedPlayers.clear();
 }

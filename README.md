@@ -11,7 +11,7 @@ The long-term product has two connected modes:
 - Build mode lets creators make stories as flowcharts without writing code.
 - Play mode runs those story graphs as synchronized two-player terminal games.
 
-Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. NetRunners is the first registered minigame.
+Stories now live in a persistent local story library. Coded minigames live in a separate minigame library and can be launched from story nodes. The installed catalog includes the multiplayer NetRunners race and the solo Billywig card table.
 
 Read the complete product direction in [Visual Story Builder Product Direction](docs/GAME_BUILDER_DIRECTION.md).
 
@@ -105,7 +105,7 @@ Each browser stores independent music and sound-effect mute and volume settings.
 
 ### Minigame library
 
-The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners can be launched directly from this catalog or through a story minigame node.
+The Minigames sidebar destination presents coded modules separately from Story Mode. NetRunners and Billywig can be launched directly from this catalog or through a story minigame node. Story-launched Billywig sessions wait until both players have finished their individual rounds before returning the campaign to its completed destination.
 
 ### NetRunners
 

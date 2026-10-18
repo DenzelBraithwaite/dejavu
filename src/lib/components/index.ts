@@ -1,5 +1,6 @@
 import Button from './buttons/Button.svelte';
 import BagMenu from './BagMenu.svelte';
+import Billywig from './Billywig.svelte';
 import Client from './Client.svelte';
 import CharacterMenu from './CharacterMenu.svelte';
 import ChatPanel from './ChatPanel.svelte';
@@ -21,6 +22,7 @@ import Toast from './Toast.svelte';
 export {
   Button,
   BagMenu,
+  Billywig,
   Client,
   Dice,
   DiceTerminal,

@@ -1826,6 +1826,7 @@
               <label for="minigame-id">Minigame</label>
               <select id="minigame-id" bind:value={selectedNode.minigameId}>
                 <option value="netrunners">NetRunners</option>
+                <option value="billywig">Billywig</option>
               </select>
               <div class="route-label">Completed destination</div>
               <div class="route-control">

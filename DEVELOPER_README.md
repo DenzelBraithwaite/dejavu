@@ -25,6 +25,7 @@ src/lib/actions/typewriter.ts        Custom punctuation-aware typewriter
 src/lib/components/Terminal.svelte   Generic scene renderer
 src/lib/components/StoryLibrary.svelte  Story CRUD and node editor
 src/lib/components/MinigameLibrary.svelte  Registered minigame catalog
+src/lib/components/Billywig.svelte         Solo card game and story return flow
 src/lib/stores/library.ts            Browser story metadata and selections
 server/gameSession.js                Authoritative scene execution
 server/netRunnersSession.js          Authoritative multiplayer minigame
@@ -497,7 +498,7 @@ defineScene({
 })
 ```
 
-The runtime waits until both players launch the node, opens NetRunners on both clients, and returns to the connected story destination when the players leave the completed game. New minigames must provide their own result IDs and server-owned completion handling.
+The runtime waits until both players launch the node and opens the selected module on both clients. NetRunners resolves its shared multiplayer round on the server. Billywig lets each player run a local player-versus-bank round, then waits for both completion signals before returning to the connected story destination. New minigames must provide their own result IDs and server-owned completion handling.
 
 ## Typewriter configuration
 

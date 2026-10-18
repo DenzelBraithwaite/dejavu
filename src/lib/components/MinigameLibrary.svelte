@@ -7,7 +7,16 @@
       title: 'NetRunners',
       description: 'Bet on rival hacker factions as they race across a volatile data grid.',
       playerCount: 2,
-      status: 'READY'
+      status: 'READY',
+      artwork: 'netrunners'
+    },
+    {
+      id: 'billywig',
+      title: 'Billywig',
+      description: 'Risk your ₭rypto against Tilda in a neon card duel where 26 is perfection.',
+      playerCount: 1,
+      status: 'READY',
+      artwork: 'billywig'
     }
   ];
 </script>
@@ -30,13 +39,20 @@
     <div class="minigame-grid">
       {#each minigames as minigame}
         <article>
-          <div class="module-art" aria-hidden="true">
-            <img src="/neon_animals.png" alt="">
+          <div class="module-art module-art--{minigame.artwork}" aria-hidden="true">
+            {#if minigame.artwork === 'netrunners'}
+              <img src="/neon_animals.png" alt="">
+            {:else}
+              <div class="billywig-card billywig-card--left">09</div>
+              <div class="billywig-card billywig-card--center">26</div>
+              <div class="billywig-card billywig-card--right">16</div>
+              <span class="billywig-scanline"></span>
+            {/if}
           </div>
           <div class="module-copy">
             <div class="module-meta">
               <span>{minigame.status}</span>
-              <span>{minigame.playerCount} PLAYERS</span>
+              <span>{minigame.playerCount} {minigame.playerCount === 1 ? 'PLAYER' : 'PLAYERS'}</span>
             </div>
             <h2>{minigame.title}</h2>
             <p>{minigame.description}</p>
@@ -111,6 +127,7 @@
   }
 
   .module-art {
+    position: relative;
     height: 190px;
     overflow: hidden;
     background: #020617;
@@ -121,6 +138,64 @@
       object-fit: cover;
       opacity: 0.78;
     }
+  }
+
+  .module-art--billywig {
+    background:
+      linear-gradient(90deg, #ff75fd12 1px, transparent 1px),
+      linear-gradient(#6dc2fb12 1px, transparent 1px),
+      radial-gradient(circle at 50% 45%, #453b82, #080610 68%);
+    background-size: 24px 24px, 24px 24px, auto;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .billywig-card {
+    position: absolute;
+    width: 84px;
+    height: 122px;
+    padding: 12px;
+    color: #6dc2fb;
+    background: #0a1324;
+    border: 2px solid #6dc2fb;
+    border-radius: 6px 22px;
+    box-shadow: 0 0 18px #6dc2fb66;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+
+  .billywig-card--left {
+    transform: translateX(-64px) rotate(-12deg);
+  }
+
+  .billywig-card--center {
+    z-index: 2;
+    color: #ff75fd;
+    border-color: #ff75fd;
+    box-shadow: 0 0 26px #ff75fd88;
+    transform: translateY(-8px);
+  }
+
+  .billywig-card--right {
+    color: #f2d40e;
+    border-color: #f2d40e;
+    box-shadow: 0 0 18px #f2d40e66;
+    transform: translateX(64px) rotate(12deg);
+  }
+
+  .billywig-scanline {
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    background: repeating-linear-gradient(
+      transparent 0,
+      transparent 4px,
+      #ffffff08 5px
+    );
+    pointer-events: none;
   }
 
   .module-copy {
