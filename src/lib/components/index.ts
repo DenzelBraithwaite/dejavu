@@ -11,6 +11,7 @@ import Journal from './Journal.svelte';
 import MinigameLibrary from './MinigameLibrary.svelte';
 import NetRunners from './NetRunners.svelte';
 import NetRunnersCard from './NetRunnersCard.svelte';
+import Pigz from './Pigz.svelte';
 import PlayerGamblingCard from './PlayerGamblingCard.svelte';
 import Sidebar from './Sidebar.svelte';
 import SaveMenu from './SaveMenu.svelte';
@@ -31,6 +32,7 @@ export {
   MinigameLibrary,
   NetRunners,
   NetRunnersCard,
+  Pigz,
   PlayerGamblingCard,
   CharacterMenu,
   ChatPanel,

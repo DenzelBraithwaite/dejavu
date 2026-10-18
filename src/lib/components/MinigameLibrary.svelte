@@ -17,6 +17,14 @@
       playerCount: 1,
       status: 'READY',
       artwork: 'billywig'
+    },
+    {
+      id: 'pigz',
+      title: 'Pigz',
+      description: 'Roll, bank, and push your luck in a neon-pink race to 100.',
+      playerCount: 2,
+      status: 'READY',
+      artwork: 'pigz'
     }
   ];
 </script>
@@ -42,11 +50,21 @@
           <div class="module-art module-art--{minigame.artwork}" aria-hidden="true">
             {#if minigame.artwork === 'netrunners'}
               <img src="/neon_animals.png" alt="">
-            {:else}
+            {:else if minigame.artwork === 'billywig'}
               <div class="billywig-card billywig-card--left">09</div>
               <div class="billywig-card billywig-card--center">26</div>
               <div class="billywig-card billywig-card--right">16</div>
               <span class="billywig-scanline"></span>
+            {:else}
+              <div class="pigz-die">
+                <i></i>
+                <i></i>
+                <i></i>
+                <i></i>
+                <i></i>
+              </div>
+              <div class="pigz-score pigz-score--left">72</div>
+              <div class="pigz-score pigz-score--right">89</div>
             {/if}
           </div>
           <div class="module-copy">
@@ -196,6 +214,77 @@
       #ffffff08 5px
     );
     pointer-events: none;
+  }
+
+  .module-art--pigz {
+    background:
+      linear-gradient(90deg, #ff75fd12 1px, transparent 1px),
+      linear-gradient(#ff75fd12 1px, transparent 1px),
+      radial-gradient(circle at center, #5c1f68, #09040d 68%);
+    background-size: 22px 22px, 22px 22px, auto;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .pigz-die {
+    z-index: 2;
+    width: 104px;
+    height: 104px;
+    padding: 18px;
+    background: #fff6fc;
+    border: 3px solid #ff3dbb;
+    border-radius: 18px;
+    box-shadow: 0 0 25px #ff75fdaa;
+
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+
+    i {
+      width: 14px;
+      height: 14px;
+      place-self: center;
+      background: #ff3dbb;
+      border-radius: 50%;
+      box-shadow: 0 0 7px #ff3dbb88;
+
+      &:nth-child(1) {
+        grid-area: 1 / 1;
+      }
+
+      &:nth-child(2) {
+        grid-area: 1 / 3;
+      }
+
+      &:nth-child(3) {
+        grid-area: 2 / 2;
+      }
+
+      &:nth-child(4) {
+        grid-area: 3 / 1;
+      }
+
+      &:nth-child(5) {
+        grid-area: 3 / 3;
+      }
+    }
+  }
+
+  .pigz-score {
+    position: absolute;
+    color: #ffb4e5;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 1.35rem;
+    font-weight: 900;
+  }
+
+  .pigz-score--left {
+    left: 16%;
+  }
+
+  .pigz-score--right {
+    right: 16%;
   }
 
   .module-copy {

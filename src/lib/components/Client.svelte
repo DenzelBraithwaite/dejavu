@@ -11,6 +11,7 @@
     netRunnersServerState,
     type NetRunnersServerState
   } from '../stores/netRunnersSession';
+  import { pigzServerState, type PigzServerState } from '../stores/pigzSession';
   import { sessionState, type PlayerId } from '../stores/session';
   import ChatPanel from './ChatPanel.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -38,6 +39,7 @@
     socket.on('campaign:state', handleCampaignState);
     socket.on('library:state', handleLibraryState);
     socket.on('netrunners:state', handleNetRunnersState);
+    socket.on('pigz:state', handlePigzState);
     socket.on('chat:history', handleChatHistory);
     socket.on('chat:message', handleChatMessage);
     socket.connect();
@@ -49,6 +51,7 @@
     socket.off('campaign:state', handleCampaignState);
     socket.off('library:state', handleLibraryState);
     socket.off('netrunners:state', handleNetRunnersState);
+    socket.off('pigz:state', handlePigzState);
     socket.off('chat:history', handleChatHistory);
     socket.off('chat:message', handleChatMessage);
     window.clearTimeout(chatToastTimer);
@@ -103,6 +106,10 @@
       if (state.activeMinigame.id === 'netrunners') {
         socket.emit('netrunners:join');
       }
+
+      if (state.activeMinigame.id === 'pigz') {
+        socket.emit('pigz:join');
+      }
     } else if (minigameWasActive) {
       minigameWasActive = false;
       location.set('terminal');
@@ -115,6 +122,10 @@
 
   function handleNetRunnersState(state: NetRunnersServerState): void {
     netRunnersServerState.set(state);
+  }
+
+  function handlePigzState(state: PigzServerState): void {
+    pigzServerState.set(state);
   }
 
   function handleChatHistory(messages: ChatMessage[]): void {

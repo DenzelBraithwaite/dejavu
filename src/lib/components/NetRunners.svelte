@@ -702,9 +702,6 @@
           <button on:click={shuffleLaneCards} class="menu-btn" class:btn-disabled={!$netRunnersGameState.colorSelectVisible} disabled={!$netRunnersGameState.colorSelectVisible}>SHUFFLE</button>
         {/if}
 
-        {#if $netRunnersGameState.betSelectVisible}
-          <button on:click={placeBet} class="confirm-btn" class:btn-disabled={$netRunnersGameState.p1.amountBet === 0} disabled={$netRunnersGameState.p1.amountBet === 0}>CONFIRM</button>
-        {/if}
       </div>
 
       <div class="game-area game-area__{$netRunnersGameState.lastWinningColor}">
@@ -783,20 +780,38 @@
           </div>
         </div>
 
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div class:hide={!$netRunnersGameState.betSelectVisible}>
-          <p class="game-message">PLACE YOUR BET</p>
-          <div class="bet-select-wrapper">
-            <div on:click={() => updateBetAmount(-1)} class="bet-amount-btn">-1</div>
-            <div on:click={() => updateBetAmount(-10)} class="bet-amount-btn">-10</div>
-            <div on:click={() => updateBetAmount(-100)} class="bet-amount-btn">-100</div>
-            <div on:click={() => updateBetAmount(-1000)} class="bet-amount-btn">-1000</div>
-            <p class="bet-amount">{$netRunnersGameState.p1.amountBet}<span class="color-green">₭</span></p>
-            <div on:click={() => updateBetAmount(1)} class="bet-amount-btn">+1</div>
-            <div on:click={() => updateBetAmount(10)} class="bet-amount-btn">+10</div>
-            <div on:click={() => updateBetAmount(100)} class="bet-amount-btn">+100</div>
-            <div on:click={() => updateBetAmount(1000)} class="bet-amount-btn">+1000</div>
+        <div class="netrunner-bet-screen" class:hide={!$netRunnersGameState.betSelectVisible}>
+          <div class="netrunner-bet-panel">
+            <p class="netrunner-bet-label">NETRUNNER EXCHANGE&gt; PLACE YOUR BET</p>
+            <p class="netrunner-bet-context">
+              Wagering on <strong class="color-{$netRunnersGameState.p1.colorBet}">{$netRunnersGameState.p1.colorBet}</strong> faction.
+            </p>
+
+            <div class="netrunner-bet-display" aria-live="polite">
+              <span>WAGER</span>
+              <strong>{$netRunnersGameState.p1.amountBet}₭</strong>
+              <small>AVAILABLE {$netRunnersGameState.p1.money}₭</small>
+            </div>
+
+            <div class="netrunner-bet-controls" aria-label="Adjust wager">
+              <button type="button" on:click={() => updateBetAmount(-1000)}>-1000</button>
+              <button type="button" on:click={() => updateBetAmount(-100)}>-100</button>
+              <button type="button" on:click={() => updateBetAmount(-10)}>-10</button>
+              <button type="button" on:click={() => updateBetAmount(-1)}>-1</button>
+              <button type="button" on:click={() => updateBetAmount(1)}>+1</button>
+              <button type="button" on:click={() => updateBetAmount(10)}>+10</button>
+              <button type="button" on:click={() => updateBetAmount(100)}>+100</button>
+              <button type="button" on:click={() => updateBetAmount(1000)}>+1000</button>
+            </div>
+
+            <button
+              type="button"
+              class="netrunner-lock-bet"
+              disabled={$netRunnersGameState.p1.amountBet === 0}
+              on:click={placeBet}
+            >
+              LOCK BET
+            </button>
           </div>
         </div>
 
@@ -1284,38 +1299,6 @@
     color: $cyan;
   }
 
-  .bet-amount-btn {
-    font-family: "Orbitron", "Space Mono", sans-serif;
-    background-color: darken($purple, 10%);
-    color: $yellow;
-    font-weight: bold;
-    height: 55px;
-    width: 55px;
-    border-radius: 50%;
-    border: 2px solid $purple;
-    box-shadow: 0 2px 8px $purple;
-    transition: 0.1s all ease-in-out;
-    
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    
-    &:hover {
-      cursor: pointer;
-      scale: 1.125;
-      background-color: $yellow;
-      color: $purple;
-    }
-
-    &:active {
-      scale: 1.25;
-    }
-
-    &::selection {
-      background-color: transparent; // avoids highlighting numbers by accident.
-    }
-  }
-
   .btn-disabled,
   .btn-disabled:hover {
     cursor: default;
@@ -1324,31 +1307,119 @@
     border: 2px solid transparent;
   }
 
-  .bet-select-wrapper {
-    width: 100%;
+  .netrunner-bet-screen {
     position: absolute;
-    bottom: 50%;
-    right: 50%;
-    transform: translate(50%, 50%);
+    z-index: 4;
+    inset: 0;
+    padding: 12px;
+    background: radial-gradient(circle at 50% 40%, #28194be8, #080610f5 70%);
 
     display: flex;
-    justify-content: space-evenly;
+    justify-content: center;
     align-items: center;
   }
 
-  .bet-amount {
-    cursor: default;
-    font-family: "Orbitron", "Space Mono", sans-serif;
-    background-color: darken($purple, 10%);
-    color: $yellow;
-    padding: 6px 4px;
-    font-size: 1.5rem;
-    font-weight: bold;
-    border-radius:4px;
-    border-bottom: 2px solid $purple;
-    box-shadow: 0 2px 8px $purple;
-    min-width: 100px;
-    text-align: right;
+  .netrunner-bet-panel {
+    width: min(720px, 100%);
+    padding: clamp(14px, 2.5vw, 20px);
+    background: #100b1cf2;
+    border: 1px solid $purple;
+    box-shadow: 12px 12px 0 #03020799, 0 0 28px #9962ff35;
+  }
+
+  .netrunner-bet-label {
+    margin-bottom: 10px;
+    color: $cyan;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 1.8px;
+  }
+
+  .netrunner-bet-context {
+    color: #aeb9c9;
+    line-height: 1.5;
+    text-transform: capitalize;
+  }
+
+  .netrunner-bet-display {
+    margin: 14px 0 10px;
+    padding: 12px;
+    background: #080610;
+    border: 1px solid #453b82;
+    text-align: center;
+
+    display: grid;
+    gap: 7px;
+
+    span,
+    small {
+      color: #94a3b8;
+      font-size: 0.68rem;
+      letter-spacing: 2px;
+    }
+
+    strong {
+      color: #9dffa7;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      text-shadow: 0 0 14px #9dffa755;
+    }
+  }
+
+  .netrunner-bet-controls {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+
+    button {
+      min-height: 38px;
+      color: #ffffff;
+      background: #171126;
+      border: 1px solid $purple;
+      border-radius: 3px;
+      font-family: "Space Mono", monospace;
+      font-weight: 800;
+      cursor: pointer;
+
+      &:hover,
+      &:focus-visible {
+        color: #080610;
+        background: $cyan;
+        border-color: $cyan;
+        outline: 2px solid #ffffff;
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  .netrunner-lock-bet {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 10px;
+    color: #080610;
+    background: $pink;
+    border: 1px solid $pink;
+    border-radius: 3px;
+    box-shadow: 0 0 18px #f837cd44;
+    font-family: "Space Mono", monospace;
+    font-weight: 800;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      background: $cyan;
+      border-color: $cyan;
+      outline: 2px solid #ffffff;
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      color: #64748b;
+      background: #11101a;
+      border-color: #334155;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
   }
 
   .betting-chip {

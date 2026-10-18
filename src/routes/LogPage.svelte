@@ -5,6 +5,7 @@
     Journal,
     MinigameLibrary,
     NetRunners,
+    Pigz,
     SettingsMenu,
     StoryLibrary,
     Terminal
@@ -18,6 +19,7 @@
   <MinigameLibrary />
   <NetRunners />
   <Billywig />
+  <Pigz />
   <SettingsMenu />
   <StoryLibrary />
 </div>

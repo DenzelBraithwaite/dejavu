@@ -23,6 +23,17 @@ import {
   updateNetRunners,
   voteNetRunnersRematch
 } from './server/netRunnersSession.js';
+import {
+  createPigzState,
+  getPigzSnapshot,
+  holdPigz,
+  joinPigz,
+  leavePigz,
+  restartPigz,
+  rollPigz,
+  submitPigzBet,
+  votePigzRematch
+} from './server/pigzSession.js';
 import { createStoryRepository } from './server/storyRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,8 +75,11 @@ const storySelections = {
 let activeStoryId = null;
 let campaignState = createCampaignState();
 let netRunnersState = createNetRunnersState();
+let pigzState = createPigzState();
 let billywigCompletionSceneId = null;
 const billywigFinishedPlayers = new Set();
+let pigzCompletionSceneId = null;
+const pigzFinishedPlayers = new Set();
 const chatMessages = [];
 
 initializeDeadlines(campaignState);
@@ -129,6 +143,7 @@ io.on('connection', (socket) => {
   socket.emit('campaign:state', getCampaignSnapshot(campaignState));
   socket.emit('library:state', createLibraryState());
   socket.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
+  socket.emit('pigz:state', getPigzSnapshot(pigzState));
   if (hasInstalledMod('neuro-link-chat')) {
     socket.emit('chat:history', chatMessages);
   }
@@ -467,6 +482,104 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('pigz:join', () => {
+    joinPigz(pigzState, playerId, campaignState.players[playerId].name);
+    io.emit('pigz:state', getPigzSnapshot(pigzState));
+  });
+
+  socket.on('pigz:leave', () => {
+    leavePigz(pigzState, playerId);
+    io.emit('pigz:state', getPigzSnapshot(pigzState));
+  });
+
+  socket.on('pigz:bet', (amount, acknowledge = () => {}) => {
+    const result = submitPigzBet(pigzState, playerId, amount);
+    acknowledge(result);
+
+    if (result.ok) {
+      io.emit('pigz:state', getPigzSnapshot(pigzState));
+    }
+  });
+
+  socket.on('pigz:roll', (acknowledge = () => {}) => {
+    const result = rollPigz(pigzState, playerId);
+    acknowledge(result);
+
+    if (result.ok) {
+      io.emit('pigz:state', getPigzSnapshot(pigzState));
+    }
+  });
+
+  socket.on('pigz:hold', (acknowledge = () => {}) => {
+    const result = holdPigz(pigzState, playerId);
+    acknowledge(result);
+
+    if (result.ok) {
+      io.emit('pigz:state', getPigzSnapshot(pigzState));
+    }
+  });
+
+  socket.on('pigz:restart', () => {
+    restartPigz(pigzState);
+    io.emit('pigz:state', getPigzSnapshot(pigzState));
+  });
+
+  socket.on('pigz:rematch', (wantsRematch, acknowledge = () => {}) => {
+    const result = votePigzRematch(pigzState, playerId, wantsRematch);
+    acknowledge(result);
+
+    if (result.ok) {
+      io.emit('pigz:state', getPigzSnapshot(pigzState));
+    }
+  });
+
+  socket.on('pigz:story-complete', (acknowledge = () => {}) => {
+    if (campaignState.activeMinigame?.id !== 'pigz') {
+      acknowledge({
+        ok: false,
+        error: 'No story-launched Pigz round is active.'
+      });
+      return;
+    }
+
+    synchronizePigzCompletionScene();
+    pigzFinishedPlayers.add(playerId);
+
+    if (pigzFinishedPlayers.size < 2) {
+      acknowledge({
+        ok: true,
+        waitingForPartner: true
+      });
+      return;
+    }
+
+    const result = completeActiveMinigame(campaignState, 'completed');
+    acknowledge(result);
+
+    if (result.ok) {
+      resetPigzCompletion();
+      io.emit('campaign:state', getCampaignSnapshot(campaignState));
+    }
+  });
+
+  socket.on('pigz:story-cancel', (acknowledge = () => {}) => {
+    if (campaignState.activeMinigame?.id !== 'pigz') {
+      acknowledge({
+        ok: false,
+        error: 'No story-launched Pigz round is active.'
+      });
+      return;
+    }
+
+    const result = completeActiveMinigame(campaignState, 'cancelled');
+    acknowledge(result);
+
+    if (result.ok) {
+      resetPigzCompletion();
+      io.emit('campaign:state', getCampaignSnapshot(campaignState));
+    }
+  });
+
   socket.on('disconnect', () => {
     const slot = playerSlots[playerId];
 
@@ -477,6 +590,7 @@ io.on('connection', (socket) => {
     }
 
     leaveNetRunners(netRunnersState, playerId);
+    leavePigz(pigzState, playerId);
 
     if (campaignState.activeMinigame?.id === 'netrunners') {
       const campaignResult = completeActiveMinigame(campaignState, 'cancelled');
@@ -487,6 +601,7 @@ io.on('connection', (socket) => {
     }
     broadcastSessionStatus();
     io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
+    io.emit('pigz:state', getPigzSnapshot(pigzState));
   });
 });
 
@@ -686,4 +801,18 @@ function synchronizeBillywigCompletionScene() {
 function resetBillywigCompletion() {
   billywigCompletionSceneId = null;
   billywigFinishedPlayers.clear();
+}
+
+function synchronizePigzCompletionScene() {
+  const activeSceneId = campaignState.activeMinigame?.sceneId ?? null;
+
+  if (pigzCompletionSceneId !== activeSceneId) {
+    pigzCompletionSceneId = activeSceneId;
+    pigzFinishedPlayers.clear();
+  }
+}
+
+function resetPigzCompletion() {
+  pigzCompletionSceneId = null;
+  pigzFinishedPlayers.clear();
 }
