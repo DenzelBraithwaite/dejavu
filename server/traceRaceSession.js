@@ -1,10 +1,12 @@
-const NODE_COUNT = 12;
+const NODE_COUNT = 18;
 
 const NETWORK_LINKS = [
-  [0, 1], [0, 3], [1, 2], [1, 4], [2, 5],
-  [3, 4], [3, 6], [4, 5], [4, 7], [5, 8],
-  [6, 7], [6, 9], [7, 8], [7, 10], [8, 11],
-  [9, 10], [10, 11]
+  [0, 1], [0, 5], [1, 2], [1, 5], [1, 6],
+  [2, 3], [2, 6], [2, 7], [3, 4], [3, 7], [3, 8],
+  [4, 8], [4, 9], [5, 6], [5, 10], [6, 7], [6, 11],
+  [7, 8], [7, 12], [8, 9], [8, 13], [9, 14],
+  [10, 11], [10, 15], [11, 12], [11, 15], [12, 13],
+  [12, 16], [13, 14], [13, 16], [14, 17], [15, 16], [16, 17]
 ];
 
 export function createTraceRaceState() {
@@ -34,7 +36,7 @@ function createPlayer(name) {
     name,
     position: null,
     exposure: 0,
-    lastPingDistance: null,
+    lastTraceRange: null,
     intel: []
   };
 }
@@ -68,8 +70,8 @@ export function performTraceRaceAction(state, playerId, action) {
   const opponent = state.players[opponentId];
   const target = Number(action?.target);
 
-  if (action?.type !== 'ping') {
-    player.lastPingDistance = null;
+  if (action?.type !== 'trace') {
+    player.lastTraceRange = null;
   }
 
   switch (action?.type) {
@@ -84,12 +86,13 @@ export function performTraceRaceAction(state, playerId, action) {
       addIntel(opponent, `TURN ${state.turn}: Rival signal shifted through the grid.`);
       break;
     }
-    case 'ping': {
+    case 'trace': {
       const distance = shortestDistance(player.position, opponent.position);
+      const range = distance + randomInteger(1, 2);
       player.exposure = Math.min(9, player.exposure + 2);
-      player.lastPingDistance = distance;
-      addIntel(player, `TURN ${state.turn}: Pulse mapped every node exactly ${distance} connection${distance === 1 ? '' : 's'} away. Your action window remains open.`);
-      addIntel(opponent, `TURN ${state.turn}: Hostile pulse detected. Rival exposure increased, but their turn continues.`);
+      player.lastTraceRange = range;
+      addIntel(player, `TURN ${state.turn}: TRACE reports the rival is fewer than ${range} hops away. Candidate nodes highlighted; your action window remains open.`);
+      addIntel(opponent, `TURN ${state.turn}: Hostile TRACE detected. Rival exposure increased, but their turn continues.`);
 
       if (player.exposure >= 7) {
         addIntel(opponent, `EXPOSURE LOCK: Rival is currently at NODE ${formatNode(player.position)}.`);
@@ -97,22 +100,31 @@ export function performTraceRaceAction(state, playerId, action) {
 
       return successResult();
     }
-    case 'trace': {
+    case 'ping': {
       if (!Number.isInteger(target) || target < 0 || target >= NODE_COUNT) {
-        return errorResult('Select a valid node to trace.');
+        return errorResult('Select a valid node to ping.');
       }
 
       if (target === opponent.position) {
         state.status = 'finished';
         state.winner = playerId;
-        addIntel(player, `TRACE LOCKED: Rival found at NODE ${formatNode(target)}.`);
-        addIntel(opponent, `TRACE BREACH: Your position at NODE ${formatNode(target)} was exposed.`);
+        addIntel(player, `PING LOCKED: Rival found at NODE ${formatNode(target)}.`);
+        addIntel(opponent, `PING BREACH: Your position at NODE ${formatNode(target)} was exposed.`);
         return successResult();
       }
 
       player.exposure = Math.min(9, player.exposure + 3);
       addIntel(player, `TURN ${state.turn}: NODE ${formatNode(target)} was empty.`);
       addIntel(opponent, `TURN ${state.turn}: Rival searched NODE ${formatNode(target)} and missed.`);
+      break;
+    }
+    case 'scan': {
+      const nearby = shortestDistance(player.position, opponent.position) <= 2;
+      player.exposure = Math.min(9, player.exposure + 1);
+      addIntel(player, nearby
+        ? `TURN ${state.turn}: SCAN POSITIVE. Rival signal detected within 2 hops.`
+        : `TURN ${state.turn}: SCAN CLEAR. No rival signal within 2 hops.`);
+      addIntel(opponent, `TURN ${state.turn}: Proximity scan swept the network. Rival exposure increased.`);
       break;
     }
     case 'scramble': {
@@ -169,10 +181,17 @@ export function getTraceRaceSnapshot(state, viewerId) {
 function startRound(state) {
   resetRound(state);
   state.status = 'playing';
-  state.players.p1.position = 0;
-  state.players.p2.position = 11;
-  addIntel(state.players.p1, 'LINK ESTABLISHED: Your signal entered at NODE 01.');
-  addIntel(state.players.p2, 'LINK ESTABLISHED: Your signal entered at NODE 12.');
+  const firstPosition = randomInteger(0, NODE_COUNT - 1);
+  let secondPosition = randomInteger(0, NODE_COUNT - 1);
+
+  while (secondPosition === firstPosition) {
+    secondPosition = randomInteger(0, NODE_COUNT - 1);
+  }
+
+  state.players.p1.position = firstPosition;
+  state.players.p2.position = secondPosition;
+  addIntel(state.players.p1, `LINK ESTABLISHED: Your signal entered at NODE ${formatNode(firstPosition)}.`);
+  addIntel(state.players.p2, `LINK ESTABLISHED: Your signal entered at NODE ${formatNode(secondPosition)}.`);
 }
 
 function resetRound(state) {
@@ -187,7 +206,7 @@ function resetRound(state) {
   for (const player of Object.values(state.players)) {
     player.position = null;
     player.exposure = 0;
-    player.lastPingDistance = null;
+    player.lastTraceRange = null;
     player.intel = [];
   }
 }
@@ -234,6 +253,10 @@ function addIntel(player, message) {
 
 function formatNode(node) {
   return String(node + 1).padStart(2, '0');
+}
+
+function randomInteger(minimum, maximum) {
+  return Math.floor(Math.random() * (maximum - minimum + 1)) + minimum;
 }
 
 function otherPlayer(playerId) {

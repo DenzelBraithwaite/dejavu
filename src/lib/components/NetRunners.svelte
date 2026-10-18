@@ -706,10 +706,26 @@
 
       <div class="game-area game-area__{$netRunnersGameState.lastWinningColor}">
         <div class="menu" class:hide={!$netRunnersGameState.menuVisible}>
-          <button class="menu-btn" on:click={setSingleplayer} class:selected-btn={$netRunnersGameState.singleplayer}>SINGLEPLAYER</button>
-          <button class="menu-btn" on:click={setMultiplayer} class:selected-btn={!$netRunnersGameState.singleplayer}>MULTIPLAYER</button>
+          <div class="mode-heading">
+            <span>SELECT CONNECTION</span>
+            <strong>Choose a race protocol</strong>
+          </div>
+          <div class="mode-options">
+            <button class="mode-option" on:click={setSingleplayer} class:mode-option--selected={$netRunnersGameState.singleplayer}>
+              <span class="mode-option__icon">01</span>
+              <strong>SOLO RUN</strong>
+              <small>Race against three autonomous runners.</small>
+              <i>{$netRunnersGameState.singleplayer ? 'SELECTED' : 'LOCAL'}</i>
+            </button>
+            <button class="mode-option mode-option--multiplayer" on:click={setMultiplayer} class:mode-option--selected={!$netRunnersGameState.singleplayer}>
+              <span class="mode-option__icon">02</span>
+              <strong>LINKED RUN</strong>
+              <small>Bet alongside the other connected player.</small>
+              <i>{$sessionState.bothPlayersConnected ? '2 PLAYERS ONLINE' : 'WAITING FOR SIGNAL'}</i>
+            </button>
+          </div>
           {#if $netRunnersGameState.singleplayer}
-            <button class="start-btn" on:click={startGame}>START</button>
+            <button class="start-btn mode-launch" on:click={startGame}>INITIALIZE SOLO RACE</button>
           {/if}
         </div>
 
@@ -1114,16 +1130,116 @@
   }
 
   .menu {
-    background-color: white;
-    padding: 16px;
-    border-radius: 8px;
-    border: 2px double $yellow;
-    background-color: $terminalBg;
+    width: min(680px, calc(100% - 32px));
+    padding: 24px;
+    background:
+      linear-gradient(135deg, color.scale($purple, $alpha: -88%), transparent 55%),
+      #17113d;
+    border: 1px solid $purple;
+    border-radius: 8px 28px;
+    box-shadow: 0 0 32px color.scale($purple, $alpha: -55%);
 
     position: absolute;
     bottom: 50%;
     right: 50%;
     transform: translate(50%, 50%);
+  }
+
+  .mode-heading {
+    margin-bottom: 18px;
+
+    display: grid;
+    gap: 5px;
+
+    span {
+      color: $cyan;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+    }
+
+    strong {
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 1.2rem;
+    }
+  }
+
+  .mode-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .mode-option {
+    position: relative;
+    min-height: 155px;
+    padding: 18px;
+    color: #cbd5e1;
+    background: #0d0a25;
+    border: 1px solid #53439b;
+    border-radius: 4px 18px;
+    cursor: pointer;
+    text-align: left;
+
+    display: grid;
+    align-content: center;
+    gap: 8px;
+
+    &:hover,
+    &:focus-visible {
+      border-color: $cyan;
+      box-shadow: 0 0 20px color.scale($cyan, $alpha: -68%);
+      outline: 2px solid #ffffff;
+      outline-offset: 2px;
+    }
+
+    strong {
+      color: $cyan;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      letter-spacing: 1.5px;
+    }
+
+    small {
+      color: #9ca3bd;
+      line-height: 1.4;
+    }
+
+    i {
+      color: $yellow;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.58rem;
+      font-style: normal;
+      letter-spacing: 1px;
+    }
+  }
+
+  .mode-option__icon {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    color: #7164ad;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 1.5rem;
+  }
+
+  .mode-option--multiplayer strong {
+    color: $pink;
+  }
+
+  .mode-option--selected {
+    border-color: $yellow;
+    box-shadow: inset 0 0 28px color.scale($yellow, $alpha: -90%);
+  }
+
+  .mode-launch {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 14px !important;
+    color: #080612;
+    background: $yellow;
+    border-color: #fff2a1;
+    box-shadow: 0 0 16px color.scale($yellow, $alpha: -55%);
   }
 
   .color-select-grid {
@@ -1752,5 +1868,19 @@
 
   .col-8 {
     grid-column: 1 / 9;
+  }
+
+  @media (max-width: 680px) {
+    .menu {
+      padding: 18px;
+    }
+
+    .mode-options {
+      grid-template-columns: 1fr;
+    }
+
+    .mode-option {
+      min-height: 125px;
+    }
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { fly } from 'svelte/transition';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import location from '../stores/location';
@@ -26,6 +27,9 @@
   $: rematchVote = playerId && $packetWarServerState
     ? $packetWarServerState.rematchVotes[playerId]
     : null;
+  $: localPlayerWon = $packetWarServerState?.mode === 'coop'
+    ? $packetWarServerState?.winner === 'players'
+    : $packetWarServerState?.winner === playerId;
 
   $: if ($location !== 'packet-war' && joined) {
     leaveGame(false);
@@ -129,7 +133,14 @@
       leech: 'green',
       worm: 'yellow',
       reboot: 'blue',
-      overclock: 'purple'
+      overclock: 'purple',
+      railgun: 'pink',
+      fortress: 'cyan',
+      blackhole: 'purple',
+      uplink: 'yellow',
+      guardian: 'cyan',
+      meshRepair: 'green',
+      darkMirror: 'purple'
     };
 
     return accents[cardId] ?? 'cyan';
@@ -168,7 +179,9 @@
         <p>
           On your turn, play one program from your hand. Programs cost
           <strong>bandwidth</strong>, shown in the card's top-right corner. Your
-          bandwidth normally resets to 3 when your next turn begins.
+          bandwidth refills to your current maximum when your next turn begins.
+          Passing cycles the first card out of your hand, so an expensive hand
+          cannot permanently trap you.
         </p>
         <div class="objective-grid">
           <article>
@@ -184,7 +197,8 @@
           <div><dt>INTEGRITY</dt><dd>Your health. Reaching 0 ends the connection.</dd></div>
           <div><dt>SHIELD</dt><dd>Absorbs incoming damage before integrity is lost. Unused shield persists between turns until damage consumes it.</dd></div>
           <div><dt>MALWARE</dt><dd>Deals ongoing damage whenever the infected target's turn begins. Reboot removes all of your malware.</dd></div>
-          <div><dt>OVERCLOCK</dt><dd>Adds 2 bandwidth and lets you play another card immediately.</dd></div>
+          <div><dt>BANDWIDTH</dt><dd>Refills to your current maximum at the start of your turn. Uplink can permanently raise that maximum without a cap.</dd></div>
+          <div><dt>DARK MIRROR</dt><dd>BLACK ICE can temporarily blind both runners to their teammate's telemetry.</dd></div>
         </dl>
         <h3>Program reference</h3>
         <div class="program-reference">
@@ -194,6 +208,12 @@
           <span><strong>WORM</strong> 2 damage and install 2 malware</span>
           <span><strong>REBOOT</strong> repair 5 and remove malware</span>
           <span><strong>OVERCLOCK</strong> +2 bandwidth; keep your turn</span>
+          <span><strong>RAILGUN · 5 BW</strong> 14 damage</span>
+          <span><strong>FORTRESS · 4 BW</strong> +12 persistent shield</span>
+          <span><strong>BLACK HOLE · 6 BW</strong> 8 damage and 4 malware</span>
+          <span><strong>UPLINK · RARE</strong> permanently raise maximum bandwidth</span>
+          <span><strong>GUARDIAN · CO-OP</strong> give your ally 7 shield</span>
+          <span><strong>MESH REPAIR · CO-OP</strong> repair both runners by 6</span>
         </div>
         <p class="instruction-tip">
           In Co-op Breach, BLACK ICE retaliates after Player 2 acts. Its attack
@@ -269,8 +289,24 @@
           <div class="status-chips">
             <span class="status-chip status-chip--shield">SHIELD <strong>{player?.shield}</strong></span>
             <span class="status-chip status-chip--malware">MALWARE <strong>{player?.malware}</strong></span>
-            <span class="status-chip status-chip--bandwidth">BANDWIDTH <strong>{player?.bandwidth}</strong></span>
+            <span class="status-chip status-chip--bandwidth">BANDWIDTH <strong>{player?.bandwidth}/{player?.maxBandwidth}</strong></span>
           </div>
+
+          {#if $packetWarServerState.mode === 'coop'}
+            <div class="teammate-telemetry" class:teammate-telemetry--blinded={$packetWarServerState.breach.teamStatsBlinded}>
+              <p>ALLY TELEMETRY · {opponent?.name}</p>
+              {#if $packetWarServerState.breach.teamStatsBlinded}
+                <strong>DARK MIRROR // SIGNAL BLINDED</strong>
+              {:else}
+                <div>
+                  <span>INT <strong>{opponent?.integrity}/30</strong></span>
+                  <span>SHD <strong>{opponent?.shield}</strong></span>
+                  <span>MLW <strong>{opponent?.malware}</strong></span>
+                  <span>BW <strong>{opponent?.bandwidth}/{opponent?.maxBandwidth}</strong></span>
+                </div>
+              {/if}
+            </div>
+          {/if}
         </article>
 
         <div class="route-visual" aria-hidden="true">
@@ -321,7 +357,7 @@
       {/if}
 
       {#if $packetWarServerState.status === 'finished'}
-        <div class="result-panel">
+        <div class="result-panel" class:result-panel--victory={localPlayerWon} class:result-panel--defeat={!localPlayerWon}>
           <p class="eyebrow">CONNECTION CLOSED</p>
           <h2>{outcomeTitle()}</h2>
 
@@ -343,7 +379,7 @@
           <div class="hand-heading">
             <div>
               <p class="eyebrow">PROGRAM HAND</p>
-              <p>Select one executable. Your bandwidth resets to 3 at the start of your turn.</p>
+              <p>Select one executable. Bandwidth refills to your maximum at the start of your turn.</p>
             </div>
             <button type="button" disabled={!isMyTurn} on:click={passTurn}>PASS TURN</button>
           </div>
@@ -368,8 +404,12 @@
       <div class="system-log" aria-live="polite">
         <p class="eyebrow">NETWORK LOG</p>
         <div class="log-entries">
-          {#each [...$packetWarServerState.log].reverse() as event}
-            <div class="log-entry" class:log-entry--program={event.type === 'program'}>
+          {#each [...$packetWarServerState.log].reverse() as event (event.id)}
+            <div
+              class="log-entry"
+              class:log-entry--program={event.type === 'program'}
+              in:fly={{ y: -14, duration: 280 }}
+            >
               {#if event.type === 'program'}
                 <span class="log-card log-card--{cardAccent(event.cardId ?? '')}">{event.cardName}</span>
               {:else}
@@ -863,6 +903,51 @@
     }
   }
 
+  .teammate-telemetry {
+    margin-top: 14px;
+    padding: 11px;
+    background: #071c22;
+    border: 1px solid #167c88;
+
+    > p {
+      margin: 0 0 8px;
+      color: #7ef9ff;
+      font-size: 0.6rem;
+      letter-spacing: 1.5px;
+    }
+
+    > div {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    span {
+      color: #829da4;
+      font-size: 0.58rem;
+
+      display: grid;
+      gap: 2px;
+    }
+
+    strong {
+      color: #d8fbff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.75rem;
+    }
+
+    &--blinded {
+      background: #1b0d2d;
+      border-color: #9b72ff;
+
+      > strong {
+        color: #c9b4ff;
+        font-size: 0.66rem;
+        letter-spacing: 1px;
+      }
+    }
+  }
+
   .route-visual {
     position: relative;
     min-height: 120px;
@@ -1119,6 +1204,28 @@
       color: #aaa4bf;
       background: transparent;
       border-color: #51496b;
+    }
+  }
+
+  .result-panel--victory {
+    background:
+      radial-gradient(circle at 50% 0, #53e6a126, transparent 60%),
+      #071a14e8;
+    border-color: #53e6a1;
+    box-shadow: 0 0 28px #53e6a144;
+
+    .eyebrow,
+    h2 {
+      color: #8ff0c3;
+      text-shadow: 0 0 18px #53e6a177;
+    }
+  }
+
+  .result-panel--defeat {
+    border-color: #9f395d;
+
+    h2 {
+      color: #ff83b9;
     }
   }
 

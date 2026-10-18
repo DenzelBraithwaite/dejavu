@@ -12,10 +12,12 @@ export type PacketWarCombatant = {
   integrity: number;
   shield: number;
   malware: number;
+  teamStatsBlinded?: boolean;
 };
 
 export type PacketWarPlayer = PacketWarCombatant & {
   bandwidth: number;
+  maxBandwidth: number;
   hand: string[];
   deck: string[];
 };

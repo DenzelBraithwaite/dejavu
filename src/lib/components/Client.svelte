@@ -30,6 +30,7 @@
   let unreadChatCount = 0;
   let showChatToast = false;
   let chatToastTimer: number;
+  let pendingPage: string | null = null;
 
   $: neuroChatInstalled = Boolean(
     $campaignState?.installedMods.includes('neuro-link-chat')
@@ -182,7 +183,50 @@
   }
 
   function changePage(event: CustomEvent<string>): void {
+    if (event.detail === $location) {
+      return;
+    }
+
+    if (shouldConfirmMinigameExit()) {
+      pendingPage = event.detail;
+      return;
+    }
+
     location.set(event.detail);
+  }
+
+  function shouldConfirmMinigameExit(): boolean {
+    const minigameLocations = ['netrunners', 'billywig', 'pigz', 'trace-race', 'packet-war'];
+
+    if (!minigameLocations.includes($location)) {
+      return false;
+    }
+
+    if ($location === 'trace-race' && $traceRaceServerState?.status === 'finished') {
+      return false;
+    }
+
+    if ($location === 'packet-war' && $packetWarServerState?.status === 'finished') {
+      return false;
+    }
+
+    if ($location === 'pigz' && $pigzServerState?.status === 'finished') {
+      return false;
+    }
+
+    if ($location === 'netrunners' && $netRunnersServerState?.status === 'finished') {
+      return false;
+    }
+
+    return true;
+  }
+
+  function confirmMinigameExit(): void {
+    if (pendingPage) {
+      location.set(pendingPage);
+    }
+
+    pendingPage = null;
   }
 </script>
 
@@ -219,6 +263,20 @@
     />
 
     <div class="main-content">
+      {#if pendingPage}
+        <div class="exit-confirmation-backdrop">
+          <section class="exit-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="exit-minigame-title">
+            <p>ACTIVE CONNECTION</p>
+            <h2 id="exit-minigame-title">Exit this minigame?</h2>
+            <span>Leaving now may abandon an active partner and end the current round.</span>
+            <div>
+              <button type="button" on:click={() => pendingPage = null}>STAY IN GAME</button>
+              <button class="exit-button" type="button" on:click={confirmMinigameExit}>EXIT MINIGAME</button>
+            </div>
+          </section>
+        </div>
+      {/if}
+
       {#if !$sessionState.bothPlayersConnected}
         <div class="partner-status" role="status">
           Waiting for player 2 · {$sessionState.playerCount}/2 connected
@@ -270,6 +328,69 @@
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+
+  .exit-confirmation-backdrop {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    padding: 24px;
+    background: #020617df;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .exit-confirmation {
+    width: min(460px, 100%);
+    padding: 28px;
+    color: #dbeafe;
+    background: #0f172a;
+    border: 1px solid #f837cd;
+    box-shadow: 0 0 36px #f837cd44;
+
+    > p {
+      margin: 0 0 8px;
+      color: #02fbfb;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    > span {
+      color: #aeb9c9;
+      line-height: 1.6;
+    }
+
+    > div {
+      margin-top: 24px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    button {
+      min-height: 42px;
+      padding: 9px 14px;
+      color: #dbeafe;
+      background: #1e293b;
+      border: 1px solid #64748b;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .exit-button {
+      color: #160811;
+      background: #ff83b9;
+      border-color: #ffc5de;
+    }
   }
 
   .partner-status {

@@ -32,14 +32,52 @@ const PROGRAMS = {
     name: 'OVERCLOCK',
     cost: 0,
     description: 'Gain 2 bandwidth this turn.'
+  },
+  railgun: {
+    name: 'RAILGUN',
+    cost: 5,
+    description: 'Deal 14 integrity damage.'
+  },
+  fortress: {
+    name: 'FORTRESS',
+    cost: 4,
+    description: 'Gain 12 persistent shield.'
+  },
+  blackhole: {
+    name: 'BLACK HOLE',
+    cost: 6,
+    description: 'Deal 8 damage and install 4 malware.'
+  },
+  uplink: {
+    name: 'UPLINK',
+    cost: 2,
+    description: 'Permanently increase maximum bandwidth by 1.'
+  },
+  guardian: {
+    name: 'GUARDIAN',
+    cost: 2,
+    description: 'Co-op: Give your ally 7 shield.'
+  },
+  meshRepair: {
+    name: 'MESH REPAIR',
+    cost: 4,
+    description: 'Co-op: Repair 6 integrity for both runners.'
+  },
+  darkMirror: {
+    name: 'DARK MIRROR',
+    cost: 0,
+    description: 'Hide ally telemetry until BLACK ICE acts again.'
   }
 };
 
-const DECK = [
+const BASE_DECK = [
   'spike', 'firewall', 'leech', 'worm', 'reboot', 'overclock',
   'spike', 'firewall', 'spike', 'worm', 'firewall', 'leech',
-  'reboot', 'overclock', 'spike', 'firewall', 'worm', 'leech'
+  'reboot', 'overclock', 'spike', 'firewall', 'worm', 'leech',
+  'railgun', 'fortress', 'blackhole', 'railgun', 'fortress', 'uplink'
 ];
+
+const COOP_PROGRAMS = ['guardian', 'guardian', 'meshRepair', 'meshRepair'];
 
 export function createPacketWarState() {
   return {
@@ -75,6 +113,7 @@ function createPlayer(name) {
     shield: 0,
     malware: 0,
     bandwidth: 3,
+    maxBandwidth: 3,
     hand: [],
     deck: []
   };
@@ -85,7 +124,8 @@ function createBreach() {
     name: 'BLACK ICE',
     integrity: BREACH_INTEGRITY,
     shield: 0,
-    malware: 0
+    malware: 0,
+    teamStatsBlinded: false
   };
 }
 
@@ -144,7 +184,7 @@ export function playPacketWarCard(state, playerId, handIndexValue) {
   player.bandwidth -= program.cost;
   player.hand.splice(handIndex, 1);
   resolveProgram(state, playerId, cardId);
-  drawCard(player);
+  drawCard(player, state.mode);
 
   if (resolveWinner(state)) {
     return successResult();
@@ -166,7 +206,16 @@ export function passPacketWarTurn(state, playerId) {
     return turnError;
   }
 
-  addLog(state, `${state.players[playerId].name} held bandwidth and passed.`);
+  const player = state.players[playerId];
+  const cycledCard = player.hand.shift();
+
+  drawCard(player, state.mode);
+  addLog(
+    state,
+    cycledCard
+      ? `${player.name} passed and cycled ${PROGRAMS[cycledCard].name} out of their hand.`
+      : `${player.name} held bandwidth and passed.`
+  );
   finishTurn(state, playerId);
   return successResult();
 }
@@ -215,10 +264,13 @@ function startRound(state) {
     : 'DUEL LINK OPEN: Reduce the rival deck to zero integrity.');
 
   for (const player of Object.values(state.players)) {
-    player.deck = shuffle(DECK);
+    player.deck = shuffle([
+      ...BASE_DECK,
+      ...(selectedMode === 'coop' ? COOP_PROGRAMS : [])
+    ]);
 
     for (let index = 0; index < MAX_HAND_SIZE; index += 1) {
-      drawCard(player);
+      drawCard(player, selectedMode);
     }
   }
 }
@@ -271,6 +323,27 @@ function resolveProgram(state, playerId, cardId) {
     case 'overclock':
       player.bandwidth += 2;
       break;
+    case 'railgun':
+      dealDamage(target, 14);
+      break;
+    case 'fortress':
+      player.shield += 12;
+      break;
+    case 'blackhole':
+      dealDamage(target, 8);
+      target.malware += 4;
+      break;
+    case 'uplink':
+      player.maxBandwidth += 1;
+      break;
+    case 'guardian':
+      state.players[otherPlayer(playerId)].shield += 7;
+      break;
+    case 'meshRepair':
+      for (const runner of Object.values(state.players)) {
+        runner.integrity = Math.min(STARTING_INTEGRITY, runner.integrity + 6);
+      }
+      break;
   }
 
   const event = addLog(
@@ -314,7 +387,7 @@ function preparePlayerTurn(player) {
     dealDamage(player, player.malware);
   }
 
-  player.bandwidth = 3;
+  player.bandwidth = player.maxBandwidth;
 }
 
 function runBreachTurn(state) {
@@ -329,6 +402,17 @@ function runBreachTurn(state) {
   }
 
   addLog(state, `BLACK ICE retaliated for ${attack} damage against both runners.`);
+
+  state.breach.teamStatsBlinded = Math.random() < 0.28;
+
+  if (state.breach.teamStatsBlinded) {
+    addLog(state, 'BLACK ICE executed DARK MIRROR. Ally telemetry is hidden until its next action.', {
+      type: 'program',
+      actor: 'BLACK ICE',
+      cardId: 'darkMirror',
+      cardName: 'DARK MIRROR'
+    });
+  }
 }
 
 function resolveWinner(state) {
@@ -368,9 +452,12 @@ function dealDamage(target, amount) {
   target.integrity = Math.max(0, target.integrity - (amount - absorbed));
 }
 
-function drawCard(player) {
+function drawCard(player, mode) {
   if (player.deck.length === 0) {
-    player.deck = shuffle(DECK);
+    player.deck = shuffle([
+      ...BASE_DECK,
+      ...(mode === 'coop' ? COOP_PROGRAMS : [])
+    ]);
   }
 
   const card = player.deck.pop();

@@ -75,7 +75,7 @@
 
   .sidebar {
     position: relative;
-    z-index: 1;
+    z-index: 200;
     grid-column: 1 / span 1;
     background-color: $backgroundColor;
     padding: 12px;
@@ -94,6 +94,7 @@
   }
 
   .collapse-icon {
+    z-index: 201;
     background-color: $backgroundColor;
     cursor: pointer;
     height: 42px;

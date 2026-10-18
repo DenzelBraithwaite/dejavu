@@ -5,7 +5,7 @@ export type TraceRacePlayer = {
   name: string;
   position: number | null;
   exposure: number;
-  lastPingDistance: number | null;
+  lastTraceRange: number | null;
   intel: string[];
 };
 

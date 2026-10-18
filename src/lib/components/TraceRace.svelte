@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { fly } from 'svelte/transition';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import location from '../stores/location';
@@ -7,19 +8,23 @@
   import { traceRaceServerState } from '../stores/traceRaceSession';
 
   type Mode = 'menu' | 'singleplayer' | 'multiplayer';
-  type ActionType = 'move' | 'ping' | 'trace' | 'scramble';
+  type ActionType = 'move' | 'trace' | 'ping' | 'scan' | 'scramble';
 
   const positions = [
-    { x: 8, y: 15 }, { x: 35, y: 9 }, { x: 66, y: 16 },
-    { x: 14, y: 43 }, { x: 42, y: 37 }, { x: 75, y: 43 },
-    { x: 8, y: 72 }, { x: 39, y: 68 }, { x: 68, y: 73 },
-    { x: 24, y: 91 }, { x: 56, y: 91 }, { x: 88, y: 83 }
+    { x: 6, y: 12 }, { x: 24, y: 8 }, { x: 43, y: 15 },
+    { x: 62, y: 8 }, { x: 81, y: 15 }, { x: 13, y: 37 },
+    { x: 32, y: 34 }, { x: 52, y: 39 }, { x: 72, y: 34 },
+    { x: 91, y: 40 }, { x: 6, y: 66 }, { x: 25, y: 61 },
+    { x: 44, y: 69 }, { x: 64, y: 62 }, { x: 83, y: 68 },
+    { x: 18, y: 89 }, { x: 50, y: 91 }, { x: 78, y: 90 }
   ];
   const links: [number, number][] = [
-    [0, 1], [0, 3], [1, 2], [1, 4], [2, 5],
-    [3, 4], [3, 6], [4, 5], [4, 7], [5, 8],
-    [6, 7], [6, 9], [7, 8], [7, 10], [8, 11],
-    [9, 10], [10, 11]
+    [0, 1], [0, 5], [1, 2], [1, 5], [1, 6],
+    [2, 3], [2, 6], [2, 7], [3, 4], [3, 7], [3, 8],
+    [4, 8], [4, 9], [5, 6], [5, 10], [6, 7], [6, 11],
+    [7, 8], [7, 12], [8, 9], [8, 13], [9, 14],
+    [10, 11], [10, 15], [11, 12], [11, 15], [12, 13],
+    [12, 16], [13, 14], [13, 16], [14, 17], [15, 16], [16, 17]
   ];
 
   let mode: Mode = 'menu';
@@ -35,7 +40,7 @@
   let localCpuPosition = 11;
   let localPlayerExposure = 0;
   let localCpuExposure = 0;
-  let localPingDistance: number | null = null;
+  let localTraceRange: number | null = null;
   let localTurn = 1;
   let localIntel: string[] = [];
   let cpuTimer: number | undefined;
@@ -51,9 +56,9 @@
   $: displayedExposure = mode === 'singleplayer'
     ? localPlayerExposure
     : serverPlayer?.exposure ?? 0;
-  $: displayedPingDistance = mode === 'singleplayer'
-    ? localPingDistance
-    : serverPlayer?.lastPingDistance ?? null;
+  $: displayedTraceRange = mode === 'singleplayer'
+    ? localTraceRange
+    : serverPlayer?.lastTraceRange ?? null;
   $: displayedIntel = mode === 'singleplayer'
     ? localIntel
     : serverPlayer?.intel ?? [];
@@ -106,15 +111,14 @@
     localStatus = 'playing';
     localWinner = null;
     localActivePlayer = 'player';
-    localPlayerPosition = 0;
-    localCpuPosition = 11;
+    [localPlayerPosition, localCpuPosition] = randomDistinctPositions();
     localPlayerExposure = 0;
     localCpuExposure = 0;
-    localPingDistance = null;
+    localTraceRange = null;
     localTurn = 1;
     selectedNode = null;
     errorMessage = '';
-    localIntel = ['LINK ESTABLISHED: Your signal entered at NODE 01.'];
+    localIntel = [`LINK ESTABLISHED: Your signal entered at NODE ${formatNode(localPlayerPosition)}.`];
   }
 
   function performAction(type: ActionType): void {
@@ -124,7 +128,7 @@
       return;
     }
 
-    if ((type === 'move' || type === 'trace') && selectedNode === null) {
+    if ((type === 'move' || type === 'ping') && selectedNode === null) {
       errorMessage = 'Select a network node first.';
       return;
     }
@@ -146,8 +150,8 @@
   }
 
   function performLocalAction(type: ActionType): void {
-    if (type !== 'ping') {
-      localPingDistance = null;
+    if (type !== 'trace') {
+      localTraceRange = null;
     }
 
     if (type === 'move') {
@@ -161,24 +165,33 @@
       addLocalIntel(`TURN ${localTurn}: Relocated to NODE ${formatNode(localPlayerPosition)}.`);
     }
 
-    if (type === 'ping') {
+    if (type === 'trace') {
       const distance = shortestDistance(localPlayerPosition, localCpuPosition);
+      const range = distance + randomInteger(1, 2);
       localPlayerExposure = Math.min(9, localPlayerExposure + 2);
-      localPingDistance = distance;
-      addLocalIntel(`TURN ${localTurn}: Pulse mapped every node exactly ${distance} connection${distance === 1 ? '' : 's'} away. Your action window remains open.`);
+      localTraceRange = range;
+      addLocalIntel(`TURN ${localTurn}: TRACE reports the rival is fewer than ${range} hops away. Candidate nodes highlighted; your action window remains open.`);
       return;
     }
 
-    if (type === 'trace') {
+    if (type === 'ping') {
       if (selectedNode === localCpuPosition) {
         localStatus = 'finished';
         localWinner = 'player';
-        addLocalIntel(`TRACE LOCKED: Rival found at NODE ${formatNode(localCpuPosition)}.`);
+        addLocalIntel(`PING LOCKED: Rival found at NODE ${formatNode(localCpuPosition)}.`);
         return;
       }
 
       localPlayerExposure = Math.min(9, localPlayerExposure + 3);
       addLocalIntel(`TURN ${localTurn}: NODE ${formatNode(selectedNode as number)} was empty.`);
+    }
+
+    if (type === 'scan') {
+      const nearby = shortestDistance(localPlayerPosition, localCpuPosition) <= 2;
+      localPlayerExposure = Math.min(9, localPlayerExposure + 1);
+      addLocalIntel(nearby
+        ? `TURN ${localTurn}: SCAN POSITIVE. Rival signal detected within 2 hops.`
+        : `TURN ${localTurn}: SCAN CLEAR. No rival signal within 2 hops.`);
     }
 
     if (type === 'scramble') {
@@ -203,15 +216,15 @@
       if (Math.random() < 0.7) {
         localStatus = 'finished';
         localWinner = 'cpu';
-        addLocalIntel(`TRACE BREACH: CPU located you at NODE ${formatNode(localPlayerPosition)}.`);
+        addLocalIntel(`PING BREACH: CPU located you at NODE ${formatNode(localPlayerPosition)}.`);
         return;
       }
 
       localCpuExposure = Math.min(9, localCpuExposure + 3);
-      addLocalIntel('RIVAL TRACE MISSED: The CPU searched an empty node.');
+      addLocalIntel('RIVAL PING MISSED: The CPU searched an empty node.');
     } else if (Math.random() < 0.42) {
       localCpuExposure = Math.min(9, localCpuExposure + 2);
-      addLocalIntel('HOSTILE PULSE: The CPU scanned your signal range.');
+      addLocalIntel('HOSTILE TRACE: The CPU sampled your signal range.');
     } else {
       const options = neighborsOf(localCpuPosition);
       localCpuPosition = options[Math.floor(Math.random() * options.length)];
@@ -268,25 +281,25 @@
   }
 
   function intelClass(message: string): string {
-    if (message.includes('TRACE LOCKED') || message.includes('EXPOSURE LOCK')) {
+    if (message.includes('PING LOCKED') || message.includes('EXPOSURE LOCK') || message.includes('SCAN POSITIVE')) {
       return 'success';
     }
 
-    if (message.includes('TRACE BREACH') || message.includes('HOSTILE')) {
+    if (message.includes('PING BREACH') || message.includes('HOSTILE')) {
       return 'danger';
     }
 
-    if (message.includes('Pulse') || message.includes('PING')) {
+    if (message.includes('TRACE') || message.includes('SCAN')) {
       return 'scan';
     }
 
     return 'standard';
   }
 
-  function isPingCandidate(node: number): boolean {
+  function isTraceCandidate(node: number): boolean {
     return displayedPosition !== null
-      && displayedPingDistance !== null
-      && shortestDistance(displayedPosition, node) === displayedPingDistance;
+      && displayedTraceRange !== null
+      && shortestDistance(displayedPosition, node) < displayedTraceRange;
   }
 
   function handleActionResult(result: { ok: boolean; error?: string }): void {
@@ -352,6 +365,21 @@
     return String(node + 1).padStart(2, '0');
   }
 
+  function randomDistinctPositions(): [number, number] {
+    const firstPosition = randomInteger(0, positions.length - 1);
+    let secondPosition = randomInteger(0, positions.length - 1);
+
+    while (secondPosition === firstPosition) {
+      secondPosition = randomInteger(0, positions.length - 1);
+    }
+
+    return [firstPosition, secondPosition];
+  }
+
+  function randomInteger(minimum: number, maximum: number): number {
+    return Math.floor(Math.random() * (maximum - minimum + 1)) + minimum;
+  }
+
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       showInstructions = false;
@@ -386,16 +414,19 @@
           You and your rival occupy hidden nodes on the same network. Your own
           node glows cyan. Each connection line you cross counts as one
           <strong>hop</strong>. Select nodes on the map, gather distance clues, and
-          use <strong>Trace</strong> when you think you know the rival's exact location.
+          use <strong>Ping</strong> when you think you know the rival's exact location.
         </p>
         <dl>
           <div><dt>MOVE</dt><dd>Relocate to a directly connected node and reduce exposure by 1.</dd></div>
-          <div><dt>PING</dt><dd>Highlight every node exactly that many connection lines away. Adds 2 exposure and does not end your turn, so you can Trace immediately.</dd></div>
-          <div><dt>TRACE</dt><dd>Search the selected node. A correct trace wins; a miss adds 3 exposure.</dd></div>
+          <div><dt>TRACE</dt><dd>Reveal that the rival is fewer than a reported number of hops away. Highlights every possible node, adds 2 exposure, and keeps your turn open.</dd></div>
+          <div><dt>PING</dt><dd>Attack the selected node. A correct Ping wins; a miss adds 3 exposure.</dd></div>
+          <div><dt>SCAN</dt><dd>Detect whether the rival is anywhere within 2 hops. Adds 1 exposure and ends your turn.</dd></div>
           <div><dt>SCRAMBLE</dt><dd>Spend your turn reducing exposure by 3.</dd></div>
         </dl>
         <p class="instruction-tip">
-          A yellow node after Ping is a possible rival location. At 7 exposure,
+          A yellow node after Trace is a possible rival location. Trace gives an
+          intentionally broad “fewer than” range rather than an exact distance.
+          At 7 exposure,
           your opponent receives your exact current node. Movement only works
           along the glowing connection lines.
         </p>
@@ -468,7 +499,7 @@
               class="network-node"
               class:network-node--current={displayedPosition === index}
               class:network-node--selected={selectedNode === index}
-              class:network-node--candidate={isPingCandidate(index)}
+              class:network-node--candidate={isTraceCandidate(index)}
               class:network-node--enemy={(mode === 'singleplayer' && localStatus === 'finished' && localCpuPosition === index)
                 || (mode === 'multiplayer' && $traceRaceServerState?.status === 'finished'
                   && playerId
@@ -507,11 +538,12 @@
             <p class="selection">Selected: {selectedNode === null ? 'NONE' : `NODE ${formatNode(selectedNode)}`}</p>
             <div class="action-grid">
               <button type="button" disabled={!isMyTurn} on:click={() => performAction('move')}>MOVE</button>
-              <button type="button" disabled={!isMyTurn} on:click={() => performAction('ping')}>PING</button>
               <button type="button" disabled={!isMyTurn} on:click={() => performAction('trace')}>TRACE</button>
+              <button type="button" disabled={!isMyTurn} on:click={() => performAction('ping')}>PING</button>
+              <button type="button" disabled={!isMyTurn} on:click={() => performAction('scan')}>SCAN</button>
               <button type="button" disabled={!isMyTurn} on:click={() => performAction('scramble')}>SCRAMBLE</button>
             </div>
-            <p class="hint">Each line is one hop. Ping highlights every possible node and keeps your turn open. Select one of those nodes and Trace it, or take another action.</p>
+            <p class="hint">Each line is one hop. Trace highlights a broad set of possible nodes and keeps your turn open. Ping a selected node to attempt the winning lock.</p>
           </div>
         {/if}
 
@@ -521,8 +553,11 @@
 
         <div class="intel-feed" aria-live="polite">
           <p class="eyebrow">INTEL FEED</p>
-          {#each [...displayedIntel].reverse() as message}
-            <p class="intel-entry intel-entry--{intelClass(message)}">&gt; {message}</p>
+          {#each [...displayedIntel].reverse() as message, index (`${displayedIntel.length - index - 1}-${message}`)}
+            <p
+              class="intel-entry intel-entry--{intelClass(message)}"
+              in:fly={{ y: -14, duration: 280 }}
+            >&gt; {message}</p>
           {/each}
         </div>
       </aside>

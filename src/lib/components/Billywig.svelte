@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition';
   import { socket } from '../socket';
-  import { campaignState } from '../stores/campaign';
+  import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
 
@@ -66,6 +66,7 @@
 
   $: balance = $netRunnersGameState.p1.money;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'billywig';
+  $: playerName = $localPlayer?.name ?? 'PLAYER';
 
   function openBetting(): void {
     resetRound();
@@ -155,7 +156,7 @@
     if (playerScore === 26) {
       return {
         outcome: 'perfect',
-        title: 'BILLYWIG PROTOCOL',
+        title: 'BILLYWIG',
         dialogue: 'I cannot believe you landed a perfect score!',
         balanceChange: bet * 5
       };
@@ -164,7 +165,7 @@
     if (playerCards.length >= 6) {
       return {
         outcome: 'six-card',
-        title: 'SIX-CARD GHOST RUN',
+        title: 'SIX UNDER 26',
         dialogue: 'Six cards under 26? You must be cheating...',
         balanceChange: bet * 3
       };
@@ -173,7 +174,7 @@
     if (playerScore > bankScore) {
       return {
         outcome: 'win',
-        title: 'PLAYER WINS',
+        title: `${playerName.toUpperCase()} WINS`,
         dialogue: `Meh. I guess you win with a score of ${playerScore}.`,
         balanceChange: bet * 2
       };
@@ -311,6 +312,64 @@
           <button type="button" on:click={() => phase = 'menu'}>CANCEL</button>
         </div>
       </div>
+    {:else if phase === 'result' && result}
+      <div class="result-stage result-stage--{result.outcome}" aria-live="polite">
+        <div class="neon-lights" aria-hidden="true">
+          {#each Array(9) as _}
+            <span></span>
+          {/each}
+        </div>
+
+        <p class="result-kicker">
+          {result.balanceChange > 0 ? 'TABLE OVERRIDE ACCEPTED' : result.balanceChange < 0 ? 'ROUND TERMINATED' : 'SIGNALS MATCHED'}
+        </p>
+        <h2>{result.title}</h2>
+
+        <div class="result-scores" aria-label="Final scores">
+          <div>
+            <span>PLAYER</span>
+            <strong>{playerScore}</strong>
+          </div>
+          <span class="score-divider">//</span>
+          <div>
+            <span>TILDA</span>
+            <strong>{bankScore}</strong>
+          </div>
+        </div>
+
+        <p class="result-dialogue"><span>TILDA&gt;</span> {result.dialogue}</p>
+
+        {#if nextCard !== null}
+          <p class="result-detail">Your next card would have been <strong>{nextCard}</strong>.</p>
+        {/if}
+
+        <div class="result-payout" class:gain={result.balanceChange > 0} class:loss={result.balanceChange < 0}>
+          <small>WAGER RESULT</small>
+          <strong>{result.balanceChange > 0 ? '+' : ''}{result.balanceChange}₭</strong>
+        </div>
+
+        {#if waitingForPartner}
+          <p class="waiting-message">Waiting for your partner to finish Billywig.</p>
+        {/if}
+
+        {#if completionError}
+          <p class="error-message">{completionError}</p>
+        {/if}
+      </div>
+
+      <div class="game-footer game-footer--result">
+        <p>WAGER <strong>{bet}₭</strong></p>
+        <div class="button-row">
+          <button class="primary-button" type="button" on:click={openBetting}>PLAY AGAIN</button>
+          {#if launchedFromStory}
+            <button type="button" disabled={waitingForPartner} on:click={returnToStory}>
+              {waitingForPartner ? 'WAITING FOR PARTNER' : 'RETURN TO STORY'}
+            </button>
+          {:else}
+            <button type="button" on:click={() => phase = 'menu'}>MAIN MENU</button>
+          {/if}
+        </div>
+      </div>
     {:else}
       <div class="table-layout">
         <div class="score-panel score-panel--tilda">
@@ -346,46 +405,16 @@
 
       <div class="console-log" aria-live="polite">
         <span class="prompt">TILDA&gt;</span>
-        {#if phase === 'result' && result}
-          <strong class="result-title result-title--{result.outcome}">{result.title}</strong>
-          <p>{result.dialogue}</p>
-          {#if nextCard !== null}
-            <p>Your next card would have been <strong class="next-card">{nextCard}</strong>.</p>
-          {/if}
-          <p class:gain={result.balanceChange > 0} class:loss={result.balanceChange < 0}>
-            {result.balanceChange > 0 ? '+' : ''}{result.balanceChange}₭
-          </p>
-          {#if waitingForPartner}
-            <p class="waiting-message">Waiting for your partner to finish Billywig.</p>
-          {/if}
-          {#if completionError}
-            <p class="error-message">{completionError}</p>
-          {/if}
-        {:else}
-          <p>{statusLine}</p>
-        {/if}
+        <p>{statusLine}</p>
       </div>
 
       <div class="game-footer">
         <p>WAGER <strong>{bet}₭</strong></p>
 
-        {#if phase === 'playing'}
-          <div class="button-row">
-            <button class="primary-button" type="button" on:click={drawCard}>DRAW CARD</button>
-            <button type="button" on:click={hold}>HOLD</button>
-          </div>
-        {:else}
-          <div class="button-row">
-            <button class="primary-button" type="button" on:click={openBetting}>PLAY AGAIN</button>
-            {#if launchedFromStory}
-              <button type="button" disabled={waitingForPartner} on:click={returnToStory}>
-                {waitingForPartner ? 'WAITING FOR PARTNER' : 'RETURN TO STORY'}
-              </button>
-            {:else}
-              <button type="button" on:click={() => phase = 'menu'}>MAIN MENU</button>
-            {/if}
-          </div>
-        {/if}
+        <div class="button-row">
+          <button class="primary-button" type="button" on:click={drawCard}>DRAW CARD</button>
+          <button type="button" on:click={hold}>HOLD</button>
+        </div>
       </div>
     {/if}
   </div>
@@ -468,6 +497,7 @@
   .title-row,
   .panel,
   .table-layout,
+  .result-stage,
   .console-log,
   .game-footer {
     position: relative;
@@ -775,6 +805,287 @@
     box-shadow: 0 0 24px #f2d40e77;
   }
 
+  .result-stage {
+    position: relative;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: clamp(30px, 5vw, 56px);
+    overflow: hidden;
+    background:
+      linear-gradient(135deg, #ff75fd12, transparent 42%),
+      radial-gradient(circle at 50% 0, #6dc2fb24, transparent 52%),
+      #0d0918ed;
+    border: 1px solid $cyan;
+    box-shadow:
+      0 0 24px #6dc2fb35,
+      inset 0 0 42px #9962ff17;
+    text-align: center;
+    clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+    animation: result-arrival 420ms ease-out both;
+
+    &::before,
+    &::after {
+      position: absolute;
+      top: 22px;
+      bottom: 22px;
+      width: 2px;
+      background: linear-gradient(transparent, $cyan, transparent);
+      box-shadow: 0 0 13px $cyan;
+      content: "";
+    }
+
+    &::before {
+      left: 12px;
+    }
+
+    &::after {
+      right: 12px;
+    }
+
+    h2 {
+      margin: 8px 0 26px;
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: clamp(2rem, 6vw, 4.2rem);
+      letter-spacing: clamp(2px, 0.8vw, 7px);
+      line-height: 1;
+      text-shadow:
+        0 0 8px #ffffff99,
+        0 0 22px $cyan,
+        4px 4px 0 $purple;
+    }
+  }
+
+  .result-stage--perfect,
+  .result-stage--six-card,
+  .result-stage--win {
+    .neon-lights span {
+      animation: victory-light 900ms ease-in-out infinite alternate;
+    }
+  }
+
+  .result-stage--perfect {
+    border-color: $cyan;
+    background:
+      linear-gradient(135deg, #6dc2fb24, transparent 48%),
+      radial-gradient(circle at 50% 0, #6dc2fb33, transparent 58%),
+      #071221ed;
+    box-shadow:
+      0 0 38px #6dc2fb66,
+      inset 0 0 58px #6dc2fb1f;
+
+    h2 {
+      color: $cyan;
+      text-shadow:
+        0 0 8px #ffffff99,
+        0 0 26px #6dc2fbee,
+        4px 4px 0 #225e91;
+    }
+  }
+
+  .result-stage--six-card {
+    border-color: $purple;
+    box-shadow:
+      0 0 34px #9962ff66,
+      inset 0 0 52px #9962ff1f;
+
+    h2 {
+      color: #b98cff;
+      text-shadow:
+        0 0 8px #ffffff88,
+        0 0 26px #9962ffdd,
+        4px 4px 0 #4c2789;
+    }
+  }
+
+  .result-stage--win {
+    border-color: $yellow;
+    box-shadow:
+      0 0 32px #f2d40e4d,
+      inset 0 0 48px #ff75fd17;
+
+    h2 {
+      color: $yellow;
+      text-shadow:
+        0 0 8px #ffffff99,
+        0 0 24px #f2d40ecc,
+        4px 4px 0 #b330ae;
+    }
+  }
+
+  .result-stage--bust,
+  .result-stage--loss {
+    border-color: $red;
+
+    h2 {
+      color: $red;
+      text-shadow: 0 0 20px #fb716d99;
+    }
+  }
+
+  .result-stage--tie {
+    border-color: $pink;
+    box-shadow:
+      0 0 28px #ff75fd44,
+      inset 0 0 42px #ff75fd14;
+
+    h2 {
+      color: $pink;
+      text-shadow: 0 0 22px #ff75fdaa;
+    }
+  }
+
+  .neon-lights {
+    position: absolute;
+    top: 0;
+    right: 34px;
+    left: 34px;
+    height: 9px;
+
+    display: flex;
+    justify-content: space-between;
+
+    span {
+      width: 7px;
+      height: 7px;
+      background: $cyan;
+      border-radius: 50%;
+      box-shadow: 0 0 10px $cyan;
+
+      &:nth-child(3n + 2) {
+        background: $pink;
+        box-shadow: 0 0 10px $pink;
+        animation-delay: 180ms;
+      }
+
+      &:nth-child(3n) {
+        background: $yellow;
+        box-shadow: 0 0 10px $yellow;
+        animation-delay: 360ms;
+      }
+    }
+  }
+
+  .result-kicker {
+    color: $cyan;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 3px;
+  }
+
+  .result-scores {
+    margin: 0 auto 24px;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(20px, 6vw, 64px);
+
+    div {
+      display: grid;
+      gap: 4px;
+    }
+
+    span {
+      color: #94a3b8;
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+    }
+
+    strong {
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+    }
+  }
+
+  .score-divider {
+    color: $purple !important;
+    font-size: 1.2rem !important;
+  }
+
+  .result-dialogue,
+  .result-detail {
+    color: #cbd5e1;
+    line-height: 1.6;
+  }
+
+  .result-dialogue span {
+    color: $pink;
+    font-weight: 800;
+  }
+
+  .result-detail {
+    margin-top: 10px;
+
+    strong {
+      color: $yellow;
+    }
+  }
+
+  .result-payout {
+    width: min(260px, 100%);
+    margin: 24px auto 0;
+    padding: 14px 20px;
+    background: #05030acc;
+    border: 1px solid $purple;
+
+    display: grid;
+    gap: 4px;
+
+    small {
+      color: #94a3b8;
+      font-size: 0.62rem;
+      letter-spacing: 2px;
+    }
+
+    strong {
+      color: $cyan;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 1.8rem;
+      text-shadow: 0 0 13px #6dc2fb77;
+    }
+
+    &.gain strong {
+      color: $yellow;
+      text-shadow: 0 0 13px #f2d40e77;
+    }
+
+    &.loss strong {
+      color: $red;
+      text-shadow: 0 0 13px #fb716d77;
+    }
+  }
+
+  .game-footer--result {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+
+  @keyframes result-arrival {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(12px);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes victory-light {
+    from {
+      opacity: 0.45;
+      transform: scale(0.8);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1.35);
+    }
+  }
+
   .console-log {
     min-height: 94px;
     margin-top: 22px;
@@ -875,6 +1186,13 @@
     .game-footer {
       align-items: start;
       flex-direction: column;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .result-stage,
+    .neon-lights span {
+      animation: none;
     }
   }
 </style>
