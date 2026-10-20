@@ -25,6 +25,14 @@
     field?: string;
     insertAfterId?: string;
   };
+  type LaneGraphLevel = {
+    depth: number;
+    nodes: StoryNode[];
+  };
+  type LaneGraph = {
+    levels: LaneGraphLevel[];
+    maxColumns: number;
+  };
 
   type EditorSnapshot = {
     story: StoryDocument;
@@ -733,6 +741,105 @@
       (node) => (node.audience ?? 'both') === lane
         && nodeMap(node) === activeStoryMap
     ) ?? [];
+  }
+
+  function getLaneGraph(lane: LaneId): LaneGraph {
+    const laneNodes = getLaneNodes(lane);
+    const flowNodes = laneNodes.filter((node) => !isCompanionNode(node));
+    const nodeIndex = new Map(flowNodes.map((node, index) => [node.id, index]));
+    const nodeDepth = new Map(flowNodes.map((node) => [node.id, 0]));
+
+    // Repeated relaxation finds the longest forward route into each node.
+    // Backward links are loops and do not push the graph into an infinite depth.
+    for (let pass = 0; pass < flowNodes.length; pass += 1) {
+      let changed = false;
+
+      for (const source of flowNodes) {
+        const sourceIndex = nodeIndex.get(source.id) ?? 0;
+        const sourceDepth = nodeDepth.get(source.id) ?? 0;
+
+        for (const field of routeFields(source)) {
+          const destinationId = getRouteValue(source, field);
+          const destinationIndex = nodeIndex.get(destinationId);
+
+          if (destinationIndex === undefined || destinationIndex <= sourceIndex) {
+            continue;
+          }
+
+          const nextDepth = sourceDepth + 1;
+
+          if (nextDepth > (nodeDepth.get(destinationId) ?? 0)) {
+            nodeDepth.set(destinationId, nextDepth);
+            changed = true;
+          }
+        }
+      }
+
+      if (!changed) {
+        break;
+      }
+    }
+
+    // Unconnected visual labels and incomplete nodes still receive their own
+    // level instead of stacking on top of unrelated graph roots.
+    let lastStandaloneDepth = -1;
+
+    for (const node of flowNodes) {
+      const hasIncoming = flowNodes.some((candidate) => routeFields(candidate).some(
+        (field) => getRouteValue(candidate, field) === node.id
+      ));
+      const hasOutgoing = routeFields(node).some((field) => Boolean(getRouteValue(node, field)));
+
+      if (!hasIncoming && !hasOutgoing && node.type !== 'ending') {
+        lastStandaloneDepth = Math.max(
+          lastStandaloneDepth + 1,
+          nodeDepth.get(node.id) ?? 0
+        );
+        nodeDepth.set(node.id, lastStandaloneDepth);
+      }
+    }
+
+    const levels = new Map<number, StoryNode[]>();
+
+    for (const node of laneNodes) {
+      const hostDepth = isCompanionNode(node)
+        ? nodeDepth.get(String(node.attachedTo ?? ''))
+        : undefined;
+      const depth = hostDepth ?? nodeDepth.get(node.id) ?? 0;
+      const levelNodes = levels.get(depth) ?? [];
+      levelNodes.push(node);
+      levels.set(depth, levelNodes);
+    }
+
+    const orderedLevels = [...levels.entries()]
+      .sort(([leftDepth], [rightDepth]) => leftDepth - rightDepth)
+      .map(([depth, nodes]) => ({ depth, nodes }));
+
+    return {
+      levels: orderedLevels,
+      maxColumns: Math.max(1, ...orderedLevels.map((level) => level.nodes.length))
+    };
+  }
+
+  function branchPathLabel(node: StoryNode): string {
+    const branchRoutes = incomingConnections(node).filter(({ node: source }) => (
+      nodeHasBranches(source)
+      && (source.audience ?? 'both') === (node.audience ?? 'both')
+      && nodeMap(source) === activeStoryMap
+    ));
+
+    if (branchRoutes.length === 1) {
+      return `${routeFieldLabel(branchRoutes[0].node, branchRoutes[0].field)} PATH`;
+    }
+
+    return branchRoutes.length > 1 ? 'MERGED BRANCHES' : '';
+  }
+
+  function nodeMergesRoutes(node: StoryNode): boolean {
+    return incomingConnections(node).filter(({ node: source }) => (
+      (source.audience ?? 'both') === (node.audience ?? 'both')
+      && nodeMap(source) === activeStoryMap
+    )).length > 1;
   }
 
   function nodeMap(node: StoryNode): StoryPlayMode {
@@ -1676,6 +1783,7 @@
 
 <section
   class="story-library"
+  class:story-library--editor={$location === 'editor'}
   class:hide={!['library', 'editor'].includes($location)}
   aria-label={$location === 'editor' ? 'Story editor' : 'Library'}
 >
@@ -1912,12 +2020,14 @@
 
           <div class="flow-lanes">
             {#each lanes as lane (`${lane.id}:${storyRevision}`)}
+              {@const laneGraph = getLaneGraph(lane.id)}
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
               <section
                 class="flow-lane"
                 class:active={activeLane === lane.id}
-                class:has-branches={getLaneNodes(lane.id).some((node) => node.type === 'condition')}
+                class:has-branches={laneGraph.maxColumns > 1}
                 class:singleplayer-disabled={activeStoryMap === 'singleplayer' && lane.id !== 'p1'}
+                style={`--lane-columns: ${laneGraph.maxColumns}`}
                 role="group"
                 aria-label={`${lane.label} lane`}
                 on:dragover|preventDefault
@@ -1937,24 +2047,37 @@
                 </button>
 
                 <div class="lane-node-grid">
-                  {#each getLaneNodes(lane.id) as node (`${node.id}:${storyRevision}`)}
-                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                  {#each laneGraph.levels as level (level.depth)}
                     <div
-                      role="listitem"
-                      class="node-wrapper"
-                      data-revision={storyRevision}
-                      class:branch-node={nodeHasBranches(node)}
-                      class:companion-node={isCompanionNode(node)}
-                      class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
-                      class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
-                      class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
-                      class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
-                      class:drag-before={dragTargetId === node.id && dragPlacement === 'before'}
-                      class:drag-after={dragTargetId === node.id && dragPlacement === 'after'}
-                      draggable="false"
-                      on:dragover|preventDefault={(event) => updateDragTarget(event, node)}
-                      on:drop|stopPropagation|preventDefault={() => dropOnNode(node)}
+                      class="graph-level"
+                      class:parallel-level={level.nodes.length > 1}
+                      class:merge-level={level.nodes.some(nodeMergesRoutes)}
+                      data-depth={level.depth}
                     >
+                      {#each level.nodes as node (`${node.id}:${storyRevision}`)}
+                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                        <div
+                          role="listitem"
+                          class="node-wrapper"
+                          data-revision={storyRevision}
+                          class:branch-node={nodeHasBranches(node)}
+                          class:merge-node={nodeMergesRoutes(node)}
+                          class:companion-node={isCompanionNode(node)}
+                          class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
+                          class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
+                          class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
+                          class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
+                          class:drag-before={dragTargetId === node.id && dragPlacement === 'before'}
+                          class:drag-after={dragTargetId === node.id && dragPlacement === 'after'}
+                          draggable="false"
+                          on:dragover|preventDefault={(event) => updateDragTarget(event, node)}
+                          on:drop|stopPropagation|preventDefault={() => dropOnNode(node)}
+                        >
+                          {#if branchPathLabel(node)}
+                            <span class="branch-path-label">{branchPathLabel(node)}</span>
+                          {:else if nodeMergesRoutes(node)}
+                            <span class="branch-path-label merge-label">MERGED PATHS</span>
+                          {/if}
                       <div class="node-quick-actions" draggable="false" aria-label={`Quick actions for ${displayNodeName(node)}`}>
                         <button draggable="false" type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2026,6 +2149,8 @@
                         >
                           + {field.replace('trueNext', 'true').replace('falseNext', 'false').replace('resultNext.', '').replace(/choices\.\d+\.next/, 'option')}
                         </button>
+                      {/each}
+                        </div>
                       {/each}
                     </div>
                   {/each}
@@ -2615,6 +2740,8 @@
 
 <style lang="scss">
   .story-library {
+    --library-terminal-accent: #55f09a;
+
     position: relative;
     width: 100%;
     height: 95vh;
@@ -2622,16 +2749,41 @@
     max-width: 1600px;
     overflow: hidden;
     background: #060b14;
-    border: 1px solid #4a98d9;
+    border: 1px solid var(--library-terminal-accent);
     border-radius: 8px;
-    box-shadow: 0 0 34px #4a98d935;
+    box-shadow: 0 0 34px color-mix(in srgb, var(--library-terminal-accent) 32%, transparent);
+
+    &.story-library--editor {
+      --library-terminal-accent: #ff8a32;
+      background: #100905;
+
+      > header {
+        background: #24150c;
+      }
+
+      .map-toolbar,
+      .editor-toolbar {
+        background: #160d08;
+      }
+
+      .node-inspector {
+        background: #120a07;
+      }
+
+      .flow-canvas {
+        background-color: #0d0805;
+        background-image:
+          linear-gradient(#ff8a321c 1px, transparent 1px),
+          linear-gradient(90deg, #ff8a321c 1px, transparent 1px);
+      }
+    }
 
     > header {
       min-height: 38px;
       padding: 9px 14px;
-      color: #02fbfb;
+      color: var(--library-terminal-accent);
       background: #111a2c;
-      border-bottom: 1px solid #4a98d9;
+      border-bottom: 1px solid var(--library-terminal-accent);
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.72rem;
       letter-spacing: 2px;
@@ -2646,6 +2798,10 @@
     height: calc(100% - 38px);
     padding: clamp(22px, 4vw, 52px);
     overflow-y: auto;
+  }
+
+  .library-content .eyebrow {
+    color: #55f09a;
   }
 
   .library-heading {
@@ -3092,7 +3248,11 @@
   }
 
   .flow-lane {
-    width: 270px;
+    width: calc(
+      (var(--lane-columns, 1) * 258px)
+      + ((var(--lane-columns, 1) - 1) * 12px)
+      + 20px
+    );
     min-height: 100%;
     padding: 10px;
     border: 1px dashed #2c3b54;
@@ -3101,14 +3261,6 @@
     &.active {
       border-color: #02fbfb;
       box-shadow: inset 0 0 20px #02fbfb12;
-    }
-
-    &.has-branches {
-      width: 554px;
-
-      .lane-node-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
     }
 
     &.singleplayer-disabled {
@@ -3150,15 +3302,48 @@
   }
 
   .lane-node-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px 12px;
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .graph-level {
+    position: relative;
+    min-width: 100%;
+
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 12px;
+
+    &:not(:first-child) .node-wrapper:not(.companion-node)::before {
+      content: '';
+      position: absolute;
+      z-index: 0;
+      top: -20px;
+      left: 50%;
+      height: 20px;
+      border-left: 1px solid #02fbfb;
+      box-shadow: 0 0 7px #02fbfb;
+    }
+
+    &.parallel-level::after,
+    &.merge-level::after {
+      content: '';
+      position: absolute;
+      z-index: 0;
+      top: -20px;
+      right: 129px;
+      left: 129px;
+      border-top: 1px solid #02fbfb;
+      box-shadow: 0 0 7px #02fbfb;
+    }
   }
 
   .node-wrapper {
     position: relative;
-    min-width: 0;
+    width: 258px;
+    min-width: 258px;
 
     display: grid;
     gap: 5px;
@@ -3196,24 +3381,24 @@
     }
 
     &.connected-before .flow-node {
-      background: linear-gradient(90deg, #16452d, #0b1820 74%);
-      border: 2px solid #6bff9d;
-      box-shadow: 0 0 20px #6bff9d45;
-
-      &::after {
-        content: 'PREVIOUS';
-        color: #8effb3;
-      }
-    }
-
-    &.connected-after .flow-node {
       background: linear-gradient(90deg, #40350c, #17170e 74%);
       border: 2px solid #f8d84e;
       box-shadow: 0 0 20px #f8d84e45;
 
       &::after {
-        content: 'NEXT';
+        content: 'PREVIOUS';
         color: #ffe77a;
+      }
+    }
+
+    &.connected-after .flow-node {
+      background: linear-gradient(90deg, #16452d, #0b1820 74%);
+      border: 2px solid #6bff9d;
+      box-shadow: 0 0 20px #6bff9d45;
+
+      &::after {
+        content: 'NEXT';
+        color: #8effb3;
       }
     }
 
@@ -3260,6 +3445,27 @@
 
     &.drag-after::after {
       bottom: -12px;
+    }
+  }
+
+  .branch-path-label {
+    position: absolute;
+    z-index: 4;
+    top: -6px;
+    left: 8px;
+    padding: 2px 6px;
+    color: #f8e69a;
+    background: #211b08;
+    border: 1px solid #ad781c;
+    font-size: 0.52rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    transform: translateY(-100%);
+
+    &.merge-label {
+      color: #8effb3;
+      background: #0b2316;
+      border-color: #4f813d;
     }
   }
 

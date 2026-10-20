@@ -41,6 +41,7 @@
   let wager = 0;
   let wagerSettled = false;
   let wagerArmed = false;
+  let lastMultiplayerStatus = '';
 
   $: serverState = $arcadeStates['lo-hi'] ?? null;
   $: state = mode === 'solo' ? localState : serverState;
@@ -48,6 +49,9 @@
   $: canAct = state?.status === 'playing'
     && (mode === 'solo' || state.activePlayer === playerId)
     && state.players[playerId]?.state === 'active';
+  $: rematchVote = mode === 'multi' && state
+    ? Boolean(state.rematchVotes?.[playerId])
+    : false;
   $: liveFaction = factionFor(state?.currentCard?.suit);
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'lo-hi';
   $: setMinigameSessionActive(
@@ -68,6 +72,15 @@
   }
   $: if ((mode === 'solo' || mode === 'multi') && state?.status === 'playing') {
     wagerArmed = true;
+  }
+  $: if (mode === 'multi' && state?.status && state.status !== lastMultiplayerStatus) {
+    const previousStatus = lastMultiplayerStatus;
+    lastMultiplayerStatus = state.status;
+
+    if (previousStatus === 'finished' && state.status === 'playing') {
+      wagerSettled = false;
+      wagerArmed = true;
+    }
   }
   $: if (state?.status === 'finished' && wagerArmed && !wagerSettled) {
     settleWager(
@@ -200,11 +213,12 @@
       const nextCard = randomCard();
       const won = localBetWon(localState.currentCard, nextCard, action);
       const points = action.type === 'direction' ? 1 : action.type === 'suits' ? 3 : action.type === 'numbers' ? 10 : 100;
+      const betLabel = localActionLabel(action);
       localState.currentCard = nextCard;
 
       if (won) {
         player.score += points;
-        addLocalLog(`${player.name} wins +${points}. ${cardLabel(nextCard)} is live.`);
+        addLocalLog(`${player.name} won ${betLabel} for +${points}. ${cardLabel(nextCard)} is live.`);
         announce(`${player.name.toUpperCase()} READ THE SIGNAL`, 'success');
 
         if (action.type === 'exact') {
@@ -213,7 +227,7 @@
         }
       } else {
         player.state = 'lost';
-        addLocalLog(`${player.name} misses. ${cardLabel(nextCard)} was transmitted.`);
+        addLocalLog(`${player.name} missed ${betLabel}. ${cardLabel(nextCard)} was transmitted.`);
         announce(`${player.name.toUpperCase()} BUSTED`, 'danger');
       }
     }
@@ -275,10 +289,16 @@
   function restart(): void {
     if (mode === 'solo') {
       returnToMenu();
-    } else {
-      resetShouldExit = false;
-      showResetConfirmation = true;
+      return;
     }
+
+    if (state?.status === 'finished') {
+      socket.emit('arcade:rematch', 'lo-hi', true, handleResult);
+      return;
+    }
+
+    resetShouldExit = false;
+    showResetConfirmation = true;
   }
 
   function confirmMultiplayerReset(): void {
@@ -371,6 +391,22 @@
     }
 
     return Number(action.number) === next.number && action.suit === next.suit;
+  }
+
+  function localActionLabel(action: Record<string, any>): string {
+    if (action.type === 'direction') {
+      return String(action.value).toUpperCase();
+    }
+
+    if (action.type === 'suits') {
+      return 'FACTION WINDOW';
+    }
+
+    if (action.type === 'numbers') {
+      return 'NUMBER WINDOW';
+    }
+
+    return 'EXACT CARD';
   }
 
   function addLocalLog(message: string): void {
@@ -509,8 +545,12 @@
             {:else if launchedFromStory}
               <button type="button" on:click={returnToStory}>RETURN TO STORY</button>
             {:else}
-              <button type="button" on:click={restart}>PLAY AGAIN</button>
-              <button type="button" on:click={returnToMenu}>MODE MENU</button>
+              {#if rematchVote}
+                <p class="rematch-waiting">REMATCH VOTE 1/2 · WAITING FOR RIVAL</p>
+              {:else}
+                <button type="button" on:click={restart}>PLAY AGAIN</button>
+              {/if}
+              <button type="button" on:click={returnToMenu}>MAIN MENU</button>
             {/if}
           </div>
         {:else if canAct}
@@ -961,6 +1001,12 @@
   .turn-message,
   .error {
     text-align: center;
+  }
+
+  .rematch-waiting {
+    color: #f8e69a;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
   }
 
   .error {

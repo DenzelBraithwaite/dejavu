@@ -95,6 +95,23 @@ export function restartArcadeGame(sessions, gameId) {
   state.status = participantCount(state) === 2 ? 'playing' : 'waiting';
 }
 
+export function voteArcadeRematch(sessions, gameId, playerId, wantsRematch) {
+  const state = sessions[gameId];
+
+  if (!state || state.status !== 'finished' || !state.participants[playerId]) {
+    return errorResult('There is no finished match available to replay.');
+  }
+
+  state.rematchVotes[playerId] = Boolean(wantsRematch);
+
+  if (state.rematchVotes.p1 && state.rematchVotes.p2) {
+    resetGame(state);
+    state.status = 'playing';
+  }
+
+  return successResult();
+}
+
 export function getArcadeSnapshot(sessions, gameId) {
   const state = sessions[gameId];
 
@@ -127,7 +144,11 @@ function createBaseState(game) {
     winner: null,
     log: [],
     mode: null,
-    departureNotice: null
+    departureNotice: null,
+    rematchVotes: {
+      p1: false,
+      p2: false
+    }
   };
 }
 
@@ -162,6 +183,10 @@ function createChopsticksState() {
       p1: [1, 1, 0, 0],
       p2: [1, 1, 0, 0]
     },
+    redistributionsRemaining: {
+      p1: 3,
+      p2: 3
+    },
     activePlayer: 'p1',
     turn: 1
   };
@@ -171,6 +196,10 @@ function resetGame(state) {
   state.winner = null;
   state.log = [];
   state.departureNotice = null;
+  state.rematchVotes = {
+    p1: false,
+    p2: false
+  };
 
   if (state.game === 'lo-hi') {
     state.currentCard = randomCard();
@@ -197,6 +226,7 @@ function resetGame(state) {
 
   if (state.game === 'chopsticks') {
     state.hands = { p1: [1, 1, 0, 0], p2: [1, 1, 0, 0] };
+    state.redistributionsRemaining = { p1: 3, p2: 3 };
     state.activePlayer = 'p1';
     state.turn = 1;
   }
@@ -412,13 +442,23 @@ function playChopsticks(state, playerId, action) {
 
   if (action.type === 'redistribute') {
     const hands = state.hands[playerId];
+    const redistributionsRemaining = state.redistributionsRemaining ?? { p1: 3, p2: 3 };
     const source = Number(action.source);
+    const target = Number(action.target);
     const sourceValue = hands[source];
     const emptySlots = hands
       .map((value, index) => value === 0 ? index : -1)
       .filter((index) => index >= 0);
 
-    if (![0, 1, 2, 3].includes(source) || ![2, 4].includes(sourceValue) || emptySlots.length === 0) {
+    state.redistributionsRemaining = redistributionsRemaining;
+
+    if (redistributionsRemaining[playerId] <= 0) {
+      return errorResult('No redistributions remain. Use your RAM sticks to attack.');
+    }
+
+    if (![0, 1, 2, 3].includes(source)
+      || ![2, 4].includes(sourceValue)
+      || !emptySlots.includes(target)) {
       return errorResult('Redistribution requires a 2GB or 4GB live stick and an empty RAM slot.');
     }
 
@@ -434,9 +474,15 @@ function playChopsticks(state, playerId, action) {
     } else {
       const nextValue = sourceValue / 2;
       hands[source] = nextValue;
-      hands[emptySlots[0]] = nextValue;
+      hands[target] = nextValue;
       addLog(state, `${state.players[playerId].name} redistributed ${sourceValue}GB into two ${nextValue}GB sticks.`);
     }
+
+    redistributionsRemaining[playerId] -= 1;
+    addLog(
+      state,
+      `${state.players[playerId].name} has ${redistributionsRemaining[playerId]}/3 redistributions remaining.`
+    );
   } else {
     const source = Number(action.source);
     const target = Number(action.target);

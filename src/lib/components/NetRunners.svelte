@@ -27,6 +27,12 @@
   $: multiplayerRematchVote = $sessionState.playerId && $netRunnersServerState
     ? $netRunnersServerState.rematchVotes[$sessionState.playerId]
     : null;
+  $: multiplayerShuffleVote = $sessionState.playerId && $netRunnersServerState
+    ? $netRunnersServerState.shuffleVotes[$sessionState.playerId]
+    : false;
+  $: multiplayerShuffleCount = $netRunnersServerState
+    ? Object.values($netRunnersServerState.shuffleVotes).filter(Boolean).length
+    : 0;
   $: setMinigameSessionActive('netrunners', !$netRunnersGameState.menuVisible);
 
   $: if (!$netRunnersGameState.singleplayer && $netRunnersServerState) {
@@ -162,7 +168,27 @@
   // Shuffles lane cards so players can click a few times before starting.
   function shuffleLaneCards(): void{
     resetDeck();
-    netRunnersGameState.set({...$netRunnersGameState, trackCards: drawLaneCards()});
+    netRunnersGameState.set({
+      ...$netRunnersGameState,
+      trackCards: drawLaneCards(),
+      odds: calculateBettingOdds()
+    });
+  }
+
+  function requestLaneShuffle(): void {
+    if ($netRunnersGameState.singleplayer) {
+      shuffleLaneCards();
+      return;
+    }
+
+    socket.emit(
+      'netrunners:shuffle',
+      (result: { ok: boolean; error?: string }) => {
+        if (!result.ok) {
+          console.error(result.error ?? 'The track could not be shuffled.');
+        }
+      }
+    );
   }
 
   // Calculate odds for each color based on removed track cards
@@ -436,12 +462,14 @@
       return;
     }
 
-    if (serverState.status === 'betting' && statusChanged) {
-      resetGame();
-      setMultiplayer();
-      hideGameMenu();
-      showColorSelectScreen();
-      showColorOddsCards();
+    if (serverState.status === 'betting') {
+      if (statusChanged) {
+        resetGame();
+        setMultiplayer();
+        hideGameMenu();
+        showColorSelectScreen();
+        showColorOddsCards();
+      }
 
       netRunnersGameState.update((state) => ({
         ...state,
@@ -455,8 +483,8 @@
           ...state.p1,
           name: localServerPlayer.name,
           money: localServerPlayer.money,
-          amountBet: 0,
-          colorBet: ''
+          amountBet: localServerPlayer.amountBet,
+          colorBet: localServerPlayer.colorBet || state.p1.colorBet
         }
       }));
       return;
@@ -728,7 +756,20 @@
 
         {#if $netRunnersGameState.colorSelectVisible}
           <button on:click={showBettingScreen} class="confirm-btn" class:btn-disabled={!$netRunnersGameState.p1.colorBet} disabled={!$netRunnersGameState.p1.colorBet}>CONFIRM</button>
-          <button on:click={shuffleLaneCards} class="menu-btn" class:btn-disabled={!$netRunnersGameState.colorSelectVisible} disabled={!$netRunnersGameState.colorSelectVisible}>SHUFFLE</button>
+          <button
+            on:click={requestLaneShuffle}
+            class="menu-btn"
+            class:btn-disabled={!$netRunnersGameState.colorSelectVisible || multiplayerShuffleVote}
+            disabled={!$netRunnersGameState.colorSelectVisible || multiplayerShuffleVote}
+          >
+            {$netRunnersGameState.singleplayer
+              ? 'SHUFFLE'
+              : multiplayerShuffleVote
+                ? `SHUFFLE VOTE ${multiplayerShuffleCount}/2`
+                : multiplayerShuffleCount > 0
+                  ? `VOTE SHUFFLE ${multiplayerShuffleCount}/2`
+                  : 'VOTE SHUFFLE'}
+          </button>
         {/if}
 
       </div>
@@ -1820,6 +1861,12 @@
     border-color: $purple;
     border-top-color: $purple;
     box-shadow: 0 0 34px #9962ff55;
+
+    .game-message {
+      position: static;
+      margin: 0 0 28px;
+      transform: none;
+    }
   }
 
   .rematch-controls {

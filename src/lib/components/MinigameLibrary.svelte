@@ -2,6 +2,11 @@
   import location from '../stores/location';
   import { minigameSessions, type MinigameId } from '../stores/minigameSessions';
 
+  type GameMode = 'singleplayer' | 'multiplayer';
+  type LibraryMode = 'all' | GameMode;
+
+  let libraryMode: LibraryMode = 'all';
+
   const minigames: Array<{
     id: MinigameId;
     title: string;
@@ -10,6 +15,7 @@
     playerLabel?: string;
     status: string;
     artwork: string;
+    modes: GameMode[];
   }> = [
     {
       id: 'netrunners',
@@ -18,7 +24,8 @@
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
-      artwork: 'netrunners'
+      artwork: 'netrunners',
+      modes: ['singleplayer', 'multiplayer']
     },
     {
       id: 'billywig',
@@ -26,7 +33,8 @@
       description: 'Risk your ₭rypto against Tilda in a neon card duel where 26 is perfection.',
       playerCount: 1,
       status: 'READY',
-      artwork: 'billywig'
+      artwork: 'billywig',
+      modes: ['singleplayer']
     },
     {
       id: 'pigz',
@@ -35,7 +43,8 @@
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
-      artwork: 'pigz'
+      artwork: 'pigz',
+      modes: ['singleplayer', 'multiplayer']
     },
     {
       id: 'trace-race',
@@ -44,7 +53,8 @@
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
-      artwork: 'trace-race'
+      artwork: 'trace-race',
+      modes: ['singleplayer', 'multiplayer']
     },
     {
       id: 'packet-war',
@@ -52,7 +62,8 @@
       description: 'Deploy tactical programs in a runner duel or breach hostile BLACK ICE together.',
       playerCount: 2,
       status: 'READY',
-      artwork: 'packet-war'
+      artwork: 'packet-war',
+      modes: ['multiplayer']
     },
     {
       id: 'lo-hi',
@@ -61,7 +72,8 @@
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
-      artwork: 'lo-hi'
+      artwork: 'lo-hi',
+      modes: ['singleplayer', 'multiplayer']
     },
     {
       id: 'mastermind',
@@ -70,7 +82,8 @@
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
-      artwork: 'mastermind'
+      artwork: 'mastermind',
+      modes: ['singleplayer', 'multiplayer']
     },
     {
       id: 'chopsticks',
@@ -79,7 +92,8 @@
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'READY',
-      artwork: 'chopsticks'
+      artwork: 'chopsticks',
+      modes: ['singleplayer', 'multiplayer']
     }
   ];
 </script>
@@ -99,8 +113,35 @@
       a story node.
     </p>
 
+    <div class="mode-filter" role="group" aria-label="Filter minigames by player mode">
+      <button
+        type="button"
+        class:active={libraryMode === 'all'}
+        aria-pressed={libraryMode === 'all'}
+        on:click={() => libraryMode = 'all'}
+      >
+        ALL
+      </button>
+      <button
+        type="button"
+        class:active={libraryMode === 'singleplayer'}
+        aria-pressed={libraryMode === 'singleplayer'}
+        on:click={() => libraryMode = 'singleplayer'}
+      >
+        SINGLEPLAYER
+      </button>
+      <button
+        type="button"
+        class:active={libraryMode === 'multiplayer'}
+        aria-pressed={libraryMode === 'multiplayer'}
+        on:click={() => libraryMode = 'multiplayer'}
+      >
+        MULTIPLAYER
+      </button>
+    </div>
+
     <div class="minigame-grid">
-      {#each minigames as minigame}
+      {#each minigames.filter((minigame) => libraryMode === 'all' || minigame.modes.includes(libraryMode)) as minigame}
         <article>
           <div class="module-art module-art--{minigame.artwork}" aria-hidden="true">
             {#if minigame.artwork === 'netrunners'}
@@ -218,6 +259,37 @@
     max-width: 70ch;
     color: #aeb9c9;
     line-height: 1.6;
+  }
+
+  .mode-filter {
+    width: fit-content;
+    margin-top: 24px;
+    padding: 4px;
+    background: #05030a;
+    border: 1px solid #453b82;
+
+    display: flex;
+    gap: 4px;
+
+    button {
+      padding: 10px 16px;
+      color: #aeb9c9;
+      background: transparent;
+      border: 1px solid transparent;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 1px;
+
+      display: flex;
+      align-items: center;
+
+      &.active {
+        color: #ffffff;
+        background: #28164a;
+        border-color: #9962ff;
+        box-shadow: 0 0 14px #9962ff44;
+      }
+    }
   }
 
   .minigame-grid {

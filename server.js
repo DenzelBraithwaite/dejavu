@@ -21,7 +21,8 @@ import {
   leaveNetRunners,
   submitNetRunnersBet,
   updateNetRunners,
-  voteNetRunnersRematch
+  voteNetRunnersRematch,
+  voteNetRunnersShuffle
 } from './server/netRunnersSession.js';
 import {
   createPigzState,
@@ -59,7 +60,8 @@ import {
   joinArcadeGame,
   leaveArcadeGame,
   performArcadeAction,
-  restartArcadeGame
+  restartArcadeGame,
+  voteArcadeRematch
 } from './server/arcadeSessions.js';
 import { createStoryRepository } from './server/storyRepository.js';
 
@@ -632,6 +634,15 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('netrunners:shuffle', (acknowledge = () => {}) => {
+    const result = voteNetRunnersShuffle(netRunnersState, playerId);
+    acknowledge(result);
+
+    if (result.ok) {
+      io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
+    }
+  });
+
   socket.on('netrunners:rematch', (wantsRematch, acknowledge = () => {}) => {
     const result = voteNetRunnersRematch(netRunnersState, playerId, wantsRematch);
     acknowledge(result);
@@ -943,6 +954,20 @@ io.on('connection', (socket) => {
   socket.on('arcade:restart', (gameId) => {
     restartArcadeGame(arcadeSessions, gameId);
     broadcastArcadeState(gameId);
+  });
+
+  socket.on('arcade:rematch', (gameId, wantsRematch, acknowledge = () => {}) => {
+    const result = voteArcadeRematch(
+      arcadeSessions,
+      gameId,
+      playerId,
+      wantsRematch
+    );
+    acknowledge(result);
+
+    if (result.ok) {
+      broadcastArcadeState(gameId);
+    }
   });
 
   socket.on('arcade:story-complete', (gameId, acknowledge = () => {}) => {

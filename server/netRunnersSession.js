@@ -27,6 +27,10 @@ export function createNetRunnersState() {
     rematchVotes: {
       p1: null,
       p2: null
+    },
+    shuffleVotes: {
+      p1: false,
+      p2: false
     }
   };
 }
@@ -114,6 +118,31 @@ export function submitNetRunnersBet(state, playerId, bet) {
   return successResult();
 }
 
+export function voteNetRunnersShuffle(state, playerId) {
+  if (state.status !== 'betting' || !state.participants[playerId]) {
+    return errorResult('The multiplayer table is not accepting shuffle votes.');
+  }
+
+  if (state.players[playerId].ready) {
+    return errorResult('A locked bet cannot request a new track.');
+  }
+
+  state.shuffleVotes[playerId] = true;
+
+  if (state.shuffleVotes.p1 && state.shuffleVotes.p2) {
+    dealBettingTrack(state);
+    return {
+      ok: true,
+      shuffled: true
+    };
+  }
+
+  return {
+    ok: true,
+    shuffled: false
+  };
+}
+
 export function voteNetRunnersRematch(state, playerId, wantsRematch) {
   if (state.status !== 'finished' || !state.participants[playerId]) {
     return errorResult('There is no finished multiplayer round to replay.');
@@ -168,6 +197,10 @@ function prepareBettingRound(state) {
     p1: null,
     p2: null
   };
+  state.shuffleVotes = {
+    p1: false,
+    p2: false
+  };
 
   for (const [playerId, player] of Object.entries(state.players)) {
     player.amountBet = 0;
@@ -181,10 +214,18 @@ function prepareBettingRound(state) {
     }
   }
 
+  dealBettingTrack(state);
+}
+
+function dealBettingTrack(state) {
   const fullDeck = createDeck();
   state.trackCards = drawRandomCards(fullDeck, 7);
   state.deck = fullDeck;
   state.odds = calculateOdds(state.deck);
+  state.shuffleVotes = {
+    p1: false,
+    p2: false
+  };
 }
 
 function startRace(state) {
@@ -305,6 +346,10 @@ function returnToMenu(state) {
   state.rematchVotes = {
     p1: null,
     p2: null
+  };
+  state.shuffleVotes = {
+    p1: false,
+    p2: false
   };
 }
 

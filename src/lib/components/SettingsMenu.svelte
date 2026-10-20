@@ -120,16 +120,16 @@
     max-width: 1100px;
     overflow: hidden;
     color: #e8edf6;
-    background: #070b16;
-    border: 1px solid #4a98d9;
+    background: #111318;
+    border: 1px solid #70756f;
     border-radius: 8px;
-    box-shadow: 0 0 30px #4a98d92f;
+    box-shadow: 0 0 30px #70756f4a;
 
     > header {
       padding: 11px 14px;
-      color: #02fbfb;
-      background: #111a2c;
-      border-bottom: 1px solid #4a98d9;
+      color: #d1d5db;
+      background: #24272d;
+      border-bottom: 1px solid #70756f;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.75rem;
       letter-spacing: 2px;
@@ -144,7 +144,7 @@
 
   .eyebrow,
   .channel-code {
-    color: #4a98d9;
+    color: #a7aca6;
     font-size: 0.7rem;
     letter-spacing: 1.5px;
   }

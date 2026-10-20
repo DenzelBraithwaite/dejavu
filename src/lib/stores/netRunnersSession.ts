@@ -35,6 +35,7 @@ export type NetRunnersServerState = {
   nextDrawAt: number | null;
   drawIntervalMs: number;
   rematchVotes: Record<'p1' | 'p2', boolean | null>;
+  shuffleVotes: Record<'p1' | 'p2', boolean>;
 };
 
 export const netRunnersServerState = writable<NetRunnersServerState | null>(null);

@@ -570,7 +570,7 @@
 
 <style lang="scss">
   .terminal {
-    --terminal-accent: #02fbfb;
+    --terminal-accent: #4a98d9;
 
     position: relative;
     width: 100%;
@@ -579,10 +579,10 @@
     padding: 0;
     overflow: hidden;
     background: #070b16;
-    border: 1px solid #2c3b54;
+    border: 1px solid #4a98d9;
     border-radius: 8px;
     box-shadow:
-      0 0 35px #02fbfb1f,
+      0 0 35px #4a98d94a,
       inset 0 0 60px #000000;
 
     display: grid;
@@ -594,7 +594,7 @@
     padding: 8px 14px;
     color: var(--terminal-accent);
     background: #111a2c;
-    border-bottom: 1px solid #2c3b54;
+    border-bottom: 1px solid #4a98d9;
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-size: 0.75rem;
     letter-spacing: 2px;

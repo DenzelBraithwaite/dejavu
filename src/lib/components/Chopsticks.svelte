@@ -15,6 +15,7 @@
   let mode: Mode = 'menu';
   let pendingMode: 'solo' | 'multi' = 'solo';
   let selectedHand: number | null = null;
+  let redistributionPattern: 'halves' | 'four-ones' | null = null;
   let error = '';
   let localState = createLocalState();
   let waitingForStoryPartner = false;
@@ -31,8 +32,19 @@
   $: networkPlayerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: playerId = (mode === 'solo' ? 'p1' : networkPlayerId) as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
+  $: redistributionsRemaining = state?.redistributionsRemaining ?? { p1: 3, p2: 3 };
+  $: playerRedistributionsRemaining = redistributionsRemaining[playerId] ?? 3;
   $: canAct = state?.status === 'playing'
     && (mode === 'solo' ? state.activePlayer === 'p1' : state.activePlayer === playerId);
+  $: playerHands = state?.hands[playerId] ?? [];
+  $: canRedistribute = selectedHand !== null
+    && playerRedistributionsRemaining > 0
+    && playerHands.includes(0)
+    && [2, 4].includes(playerHands[selectedHand]);
+  $: canRedistributeFourWays = selectedHand !== null
+    && playerHands[selectedHand] === 4
+    && playerHands.filter((value: number) => value > 0).length === 1
+    && playerHands.filter((value: number) => value === 0).length === 3;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks';
   $: setMinigameSessionActive(
     'chopsticks',
@@ -66,6 +78,7 @@
       winner: null,
       log: [],
       hands: { p1: [1, 1, 0, 0], p2: [1, 1, 0, 0] },
+      redistributionsRemaining: { p1: 3, p2: 3 },
       activePlayer: 'p1',
       turn: 1
     };
@@ -92,6 +105,7 @@
     wagerArmed = false;
     showWager = false;
     selectedHand = null;
+    redistributionPattern = null;
     error = '';
 
     if (pendingMode === 'solo') {
@@ -103,12 +117,18 @@
     }
   }
 
-  function selectOwnHand(index: number): void {
-    if (!state || !canAct || state.hands[playerId][index] === 0) {
+  function selectOwnSlot(index: number): void {
+    if (!state || !canAct) {
+      return;
+    }
+
+    if (state.hands[playerId][index] === 0) {
+      completeRedistribution(index);
       return;
     }
 
     selectedHand = selectedHand === index ? null : index;
+    redistributionPattern = null;
   }
 
   function attack(target: number): void {
@@ -118,16 +138,32 @@
 
     sendAction({ type: 'attack', source: selectedHand, target });
     selectedHand = null;
+    redistributionPattern = null;
   }
 
-  function redistribute(pattern: 'halves' | 'four-ones' = 'halves'): void {
+  function prepareRedistribution(pattern: 'halves' | 'four-ones'): void {
     if (selectedHand === null) {
       error = 'Select a 2GB or 4GB RAM stick before redistributing.';
       return;
     }
 
-    sendAction({ type: 'redistribute', source: selectedHand, pattern });
+    redistributionPattern = redistributionPattern === pattern ? null : pattern;
+    error = '';
+  }
+
+  function completeRedistribution(target: number): void {
+    if (selectedHand === null || redistributionPattern === null) {
+      return;
+    }
+
+    sendAction({
+      type: 'redistribute',
+      source: selectedHand,
+      target,
+      pattern: redistributionPattern
+    });
     selectedHand = null;
+    redistributionPattern = null;
   }
 
   function sendAction(action: Record<string, unknown>): void {
@@ -147,13 +183,20 @@
 
     if (action.type === 'redistribute') {
       const hands = localState.hands[actor];
+      const remaining = localState.redistributionsRemaining[actor];
       const source = Number(action.source);
+      const target = Number(action.target);
       const sourceValue = hands[source];
       const emptySlots = hands
         .map((value: number, index: number) => value === 0 ? index : -1)
         .filter((index: number) => index >= 0);
 
-      if (![2, 4].includes(sourceValue) || emptySlots.length === 0) {
+      if (remaining <= 0) {
+        error = 'No redistributions remain. Use your RAM sticks to attack.';
+        return;
+      }
+
+      if (![2, 4].includes(sourceValue) || !emptySlots.includes(target)) {
         error = 'Redistribution requires a 2GB or 4GB live stick and an empty RAM slot.';
         return;
       }
@@ -169,9 +212,14 @@
       } else {
         const nextValue = sourceValue / 2;
         hands[source] = nextValue;
-        hands[emptySlots[0]] = nextValue;
+        hands[target] = nextValue;
         addLog(`${localState.players[actor].name} redistributed ${sourceValue}GB into two ${nextValue}GB sticks.`);
       }
+
+      localState.redistributionsRemaining[actor] -= 1;
+      addLog(
+        `${localState.players[actor].name} has ${localState.redistributionsRemaining[actor]}/3 redistributions remaining.`
+      );
     } else {
       const source = Number(action.source);
       const target = Number(action.target);
@@ -203,7 +251,10 @@
       .map((value: number, index: number) => [value, index])
       .filter(([value]: number[]) => value === 2 || value === 4);
 
-    if (hands.includes(0) && redistributable.length > 0 && Math.random() < 0.35) {
+    if (localState.redistributionsRemaining.p2 > 0
+      && hands.includes(0)
+      && redistributable.length > 0
+      && Math.random() < 0.35) {
       const [value, source] = redistributable[Math.floor(Math.random() * redistributable.length)];
       const fourOnes = value === 4
         && hands.filter((candidate: number) => candidate > 0).length === 1
@@ -211,6 +262,7 @@
       applyLocalAction('p2', {
         type: 'redistribute',
         source,
+        target: hands.findIndex((candidate: number) => candidate === 0),
         pattern: fourOnes ? 'four-ones' : 'halves'
       });
       return;
@@ -225,6 +277,7 @@
 
   function restart(): void {
     selectedHand = null;
+    redistributionPattern = null;
 
     if (mode === 'solo') {
       mode = 'menu';
@@ -271,28 +324,6 @@
     }
 
     mode = 'menu';
-  }
-
-  function redistributeAvailable(): boolean {
-    if (!state) {
-      return false;
-    }
-
-    const hands = state.hands[playerId];
-    return selectedHand !== null
-      && hands.includes(0)
-      && [2, 4].includes(hands[selectedHand]);
-  }
-
-  function fourWayAvailable(): boolean {
-    if (!state || selectedHand === null) {
-      return false;
-    }
-
-    const hands = state.hands[playerId];
-    return hands[selectedHand] === 4
-      && hands.filter((value: number) => value > 0).length === 1
-      && hands.filter((value: number) => value === 0).length === 3;
   }
 
   function addLog(message: string): void {
@@ -369,6 +400,7 @@
             <li>Select a 2GB stick and choose <strong>REDISTRIBUTE 1+1</strong> to divide it across itself and the first empty slot.</li>
             <li>Select a 4GB stick and choose <strong>REDISTRIBUTE 2+2</strong>. It uses the first empty slot.</li>
             <li>If a 4GB stick is your only live stick, all three other slots are empty, and you may instead choose <strong>REDISTRIBUTE 1+1+1+1</strong>.</li>
+            <li>Each player may redistribute only <strong>three times per match</strong>, regardless of the pattern used.</li>
             <li>Redistribution consumes the turn. Overload every opposing RAM stick to win.</li>
           </ul>
         </div>
@@ -389,7 +421,12 @@
       </div>
 
       <section class="player-zone opponent">
-        <h2>{state.players[opponentId].name}</h2>
+        <div class="zone-heading">
+          <h2>{state.players[opponentId].name}</h2>
+          <span class:exhausted={redistributionsRemaining[opponentId] === 0}>
+            REDISTRIBUTIONS {redistributionsRemaining[opponentId]}/3
+          </span>
+        </div>
         <div class="hands">
           {#each state.hands[opponentId] as value, index}
             <button class:dead={value === 0} class:targetable={canAct && selectedHand !== null && value > 0} on:click={() => attack(index)}>
@@ -402,25 +439,47 @@
       <div class="divider">MEMORY BUS</div>
 
       <section class="player-zone self">
-        <h2>{state.players[playerId].name}</h2>
+        <div class="zone-heading">
+          <h2>{state.players[playerId].name}</h2>
+          <span class:exhausted={playerRedistributionsRemaining === 0}>
+            REDISTRIBUTIONS {playerRedistributionsRemaining}/3
+          </span>
+        </div>
         <div class="hands">
           {#each state.hands[playerId] as value, index}
-            <button class:selected={selectedHand === index} class:dead={value === 0} disabled={!canAct || value === 0} on:click={() => selectOwnHand(index)}>
+            <button
+              class:selected={selectedHand === index}
+              class:dead={value === 0}
+              class:redistribution-target={value === 0 && redistributionPattern !== null}
+              disabled={!canAct || (value === 0 && redistributionPattern === null)}
+              on:click={() => selectOwnSlot(index)}
+            >
               <span>RAM-{index + 1}</span><strong>{value}<small>GB</small></strong><i></i>
             </button>
           {/each}
         </div>
-        {#if redistributeAvailable()}
+        {#if canRedistribute}
           <div class="redistribute-controls">
-            <button on:click={() => redistribute('halves')}>
+            <button
+              class:active={redistributionPattern === 'halves'}
+              on:click={() => prepareRedistribution('halves')}
+            >
               {selectedHand !== null && state.hands[playerId][selectedHand] === 4
                 ? 'REDISTRIBUTE 2+2'
                 : 'REDISTRIBUTE 1+1'}
             </button>
-            {#if fourWayAvailable()}
-              <button on:click={() => redistribute('four-ones')}>REDISTRIBUTE 1+1+1+1</button>
+            {#if canRedistributeFourWays}
+              <button
+                class:active={redistributionPattern === 'four-ones'}
+                on:click={() => prepareRedistribution('four-ones')}
+              >REDISTRIBUTE 1+1+1+1</button>
             {/if}
           </div>
+          {#if redistributionPattern}
+            <p class="redistribution-hint">Select a highlighted 0GB slot to complete the redistribution.</p>
+          {/if}
+        {:else if playerRedistributionsRemaining === 0}
+          <p class="redistribution-exhausted">REDISTRIBUTION LIMIT REACHED · ATTACKS ONLY</p>
         {/if}
       </section>
 
@@ -433,7 +492,7 @@
           {:else if launchedFromStory}
             <button on:click={returnToStory}>RETURN TO STORY</button>
           {:else}
-            <button on:click={restart}>PLAY AGAIN</button><button on:click={returnToMenu}>MODE MENU</button>
+            <button on:click={restart}>PLAY AGAIN</button><button on:click={returnToMenu}>MAIN MENU</button>
           {/if}
         </section>
       {/if}
@@ -597,6 +656,36 @@
     text-align: center;
   }
 
+  .zone-heading {
+    max-width: 648px;
+    margin: 0 auto 10px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+
+    h2 {
+      margin: 0;
+    }
+
+    span {
+      padding: 6px 9px;
+      color: #f8e69a;
+      background: #211b08;
+      border: 1px solid #ad781c;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.68rem;
+      letter-spacing: 1px;
+
+      &.exhausted {
+        color: #ff91aa;
+        background: #290a13;
+        border-color: #b93452;
+      }
+    }
+  }
+
   .hands {
     display: grid;
     grid-template-columns: repeat(4, minmax(105px, 150px));
@@ -662,6 +751,13 @@
     transform: translateY(-3px);
   }
 
+  .self .hands button.redistribution-target {
+    color: #f8e69a;
+    background: #211b08;
+    border-color: #f8e69a;
+    box-shadow: 0 0 18px #f8e69a66, inset 0 0 12px #f8e69a22;
+  }
+
   .divider {
     color: #477a5e;
     text-align: center;
@@ -674,6 +770,31 @@
     display: flex;
     justify-content: center;
     gap: 8px;
+
+    button.active {
+      color: #06130b;
+      background: #f8e69a;
+      border-color: #ffffff;
+      box-shadow: 0 0 18px #f8e69a66;
+    }
+  }
+
+  .redistribution-hint {
+    margin: 10px 0 0;
+    color: #f8e69a;
+    text-align: center;
+  }
+
+  .redistribution-exhausted {
+    width: fit-content;
+    margin: 12px auto 0;
+    padding: 7px 10px;
+    color: #ff91aa;
+    background: #290a13;
+    border: 1px solid #b93452;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
   }
 
   .log {

@@ -116,17 +116,17 @@
     height: 95vh;
     max-width: 1100px;
     overflow: hidden;
-    background: #04101d;
-    border: 1px solid #1472bf;
+    background: #150510;
+    border: 1px solid #ff3dbb;
     border-radius: 8px;
-    box-shadow: 0 0 34px #1472bf33;
+    box-shadow: 0 0 34px #ff3dbb55;
 
     header {
       min-height: 38px;
       padding: 8px 14px;
-      color: #6dc2fb;
-      background: #071d33;
-      border-bottom: 1px solid #1472bf;
+      color: #ff9ada;
+      background: #24091c;
+      border-bottom: 1px solid #ff3dbb;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.75rem;
       letter-spacing: 2px;
@@ -145,7 +145,7 @@
 
   .eyebrow {
     margin-bottom: 8px;
-    color: #4a98d9;
+    color: #ff75c8;
     font-size: 0.75rem;
     letter-spacing: 2px;
   }
@@ -164,9 +164,9 @@
 
     div {
       padding: 16px;
-      background: #071a2c;
-      border: 1px solid #19406c;
-      border-left: 3px solid #02fbfb;
+      background: #210a19;
+      border: 1px solid #6b1f50;
+      border-left: 3px solid #ff3dbb;
     }
 
     dt {
@@ -178,7 +178,7 @@
     }
 
     dd {
-      color: #02fbfb;
+      color: #ff75c8;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 1.5rem;
     }
@@ -207,14 +207,14 @@
 
     span {
       margin-right: 8px;
-      color: #4a98d9;
+      color: #ff75c8;
     }
   }
 
   .equipment-section {
     margin-top: 52px;
     padding-top: 30px;
-    border-top: 1px solid #19406c;
+    border-top: 1px solid #6b1f50;
 
     h2 {
       margin: 8px 0 24px;
@@ -231,8 +231,8 @@
 
     article {
       padding: 20px;
-      background: #071a2c;
-      border: 1px solid #19406c;
+      background: #210a19;
+      border: 1px solid #6b1f50;
     }
 
     h3 {
@@ -248,7 +248,7 @@
     li {
       padding: 8px 0;
       color: #e8edf6;
-      border-bottom: 1px dashed #19406c;
+      border-bottom: 1px dashed #6b1f50;
     }
   }
 
@@ -263,8 +263,8 @@
 
   .contact-card {
     padding: 14px;
-    background: #04101d;
-    border-left: 3px solid #4f813d;
+    background: #190711;
+    border-left: 3px solid #ff3dbb;
 
     display: grid;
     grid-template-columns: auto 1fr;

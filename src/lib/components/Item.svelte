@@ -186,6 +186,10 @@
     background-color: #453b82;
   }
 
+  .item-color__pink {
+    background-color: #ff3dbb;
+  }
+
   .item-color__brown {
     background-color: #7a4d2b;
   }
