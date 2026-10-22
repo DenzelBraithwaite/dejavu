@@ -40,7 +40,7 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - Déjà Vu is seeded as the first built-in story and can be edited or duplicated.
 - Creators can create, read, edit, duplicate, and delete custom playable stories.
 - The Editor is a dedicated sidebar destination, while every Library cartridge still links directly into it.
-- The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, previous/next click-to-connect routes, drag-and-drop organization, labels, validation, undo/redo, quick node actions, and a type-specific inspector.
+- The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, previous/next click-to-connect routes, drag-and-drop organization, labels, validation, undo/redo, quick node actions, a type-specific inspector, and a categorized in-app handbook covering every node.
 - Inventory/effect and music/atmosphere changes are attached to main-flow nodes as visually offset companions. Image nodes are normal routed steps that display artwork inside the terminal.
 - Terminal-effect companions can shake the screen or blink the terminal when their host node becomes active.
 - Choice, timed-choice, and shared-vote nodes expose one to five labelled buttons, each with its own route. Routes may intentionally loop back to an earlier node.

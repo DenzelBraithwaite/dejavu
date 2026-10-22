@@ -60,13 +60,15 @@ CRUD operations are server-owned. Do not write stories into browser storage or m
 
 Open **Editor** from the sidebar, choose **Edit** on a Library cartridge, or create a new story from **Library**. The Editor is its own page, while Library remains the CRUD and cartridge-selection page. A new story begins with separate Player 1 and Player 2 dialogue nodes leading to one shared ending.
 
+The in-app handbook is driven by `tutorialNodeSections` beside the node palette in `StoryLibrary.svelte`. Add a concise description and usage instruction there whenever a node type is added. The tutorial compares its catalog with the palette and displays a warning if an entry is missing.
+
 The canvas is divided into Player 1, Shared, and Player 2 lanes. Select a node to edit it in the inspector. Route controls enter a temporary selection mode so the creator can click a destination node instead of handling internal IDs. Player routes can target their own lane or Shared; Shared routes stay in Shared.
 
 Use the plus control at the bottom of a lane to append a node. Empty normal and branch routes expose their own plus controls, which insert and connect a new node at that exact route. Appending after a node with an empty normal route connects it automatically. Nodes can be dragged within a lane to reorder them or dropped onto another lane to change their audience. The inspector also provides keyboard-accessible move controls, while each card exposes compact copy, duplicate, and delete actions. Undo and redo retain up to 100 editor snapshots between loads or saves.
 
 The inspector can select routes in either direction. **Select next node** updates the selected node. **Select previous node** asks for an existing source node, finds an unused compatible route on it, and updates that source so it leads into the selected node. Nodes with several incoming routes display every source separately.
 
-Item/effect and music/atmosphere nodes are companion changes offset visually from the main flow. A companion stores the main-flow node ID in `attachedTo`; it has no incoming or outgoing route of its own and is applied when its host becomes active. Image nodes are routed main-flow nodes that render artwork in the terminal and may clear previous terminal output. Images are uploaded to `public/uploads/stories/` through the host's `/api/story-assets/images` endpoint; accepted formats are PNG, JPEG, WebP, GIF, AVIF, and SVG, with an 8 MB limit. Compatible images copied directly into that folder also appear in the editor asset library.
+Item/effect, music/atmosphere, and terminal-effect nodes are companion changes offset visually from the main flow. A companion stores the main-flow node ID in `attachedTo`; it has no incoming or outgoing route of its own and is applied when its host becomes active. Image nodes are routed main-flow nodes that render artwork in the terminal and may clear previous terminal output. Images are uploaded to `public/uploads/stories/` through the host's `/api/story-assets/images` endpoint; accepted formats are PNG, JPEG, WebP, GIF, AVIF, and SVG, with an 8 MB limit. Compatible images copied directly into that folder also appear in the editor asset library.
 
 Node cards show their type ordinal, such as `3rd dialogue node`, plus readable route destinations. Missing incoming routes, missing outgoing routes, broken destinations, and illegal cross-player links receive a red invalid border. Start nodes, endings, and visual labels have the expected validation exceptions.
 
@@ -84,7 +86,7 @@ Available palette nodes are:
 
 - Dialogue, free-form player input, choice, checkpoint, and open-floor conversation.
 - Dice check, shared vote, and timed choice.
-- Item/effect and condition.
+- Item/effect, condition, music/atmosphere, and terminal effect.
 - Image, minigame, and ending.
 - Visual labels for chapters, locations, and other editor-only organization.
 

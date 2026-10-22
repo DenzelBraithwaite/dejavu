@@ -45,6 +45,19 @@
     activeLane: LaneId;
   };
 
+  type TutorialNode = {
+    name: string;
+    type: string;
+    description: string;
+    usage: string;
+  };
+
+  type TutorialSection = {
+    title: string;
+    description: string;
+    nodes: TutorialNode[];
+  };
+
   const flowNodeTypes = [
     { type: 'dialogue', label: 'Dialogue' },
     { type: 'input', label: 'Player input' },
@@ -68,6 +81,148 @@
   ];
 
   const nodeTypes = [...flowNodeTypes, ...companionNodeTypes];
+
+  // Keep the guide catalog beside the palette so every added node has a matching explanation.
+  const tutorialNodeSections: TutorialSection[] = [
+    {
+      title: 'Narrative and player input',
+      description: 'Present story text or collect a written response before continuing.',
+      nodes: [
+        {
+          name: 'Dialogue',
+          type: 'dialogue',
+          description: 'Displays typed story text with an optional character, expression, or custom speaker.',
+          usage: 'Choose the audience, write the dialogue, select its speaker and expression, then connect Next.'
+        },
+        {
+          name: 'Player input',
+          type: 'input',
+          description: 'Pauses for a player to enter free-form text, such as a name or answer.',
+          usage: 'Write the prompt and placeholder, set a length limit, and connect the response to Next.'
+        }
+      ]
+    },
+    {
+      title: 'Branches and rules',
+      description: 'Split the story through buttons, timers, dice, votes, or stored campaign state.',
+      nodes: [
+        {
+          name: 'Choice',
+          type: 'choice',
+          description: 'Shows one to five labelled buttons with an independent destination for each button.',
+          usage: 'Set the button count and labels, then connect every option. Options may loop back to this node.'
+        },
+        {
+          name: 'Timed choice',
+          type: 'timed-choice',
+          description: 'Works like Choice but automatically selects a fallback when its timer expires.',
+          usage: 'Set the duration, buttons, fallback option, and a destination for every option.'
+        },
+        {
+          name: 'Dice check',
+          type: 'dice-check',
+          description: 'Rolls a selected die against a character stat and target value.',
+          usage: 'Choose the die, stat, and target, then connect both Success and Failure.'
+        },
+        {
+          name: 'Condition',
+          type: 'condition',
+          description: 'Immediately routes by an item, flag, stat threshold, or previous dice result.',
+          usage: 'Select the rule and connect both True and False. Conditions do not display a prompt.'
+        },
+        {
+          name: 'Shared vote',
+          type: 'vote',
+          description: 'Collects a button choice from both players and resolves the shared result.',
+          usage: 'Create one to five options and connect every result. Use it only on the Shared lane.'
+        }
+      ]
+    },
+    {
+      title: 'Multiplayer coordination',
+      description: 'Synchronize players or let them speak directly during a shared scene.',
+      nodes: [
+        {
+          name: 'Checkpoint',
+          type: 'checkpoint',
+          description: 'Stops one player until both players reach the same checkpoint key.',
+          usage: 'Place matching checkpoint nodes on both player lanes, give them the same key, and connect Next.'
+        },
+        {
+          name: 'Open floor',
+          type: 'conversation',
+          description: 'Runs a turn-based, face-to-face text conversation between the two players.',
+          usage: 'Choose the first speaker and each player’s turn count, then connect the shared Next route.'
+        }
+      ]
+    },
+    {
+      title: 'Media, games, and structure',
+      description: 'Show visual content, launch coded games, organize the graph, or finish a path.',
+      nodes: [
+        {
+          name: 'Show image',
+          type: 'image',
+          description: 'Displays uploaded artwork as a routed step inside the terminal.',
+          usage: 'Select an image, provide alternative text, and connect Next like any other flow node.'
+        },
+        {
+          name: 'Minigame',
+          type: 'minigame',
+          description: 'Launches a registered coded minigame from the story.',
+          usage: 'Choose the game and connect both Finished Game and Exited Early destinations.'
+        },
+        {
+          name: 'Visual label',
+          type: 'label',
+          description: 'Adds a heading or note to organize the editor canvas without affecting play.',
+          usage: 'Write a useful chapter or section title. Labels never receive story routes.'
+        },
+        {
+          name: 'Ending',
+          type: 'ending',
+          description: 'Marks the final destination of a playable route.',
+          usage: 'Write the closing terminal text. Ending nodes intentionally have no outgoing route.'
+        }
+      ]
+    },
+    {
+      title: 'Companion changes',
+      description: 'Attach these beside a host node. They activate with that host and never become another path step.',
+      nodes: [
+        {
+          name: 'Item / effect',
+          type: 'effect',
+          description: 'Changes campaign state by giving items, setting flags, adjusting stats, or managing mods.',
+          usage: 'Select the operation and value, then attach it to the flow node where the change occurs.'
+        },
+        {
+          name: 'Music / atmosphere',
+          type: 'ambience',
+          description: 'Changes the terminal background, looping music, or one-shot sound.',
+          usage: 'Provide the desired asset paths and attach the companion to its host scene.'
+        },
+        {
+          name: 'Terminal effect',
+          type: 'screen-effect',
+          description: 'Shakes the screen or blinks the terminal when its host becomes active.',
+          usage: 'Choose Shake or Blink and attach it to a routed node. Reduced-motion settings disable animation.'
+        }
+      ]
+    }
+  ];
+
+  // Surface missing handbook entries immediately when the palette gains another node.
+  const documentedNodeTypes = new Set(
+    tutorialNodeSections.flatMap((section) => {
+      return section.nodes.map((node) => {
+        return node.type;
+      });
+    })
+  );
+  const undocumentedNodeTypes = nodeTypes.filter((nodeType) => {
+    return !documentedNodeTypes.has(nodeType.type);
+  });
 
   const lanes: Array<{ id: LaneId; label: string }> = [
     { id: 'p1', label: 'PLAYER 1' },
@@ -119,6 +274,14 @@
   let lastLocation = '';
   let dragTargetId = '';
   let dragPlacement: 'before' | 'after' = 'before';
+
+  function openTutorial(): void {
+    tutorialOpen = true;
+  }
+
+  function closeTutorial(): void {
+    tutorialOpen = false;
+  }
 
   $: playerId = $sessionState.playerId;
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
@@ -2127,7 +2290,7 @@
           <button type="button" disabled={redoStack.length === 0} on:click={redo} aria-label="Redo editor change">
             ↷ Redo
           </button>
-          <button class="tutorial-button" type="button" on:click={() => tutorialOpen = true} aria-label="Open editor tutorial">
+          <button class="tutorial-button" type="button" on:click={openTutorial} aria-label="Open editor tutorial">
             ⓘ Guide
           </button>
           <button class="primary-button" type="button" on:click={saveStory}>
@@ -2862,22 +3025,63 @@
           <section class="editor-tutorial" role="dialog" aria-modal="true" aria-labelledby="editor-guide-title">
             <header>
               <div>
-                <p>QUICK START</p>
-                <h2 id="editor-guide-title">How the story editor works</h2>
+                <p>EDITOR HANDBOOK</p>
+                <h2 id="editor-guide-title">Story nodes and workflows</h2>
               </div>
-              <button type="button" aria-label="Close editor tutorial" on:click={() => tutorialOpen = false}>×</button>
+              <button type="button" aria-label="Close editor tutorial" on:click={closeTutorial}>×</button>
             </header>
-            <ol>
-              <li><strong>Add to Player</strong> appends a new node to the bottom of that lane. It only auto-connects when the previous node has an unused normal route.</li>
-              <li><strong>+ next, + yes, or + no</strong> creates a node directly on that exact route. Use these when building a connected sequence or branch.</li>
-              <li><strong>Select next node</strong> connects to an existing node. <strong>Select previous node</strong> makes an existing node lead into the selected node.</li>
-              <li><strong>Loops are supported.</strong> Give a Choice node one to five buttons and make it the area's hub. Route Talk, Search, or Play branches through their scenes and connect their last nodes back to the hub. Route Leave forward to the next area. Backward routes are marked <strong>↻ LOOP</strong>.</li>
-              <li>For a locked exit, route the hub's <strong>Leave</strong> choice into a Condition. Its true route leaves the area; its false route shows a denial message and returns to the hub. Conditions resolve immediately, so never point one directly to itself.</li>
-              <li>For a repeatable minigame, connect its Finished and Exited Early routes back to the hub. The runtime resets its launch checkpoint each time the players return.</li>
-              <li><strong>Image nodes</strong> are part of the main terminal flow and use normal previous and next routes. <strong>Companion changes</strong> update inventory, atmosphere, or terminal presentation beside a host node without becoming its next destination.</li>
-              <li>Red nodes have a missing or invalid connection. Save only after every playable route reaches another node or an Ending.</li>
-            </ol>
-            <button class="primary-button" type="button" on:click={() => tutorialOpen = false}>Got it</button>
+
+            <p class="tutorial-introduction">
+              Main-flow nodes create the playable path. Companion nodes sit beside a host and activate with it without adding another step.
+            </p>
+
+            <section class="tutorial-workflow" aria-labelledby="workflow-guide-title">
+              <p class="tutorial-section-label">WORKFLOW</p>
+              <h3 id="workflow-guide-title">Build and connect a path</h3>
+              <ol>
+                <li><strong>Add to Player</strong> appends a node to that lane. It auto-connects only when the previous node has an unused normal route.</li>
+                <li><strong>+ next, + yes, or + no</strong> creates a node directly on that route. Use <strong>Select node</strong> to connect an existing node instead.</li>
+                <li><strong>Select previous node</strong> makes an existing node lead into the selected node. Red nodes are missing a required or valid connection.</li>
+                <li><strong>Loops are supported.</strong> Route branch endings back to a Choice hub and route one exit button forward. Backward routes display <strong>↻ LOOP</strong>.</li>
+                <li>Use the <strong>Player 1</strong> and <strong>Player 2</strong> lanes for private scenes. Put synchronized actions and votes in <strong>Shared</strong>.</li>
+                <li>Companions use <strong>Select host node</strong>. They never receive previous or next routes.</li>
+              </ol>
+            </section>
+
+            <div class="tutorial-node-sections">
+              {#each tutorialNodeSections as section}
+                <section class="tutorial-node-section">
+                  <p class="tutorial-section-label">NODE REFERENCE</p>
+                  <h3>{section.title}</h3>
+                  <p class="tutorial-section-description">{section.description}</p>
+
+                  <div class="tutorial-node-grid">
+                    {#each section.nodes as node}
+                      <article>
+                        <div class="tutorial-node-heading">
+                          <h4>{node.name}</h4>
+                          <code>{node.type}</code>
+                        </div>
+                        <p>{node.description}</p>
+                        <p class="tutorial-node-usage"><strong>How to use it:</strong> {node.usage}</p>
+                      </article>
+                    {/each}
+                  </div>
+                </section>
+              {/each}
+            </div>
+
+            {#if undocumentedNodeTypes.length > 0}
+              <p class="tutorial-warning" role="alert">
+                Handbook entries are still needed for:
+                {undocumentedNodeTypes.map((nodeType) => nodeType.label).join(', ')}.
+              </p>
+            {/if}
+
+            <footer class="tutorial-footer">
+              <p>Save after every playable route reaches another node or an Ending.</p>
+              <button class="primary-button" type="button" on:click={closeTutorial}>Got it</button>
+            </footer>
           </section>
         </div>
       {/if}
@@ -4407,7 +4611,7 @@
   }
 
   .editor-tutorial {
-    width: min(680px, 100%);
+    width: min(920px, 100%);
     max-height: 85%;
     padding: 24px;
     overflow-y: auto;
@@ -4415,8 +4619,11 @@
     border: 1px solid #02fbfb;
     box-shadow: 0 0 48px #02fbfb33;
 
-    header {
+    > header {
       margin-bottom: 18px;
+      padding-bottom: 16px;
+      background: #09111e;
+      border-bottom: 1px solid #1e3a52;
 
       display: flex;
       justify-content: space-between;
@@ -4434,11 +4641,26 @@
       }
     }
 
+    h3,
+    h4 {
+      color: #eef8ff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    h3 {
+      margin: 5px 0 8px;
+      font-size: 1rem;
+    }
+
+    h4 {
+      font-size: 0.83rem;
+    }
+
     ol {
-      margin: 0 0 20px 20px;
+      margin: 14px 0 0 20px;
 
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
 
     li {
@@ -4450,6 +4672,109 @@
         color: #f8e69a;
       }
     }
+  }
+
+  .tutorial-introduction {
+    max-width: 78ch;
+    margin-bottom: 20px;
+    color: #b7c2d3;
+    line-height: 1.65;
+  }
+
+  .tutorial-workflow,
+  .tutorial-node-section {
+    padding: 18px;
+    background: #07101c;
+    border: 1px solid #1f4059;
+  }
+
+  .tutorial-workflow {
+    margin-bottom: 18px;
+  }
+
+  .tutorial-section-label {
+    color: #4a98d9;
+    font-size: 0.62rem;
+    letter-spacing: 1.4px;
+  }
+
+  .tutorial-node-sections {
+    display: grid;
+    gap: 18px;
+  }
+
+  .tutorial-section-description {
+    margin-bottom: 14px;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+
+  .tutorial-node-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+
+    article {
+      padding: 14px;
+      background: #0c1726;
+      border: 1px solid #263d54;
+    }
+
+    article > p {
+      color: #b7c2d3;
+      line-height: 1.5;
+    }
+  }
+
+  .tutorial-node-heading {
+    margin-bottom: 9px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+
+    code {
+      padding: 3px 6px;
+      color: #02fbfb;
+      background: #020617;
+      border: 1px solid #17455a;
+      font-size: 0.63rem;
+    }
+  }
+
+  .tutorial-node-usage {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px dashed #263d54;
+
+    strong {
+      color: #f8e69a;
+    }
+  }
+
+  .tutorial-footer {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #1e3a52;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+
+    p {
+      color: #94a3b8;
+    }
+  }
+
+  .tutorial-warning {
+    margin-top: 18px;
+    padding: 12px 14px;
+    color: #ffdbd6;
+    background: #2b1115;
+    border: 1px solid #cb381f;
+    line-height: 1.5;
   }
 
   .editor-empty-state {
@@ -4566,6 +4891,19 @@
 
     .node-type-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tutorial-node-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .tutorial-footer {
+      align-items: stretch;
+      flex-direction: column;
+
+      .primary-button {
+        width: 100%;
+      }
     }
   }
 </style>
