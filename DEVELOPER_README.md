@@ -665,6 +665,12 @@ pnpm build
 
 For multiplayer changes, verify with two separate browser profiles or devices. A third profile should receive only the Game is full screen.
 
+## Responsive layout
+
+Desktop remains the primary layout. At `760px` and below, the application shell moves the sidebar into a horizontally scrollable bottom dock and gives the current screen the remaining dynamic viewport height. Feature panels should use `height: 100%` so they fit that shell. Prefer single-column controls on narrow screens; preserve horizontal scrolling for dense game boards and the visual story graph when compressing them would make them harder to use.
+
+Navigation items must remain semantic buttons with clear accessible labels because their visible text is hidden in the mobile dock. New screens should keep their primary controls at least 40 pixels tall and avoid fixed widths wider than a typical phone viewport.
+
 ## Coding standards
 
 - Keep functions and components focused.

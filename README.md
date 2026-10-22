@@ -46,6 +46,7 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - Choice, timed-choice, and shared-vote nodes expose one to five labelled buttons, each with its own route. Routes may intentionally loop back to an earlier node.
 - Story images can be uploaded as PNG, JPEG, WebP, GIF, AVIF, or SVG files up to 8 MB and are stored by the LAN host. The editor asset picker also lists compatible files copied directly into `public/uploads/stories/`.
 - Stories may expose a solo map, a multiplayer map, or both. Disabling a mode preserves its nodes; the solo map greys out the Player 2 and Shared lanes.
+- Phone-sized screens use a touch-friendly bottom navigation dock and viewport-fitted panels. Dense tools such as the story graph remain horizontally scrollable so the desktop layout and editing model stay intact.
 
 ### Server-authoritative campaign
 

@@ -601,7 +601,7 @@
 
     position: relative;
     width: 100%;
-    height: 95vh;
+    height: 100%;
     max-width: 1100px;
     padding: 0;
     overflow: hidden;

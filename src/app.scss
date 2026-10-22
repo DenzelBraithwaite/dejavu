@@ -46,6 +46,7 @@ fieldset {
 }
 
 html, body, #app {
+  width: 100%;
   font-size: 14px;
   height: 100%;
   line-height: 1.2;
@@ -123,6 +124,22 @@ a {
 ::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+@media (max-width: 760px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
 }
 
 // .<CLASS_NAME>::-webkit-scrollbar-track {

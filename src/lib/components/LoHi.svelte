@@ -591,7 +591,7 @@
 <style lang="scss">
   .terminal-game {
     width: min(1120px, 100%);
-    height: 95vh;
+    height: 100%;
     overflow: hidden;
     color: #d8fbff;
     background: #050b12;

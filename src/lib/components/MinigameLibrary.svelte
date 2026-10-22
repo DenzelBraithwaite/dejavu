@@ -218,7 +218,7 @@
 <style lang="scss">
   .minigame-library {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     max-width: 1100px;
     overflow: hidden;
     background: #080610;
@@ -718,6 +718,32 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+
+  @media (max-width: 560px) {
+    .library-content {
+      padding: 22px 16px;
+    }
+
+    .mode-filter {
+      width: 100%;
+
+      button {
+        min-height: 44px;
+        padding: 8px 10px;
+
+        flex: 1;
+        justify-content: center;
+      }
+    }
+
+    .minigame-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .module-art {
+      height: 160px;
+    }
   }
 
   .packet-deck {

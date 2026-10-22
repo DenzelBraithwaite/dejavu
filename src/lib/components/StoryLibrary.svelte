@@ -3191,7 +3191,7 @@
 
     position: relative;
     width: 100%;
-    height: 95vh;
+    height: 100%;
     min-width: 0;
     max-width: 1600px;
     overflow: hidden;
@@ -4871,6 +4871,11 @@
   }
 
   @media (max-width: 800px) {
+    .library-content,
+    .form-screen {
+      padding: 20px 16px;
+    }
+
     .library-heading {
       align-items: stretch;
       flex-direction: column;
@@ -4889,6 +4894,30 @@
       grid-template-columns: 760px 280px;
     }
 
+    .editor-toolbar {
+      grid-template-columns: 1fr;
+
+      .back-button {
+        width: fit-content;
+      }
+    }
+
+    .toolbar-actions {
+      justify-content: flex-start;
+    }
+
+    .map-toolbar {
+      overflow-x: auto;
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .map-tabs,
+    .mode-toggles,
+    .cast-controls {
+      width: max-content;
+    }
+
     .node-type-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -4904,6 +4933,27 @@
       .primary-button {
         width: 100%;
       }
+    }
+  }
+
+  @media (max-width: 420px) {
+    .story-grid,
+    .node-type-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .card-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .editor-tutorial {
+      padding: 18px 14px;
+    }
+
+    .toast-message {
+      right: 10px;
+      bottom: 10px;
+      left: 10px;
     }
   }
 </style>

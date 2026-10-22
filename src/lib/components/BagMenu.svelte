@@ -68,7 +68,7 @@
 <style lang="scss">
   .bag {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     max-width: 1100px;
     overflow: hidden;
     background: #07100e;

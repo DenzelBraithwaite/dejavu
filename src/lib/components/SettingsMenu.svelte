@@ -116,7 +116,7 @@
 <style lang="scss">
   .settings {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     max-width: 1100px;
     overflow: hidden;
     color: #e8edf6;

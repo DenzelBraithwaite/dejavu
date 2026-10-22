@@ -1028,7 +1028,7 @@
     position: relative;
     background-color: $terminalBg;
     height: 100%;
-    max-height: 95vh;
+    max-height: 100%;
     width: 100%;
     max-width: 1100px; // 
     border: 2px solid $yellow;
@@ -1038,7 +1038,7 @@
     padding: 20px;
     overflow-wrap: break-word;
     transition: all 0.5s ease-out;
-    margin-bottom: 20px;
+    margin-bottom: 0;
     box-shadow: 0 0 20px color.scale($yellow, $alpha: -50%);
     z-index: 0;
 
@@ -1938,6 +1938,10 @@
   }
 
   @media (max-width: 680px) {
+    .terminal {
+      padding: 10px;
+    }
+
     .menu {
       padding: 18px;
     }

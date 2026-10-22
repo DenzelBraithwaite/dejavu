@@ -373,7 +373,7 @@
 <style lang="scss">
   .character-library {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     overflow: hidden;
     color: #e8edf6;
     background: #150510;
@@ -674,11 +674,32 @@
   }
 
   @media (max-width: 700px) {
+    .screen {
+      padding: 20px 16px;
+    }
+
     .title-row,
     .form-heading,
     .active-profile {
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .character-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .character-form fieldset {
+      padding: 14px;
+    }
+
+    .form-actions {
+      align-items: stretch;
+      flex-direction: column-reverse;
+
+      button {
+        width: 100%;
+      }
     }
   }
 </style>

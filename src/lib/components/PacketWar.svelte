@@ -700,7 +700,7 @@
 <style lang="scss">
   .packet-war {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     overflow: hidden;
     color: #ebefff;
     background:

@@ -506,7 +506,7 @@
 <style lang="scss">
   .chopsticks {
     width: min(1050px, 100%);
-    height: 95vh;
+    height: 100%;
     overflow: hidden;
     color: #d9ffe8;
     background: #040d0a;

@@ -907,7 +907,7 @@
 <style lang="scss">
   .trace-race {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     overflow: hidden;
     color: #dafcff;
     background:

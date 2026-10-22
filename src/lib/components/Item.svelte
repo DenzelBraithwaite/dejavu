@@ -7,11 +7,10 @@
   export let color = 'grey';
   export let collapsed = false;
   export let badge = 0;
+  export let label = 'Menu item';
 </script>
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<!-- svelte-ignore a11y-click-events-have-key-events -->
 
-<div on:click class="item item-color__{color}">
+<button type="button" on:click class="item item-color__{color}" aria-label={label}>
   {#if iconType === 'terminal'}
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon">
       <polyline points="4 17 10 11 4 5"/>
@@ -114,13 +113,15 @@
       <p class="item-text"><slot name="description">Brief description</slot></p>
     </div>
   {/if}
- </div>
+</button>
 
 <style lang="scss">
   .item {
     position: relative;
     cursor: pointer;
+    color: inherit;
     background-color: #5f5a5a;
+    border: 0;
     border-radius: var(--border-radius-small);
     transition: all 0.2s ease-in-out;
     margin-bottom: 8px;
@@ -131,6 +132,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    font: inherit;
+    text-align: left;
 
     &:hover {
       scale: 1.05;
@@ -228,5 +231,19 @@
     font-weight: 800;
     line-height: 17px;
     text-align: center;
+  }
+
+  @media (max-width: 760px) {
+    .item:hover {
+      margin: 0;
+      box-shadow: none;
+      transform: none;
+      scale: 1;
+    }
+
+    .icon {
+      width: 30px;
+      height: 30px;
+    }
   }
 </style>

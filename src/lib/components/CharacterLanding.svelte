@@ -317,6 +317,19 @@
   }
 
   @media (max-width: 620px) {
+    .landing {
+      padding: 10px;
+      place-items: start center;
+    }
+
+    .landing-content {
+      padding: 24px 16px;
+    }
+
+    .character-grid {
+      grid-template-columns: 1fr;
+    }
+
     .character-card {
       grid-template-columns: 56px 1fr;
 
@@ -329,6 +342,11 @@
 
     .select-label {
       display: none;
+    }
+
+    .quick-create input {
+      width: 100%;
+      min-width: 0;
     }
   }
 </style>

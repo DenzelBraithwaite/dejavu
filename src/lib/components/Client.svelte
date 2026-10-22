@@ -646,8 +646,48 @@
   }
 
   @media (max-width: 760px) {
+    .client,
+    .client-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+
     .main-content {
+      min-height: 0;
+      padding: 8px;
+      overflow: hidden;
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .partner-status {
+      top: 6px;
+      width: calc(100% - 28px);
+      padding: 6px 10px;
+      text-align: center;
+    }
+
+    .chat-toast {
+      top: 12px;
+      right: 12px;
+    }
+
+    .exit-confirmation-backdrop {
       padding: 14px;
+    }
+
+    .exit-confirmation {
+      padding: 20px;
+
+      > div {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+
+    .status-screen {
+      width: calc(100% - 24px);
+      padding: 30px 20px;
     }
   }
 </style>

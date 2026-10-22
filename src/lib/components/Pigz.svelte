@@ -602,7 +602,7 @@
 
   .pigz {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     max-width: 1280px;
     overflow: hidden;
     background: $background;

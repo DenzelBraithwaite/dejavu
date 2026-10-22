@@ -29,27 +29,27 @@
     </svg>
   </button>
   
-  <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'}>
+  <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
     <span slot="title">Story Mode</span>
     <span slot="description">Play the inserted story</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'}>
+  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
     <span slot="title">Library</span>
     <span slot="description">Select or create stories</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'}>
+  <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'} label="Minigames">
     <span slot="title">Minigames</span>
     <span slot="description">Browse coded game modules</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'pink'} iconType={'player'}>
+  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'pink'} iconType={'player'} label="Characters">
     <span slot="title">Characters</span>
     <span slot="description">Create and manage the cast</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'brown'} iconType={'journal'}>
+  <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'brown'} iconType={'journal'} label="Journal">
     <span slot="title">Journal</span>
     <span slot="description">Transcript and decisions</span>
   </Item>
@@ -61,18 +61,19 @@
       color={'blue'}
       iconType={'chat'}
       badge={chatUnreadCount}
+      label="Neuro-Link chat"
     >
       <span slot="title">Neuro-Link</span>
       <span slot="description">Transmit thoughts to your partner</span>
     </Item>
   {/if}
 
-  <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'}>
+  <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'} label="Editor">
     <span slot="title">Editor</span>
     <span slot="description">Build story flow charts</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'}>
+  <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'} label="Settings">
     <span slot="title">Settings</span>
     <span slot="description">Audio, saves, and preferences</span>
   </Item>
@@ -148,6 +149,41 @@
   .rotate {
     .icon {
       transform: rotate(180deg);
+    }
+  }
+
+  @media (max-width: 760px) {
+    .sidebar,
+    .sidebar-collapsed,
+    .sidebar-expanded {
+      width: 100%;
+      height: calc(70px + env(safe-area-inset-bottom));
+      padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+      border-radius: 0;
+      grid-column: 1;
+      grid-row: 2;
+      overflow-x: auto;
+      overflow-y: hidden;
+
+      display: flex;
+      gap: 7px;
+    }
+
+    .collapse-button {
+      display: none;
+    }
+
+    .sidebar :global(.item) {
+      width: 56px;
+      height: 56px;
+      margin: 0;
+
+      flex: 0 0 56px;
+      justify-content: center;
+    }
+
+    .sidebar :global(.item-text-wrapper) {
+      display: none;
     }
   }
 </style>

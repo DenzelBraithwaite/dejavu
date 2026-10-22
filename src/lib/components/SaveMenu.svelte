@@ -122,7 +122,7 @@
 <style lang="scss">
   .saves {
     width: 100%;
-    height: 95vh;
+    height: 100%;
     max-width: 1100px;
     overflow: hidden;
     background: #0e0c08;

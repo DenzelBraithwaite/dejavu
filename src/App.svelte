@@ -10,8 +10,9 @@
 
 <style lang="scss">
   .main-content {
-    height: 100vh; // dynamic viewport units not as supported (not at all in firefox)
-    width: 100vw;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
     padding: 8px;
     background-color: var(--black);
 
@@ -19,5 +20,11 @@
     justify-content: center;
     align-items: center;
     overflow: hidden;
+  }
+
+  @media (max-width: 760px) {
+    .main-content {
+      padding: 0;
+    }
   }
 </style>
