@@ -57,9 +57,10 @@ function emptyColorRecord() {
   };
 }
 
-export function joinNetRunners(state, playerId, playerName) {
+export function joinNetRunners(state, playerId, playerName, wallet = STARTING_MONEY) {
   if (!state.participants[playerId]) {
     state.participants[playerId] = true;
+    state.players[playerId].money = Math.max(0, Math.trunc(Number(wallet) || 0));
   }
 
   state.players[playerId].name = playerName;

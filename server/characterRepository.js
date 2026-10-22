@@ -1,0 +1,343 @@
+import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+const DEFAULT_STATS = {
+  muscles: 10,
+  toughness: 10,
+  speed: 10,
+  stealth: 10,
+  smarts: 10,
+  ocuware: 10,
+  cred: 10,
+  luck: 2,
+  hacking: 10
+};
+
+const DEFAULT_IMAGES = {
+  normal: '',
+  shocked: '',
+  angry: '',
+  sad: '',
+  happy: ''
+};
+
+const SEEDED_CHARACTERS = [
+  {
+    id: 'nova',
+    name: 'Nova',
+    wallet: 10_000,
+    stats: {
+      muscles: 11,
+      toughness: 10,
+      speed: 9,
+      stealth: 8,
+      smarts: 12,
+      ocuware: 10,
+      cred: 15,
+      luck: 2,
+      hacking: 17
+    }
+  },
+  {
+    id: 'avona',
+    name: 'Avona',
+    wallet: 10_000,
+    stats: {
+      muscles: 8,
+      toughness: 9,
+      speed: 10,
+      stealth: 12,
+      smarts: 11,
+      ocuware: 20,
+      cred: 13,
+      luck: 4,
+      hacking: 6
+    }
+  }
+];
+
+export function createCharacterRepository(databasePath) {
+  mkdirSync(dirname(databasePath), {
+    recursive: true
+  });
+
+  const database = new DatabaseSync(databasePath);
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS characters (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      wallet INTEGER NOT NULL DEFAULT 0,
+      stats_json TEXT NOT NULL,
+      images_json TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      built_in INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  seedCharacters(database);
+
+  return {
+    listCharacters() {
+      return database.prepare(`
+        SELECT
+          id,
+          name,
+          wallet,
+          stats_json AS statsJson,
+          images_json AS imagesJson,
+          notes,
+          built_in AS builtIn,
+          created_at AS createdAt,
+          updated_at AS updatedAt
+        FROM characters
+        ORDER BY built_in DESC, name COLLATE NOCASE ASC
+      `).all().map(normalizeCharacterRow);
+    },
+
+    getCharacter(id) {
+      const row = database.prepare(`
+        SELECT
+          id,
+          name,
+          wallet,
+          stats_json AS statsJson,
+          images_json AS imagesJson,
+          notes,
+          built_in AS builtIn,
+          created_at AS createdAt,
+          updated_at AS updatedAt
+        FROM characters
+        WHERE id = ?
+      `).get(id);
+
+      return row ? normalizeCharacterRow(row) : null;
+    },
+
+    createCharacter(input) {
+      const character = normalizeCharacter({
+        ...input,
+        id: createCharacterId(input?.name),
+        builtIn: false
+      });
+      const now = new Date().toISOString();
+
+      database.prepare(`
+        INSERT INTO characters (
+          id,
+          name,
+          wallet,
+          stats_json,
+          images_json,
+          notes,
+          built_in,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        character.id,
+        character.name,
+        character.wallet,
+        JSON.stringify(character.stats),
+        JSON.stringify(character.images),
+        character.notes,
+        0,
+        now,
+        now
+      );
+
+      return this.getCharacter(character.id);
+    },
+
+    updateCharacter(id, input) {
+      const existing = this.getCharacter(id);
+
+      if (!existing) {
+        throw new Error('Character not found.');
+      }
+
+      const character = normalizeCharacter({
+        ...existing,
+        ...input,
+        id,
+        builtIn: existing.builtIn
+      });
+      const now = new Date().toISOString();
+
+      database.prepare(`
+        UPDATE characters
+        SET
+          name = ?,
+          wallet = ?,
+          stats_json = ?,
+          images_json = ?,
+          notes = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).run(
+        character.name,
+        character.wallet,
+        JSON.stringify(character.stats),
+        JSON.stringify(character.images),
+        character.notes,
+        now,
+        id
+      );
+
+      return this.getCharacter(id);
+    },
+
+    adjustWallet(id, amount) {
+      const existing = this.getCharacter(id);
+
+      if (!existing) {
+        throw new Error('Character not found.');
+      }
+
+      const wallet = Math.max(0, existing.wallet + Math.trunc(Number(amount) || 0));
+
+      database.prepare(`
+        UPDATE characters
+        SET wallet = ?, updated_at = ?
+        WHERE id = ?
+      `).run(wallet, new Date().toISOString(), id);
+
+      return this.getCharacter(id);
+    },
+
+    setWallet(id, amount) {
+      const existing = this.getCharacter(id);
+
+      if (!existing) {
+        throw new Error('Character not found.');
+      }
+
+      const wallet = normalizeWholeNumber(amount, 0, 999_999_999);
+
+      database.prepare(`
+        UPDATE characters
+        SET wallet = ?, updated_at = ?
+        WHERE id = ?
+      `).run(wallet, new Date().toISOString(), id);
+
+      return this.getCharacter(id);
+    },
+
+    deleteCharacter(id) {
+      const existing = this.getCharacter(id);
+
+      if (!existing) {
+        throw new Error('Character not found.');
+      }
+
+      if (existing.builtIn) {
+        throw new Error('Built-in characters cannot be deleted.');
+      }
+
+      database.prepare('DELETE FROM characters WHERE id = ?').run(id);
+    }
+  };
+}
+
+function seedCharacters(database) {
+  const insert = database.prepare(`
+    INSERT OR IGNORE INTO characters (
+      id,
+      name,
+      wallet,
+      stats_json,
+      images_json,
+      notes,
+      built_in,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const character of SEEDED_CHARACTERS) {
+    const now = new Date().toISOString();
+
+    insert.run(
+      character.id,
+      character.name,
+      character.wallet,
+      JSON.stringify(character.stats),
+      JSON.stringify(DEFAULT_IMAGES),
+      '',
+      1,
+      now,
+      now
+    );
+  }
+}
+
+function normalizeCharacter(input) {
+  const name = String(input?.name ?? '').trim().slice(0, 48);
+
+  if (!name) {
+    throw new Error('Enter a character name.');
+  }
+
+  const stats = {};
+
+  for (const [key, defaultValue] of Object.entries(DEFAULT_STATS)) {
+    stats[key] = normalizeWholeNumber(input?.stats?.[key] ?? defaultValue, 0, 100);
+  }
+
+  return {
+    id: String(input.id),
+    name,
+    wallet: normalizeWholeNumber(input.wallet, 0, 999_999_999),
+    stats,
+    images: {
+      ...DEFAULT_IMAGES,
+      ...(input.images ?? {})
+    },
+    notes: String(input.notes ?? '').trim().slice(0, 500),
+    builtIn: Boolean(input.builtIn)
+  };
+}
+
+function normalizeCharacterRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    wallet: Number(row.wallet),
+    stats: JSON.parse(row.statsJson),
+    images: {
+      ...DEFAULT_IMAGES,
+      ...JSON.parse(row.imagesJson)
+    },
+    notes: row.notes,
+    builtIn: Boolean(row.builtIn),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
+}
+
+function normalizeWholeNumber(value, minimum, maximum) {
+  const number = Math.trunc(Number(value));
+
+  if (!Number.isFinite(number)) {
+    return minimum;
+  }
+
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function createCharacterId(name) {
+  const slug = String(name ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'unnamed-character';
+
+  return `${slug}-${randomUUID().slice(0, 8)}`;
+}

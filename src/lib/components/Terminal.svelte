@@ -25,6 +25,9 @@
   let lastAudioSceneId = '';
   let diceTerminalOpen = false;
   let scenePresentation: Pick<StoryNode, 'background' | 'music' | 'sound'> = {};
+  let sceneSpeaker = '';
+  let scenePortrait = '';
+  let scenePortraitAlt = '';
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -33,6 +36,18 @@
   $: scene = sceneId
     ? $campaignState?.story?.nodes.find((candidate) => candidate.id === sceneId)
     : undefined;
+  $: sceneCharacter = scene?.characterId
+    ? $campaignState?.characters.find(
+        (character) => character.id === scene?.characterId
+      )
+    : undefined;
+  $: sceneSpeaker = sceneCharacter?.name ?? scene?.speaker ?? '';
+  $: scenePortrait = sceneCharacter?.images?.[scene?.expression ?? 'normal']
+    ?? scene?.portrait
+    ?? '';
+  $: scenePortraitAlt = sceneCharacter
+    ? `${sceneCharacter.name}, ${scene?.expression ?? 'normal'} expression`
+    : scene?.portraitAlt ?? '';
   $: companionNodes = sceneId
     ? $campaignState?.story?.nodes.filter((candidate) => candidate.attachedTo === sceneId) ?? []
     : [];
@@ -386,16 +401,16 @@
         </figure>
       {/each}
 
-      <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scene.portrait)}>
-        {#if scene.type === 'dialogue' && scene.portrait}
+      <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scenePortrait)}>
+        {#if scene.type === 'dialogue' && scenePortrait}
           <figure class="dialogue-portrait">
-            <img src={scene.portrait} alt={scene.portraitAlt ?? ''}>
+            <img src={scenePortrait} alt={scenePortraitAlt}>
           </figure>
         {/if}
 
         <div class="scene-copy__text">
-          {#if scene.speaker}
-            <p class="speaker">{interpolateSceneText(scene.speaker, textValues)}</p>
+          {#if sceneSpeaker}
+            <p class="speaker">{interpolateSceneText(sceneSpeaker, textValues)}</p>
           {/if}
 
           <p
@@ -404,7 +419,7 @@
             bind:this={typedTextElement}
             use:typewriter={{
               text: sceneText,
-              timing: scene.speaker
+              timing: sceneSpeaker
                 ? typewriterProfiles.dialogue
                 : typewriterProfiles.narration,
               onComplete: completeTyping

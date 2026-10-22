@@ -1,4 +1,5 @@
 import { netRunnersGameState } from '../stores/netRunnersGameState';
+import { socket } from '../socket';
 
 export type WagerOutcome = 'win' | 'loss' | 'draw';
 
@@ -16,6 +17,8 @@ export function settleWager(wager: number, outcome: WagerOutcome): number {
       money: state.p1.money + balanceChange
     }
   }));
+
+  socket.emit('characters:adjust-wallet', balanceChange);
 
   return balanceChange;
 }

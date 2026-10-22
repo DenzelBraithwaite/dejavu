@@ -13,6 +13,17 @@ export const dejaVuStoryDocument = {
     singleplayer: false,
     multiplayer: true
   },
+  mainCharacterIds: {
+    singleplayer: 'nova',
+    multiplayer: {
+      p1: 'nova',
+      p2: 'avona'
+    }
+  },
+  characterIds: [
+    'nova',
+    'avona'
+  ],
   initialSceneIds: {
     p1: 'prologue.p1.wake',
     p2: 'prologue.p2.wake'

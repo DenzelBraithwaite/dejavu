@@ -213,6 +213,8 @@
         money: state.p1.money + amount
       }
     }));
+
+    socket.emit('characters:adjust-wallet', amount);
   }
 
   function returnToMinigames(): void {

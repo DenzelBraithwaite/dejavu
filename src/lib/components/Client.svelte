@@ -4,6 +4,11 @@
   import { LogPage } from '../../routes';
   import { socket, storeSessionToken } from '../socket';
   import { campaignState, type CampaignState } from '../stores/campaign';
+  import {
+    activeCharacter,
+    characterLibraryState,
+    type CharacterLibraryState
+  } from '../stores/characters';
   import { chatMessages, type ChatMessage } from '../stores/chat';
   import location from '../stores/location';
   import { libraryState, type LibraryState } from '../stores/library';
@@ -28,6 +33,7 @@
     type ArcadeState
   } from '../stores/arcade';
   import ChatPanel from './ChatPanel.svelte';
+  import CharacterLanding from './CharacterLanding.svelte';
   import Sidebar from './Sidebar.svelte';
 
   let sidebarExpanded = true;
@@ -53,6 +59,7 @@
     socket.on('connect_error', handleConnectionError);
     socket.on('session:status', handleSessionStatus);
     socket.on('campaign:state', handleCampaignState);
+    socket.on('characters:state', handleCharacterLibraryState);
     socket.on('library:state', handleLibraryState);
     socket.on('netrunners:state', handleNetRunnersState);
     socket.on('pigz:state', handlePigzState);
@@ -68,6 +75,7 @@
     socket.off('connect_error', handleConnectionError);
     socket.off('session:status', handleSessionStatus);
     socket.off('campaign:state', handleCampaignState);
+    socket.off('characters:state', handleCharacterLibraryState);
     socket.off('library:state', handleLibraryState);
     socket.off('netrunners:state', handleNetRunnersState);
     socket.off('pigz:state', handlePigzState);
@@ -136,6 +144,22 @@
       minigameWasActive = false;
       location.set('terminal');
     }
+  }
+
+  function handleCharacterLibraryState(state: CharacterLibraryState): void {
+    characterLibraryState.set(state);
+  }
+
+  // Keep legacy local minigames projected from the selected persistent character.
+  $: if ($activeCharacter) {
+    netRunnersGameState.update((state) => ({
+      ...state,
+      p1: {
+        ...state.p1,
+        name: $activeCharacter?.name ?? state.p1.name,
+        money: $activeCharacter?.wallet ?? state.p1.money
+      }
+    }));
   }
 
   function handleLibraryState(state: LibraryState): void {
@@ -401,6 +425,8 @@
     <p class="status-code">INITIALIZING</p>
     <h1 id="connecting-title">Connecting to Déjà Vu</h1>
   </main>
+{:else if !$activeCharacter}
+  <CharacterLanding />
 {:else}
   <div
     in:blur={{ duration: 600 }}

@@ -142,6 +142,11 @@ import { chapterOneScenes } from './chapters/chapterOne.js';
 
 export const dejaVuStoryDocument = {
   // Other story metadata is omitted here.
+  mainCharacterIds: {
+    solo: 'nova',
+    multiplayer: ['nova', 'avona']
+  },
+  characterIds: ['nova', 'avona'],
   nodes: [
     ...prologueScenes,
     ...chapterOneScenes
@@ -170,7 +175,8 @@ defineScene({
   id: 'chapter-01.trinity-greeting',
   type: 'dialogue',
   audience: 'both',
-  speaker: 'Trinity',
+  characterId: 'trinity',
+  expression: 'normal',
   text: 'Welcome to the Shades, {PLAYER_NAME}.',
   next: 'chapter-01.look-around'
 })
@@ -178,22 +184,21 @@ defineScene({
 
 Use `audience: 'p1'` or `audience: 'p2'` for a private perspective. Use `both` when both players can receive the scene.
 
-Dialogue can also show a small speaker portrait beside the active terminal text. In the visual editor, select the Dialogue node, upload a speaker portrait, and provide concise alternative text. The uploaded asset is stored through the same story-image endpoint used by Image nodes.
+Dialogue can show a small speaker portrait beside the active terminal text. In the visual editor, select a character and one of the five supported expressions: `normal`, `shocked`, `angry`, `sad`, or `happy`. The runtime resolves the speaker name and image from the campaign's character snapshot.
 
 ```js
 defineScene({
   id: 'chapter-01.trinity-greeting',
   type: 'dialogue',
   audience: 'both',
-  speaker: 'Trinity',
-  portrait: '/uploads/stories/trinity.webp',
-  portraitAlt: 'Trinity wearing mirrored neural-interface glasses',
+  characterId: 'trinity',
+  expression: 'shocked',
   text: 'Welcome to the Shades, {PLAYER_NAME}.',
   next: 'chapter-01.look-around'
 })
 ```
 
-The portrait is archived with completed Dialogue output and remains visible at a smaller size. Use a routed Image node for full terminal art, location imagery, or illustrations.
+Custom speaker text remains available for unnamed extras and system messages. The resolved portrait is archived with completed Dialogue output and remains visible at a smaller size. Use a routed Image node for full terminal art, location imagery, or illustrations.
 
 ## Terminal history and clearing
 
@@ -564,7 +569,15 @@ const dramaticTiming = {
 
 ## Character records
 
-Add public journal information to `src/lib/story/characters.ts`. Keep secret information out of the public summary. A character becomes visible after a `discover-character` effect adds its ID to the local player's `knownCharacters` array.
+Reusable character records live in the SQLite `characters` table and are managed by `server/characterRepository.js`. Each record owns its display name, wallet, notes, stats, and five expression images. Browser state is projected through `src/lib/stores/characters.ts`.
+
+Story documents reference those records through `mainCharacterIds` and `characterIds`. A solo map requires one main character. A multiplayer map requires two different main characters. Dialogue `characterId` values are added to `characterIds` automatically when the editor saves.
+
+The server snapshots all referenced records when a campaign starts. Dice checks therefore use the assigned main character's stats, dialogue uses the selected character's name and expression image, and an active campaign remains stable if the reusable library record changes later.
+
+Each browser also selects an active character before reaching the main menu. Main-menu wager results update that persistent character's wallet. Story campaigns intentionally use the story role rather than treating the browser's active character as the canonical story protagonist.
+
+The older `speaker`, `portrait`, and `portraitAlt` dialogue fields remain readable for custom speakers and existing documents. New reusable cast members should use `characterId` and `expression`.
 
 ## Saves
 

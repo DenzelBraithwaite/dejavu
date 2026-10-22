@@ -1,127 +1,387 @@
 <script lang="ts">
   import { blur } from 'svelte/transition';
-  import { campaignState, localPlayer } from '../stores/campaign';
+  import { socket } from '../socket';
+  import {
+    activeCharacter,
+    characterLibraryState,
+    type CharacterExpression,
+    type CharacterRecord
+  } from '../stores/characters';
   import location from '../stores/location';
-  import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { sessionState } from '../stores/session';
-  import { characterRegistry } from '../story/characters';
+
+  const expressions: Array<{ id: CharacterExpression; label: string }> = [
+    { id: 'normal', label: 'Normal' },
+    { id: 'shocked', label: 'Shocked' },
+    { id: 'angry', label: 'Angry' },
+    { id: 'sad', label: 'Sad' },
+    { id: 'happy', label: 'Happy' }
+  ];
+
+  let editingCharacter: CharacterRecord | null = null;
+  let errorMessage = '';
+  let statusMessage = '';
+  let uploadingExpression: CharacterExpression | null = null;
+  let deleteArmed = false;
+
+  // New records begin with the same complete stat shape used by the runtime.
+  function createDraft(): CharacterRecord {
+    const now = new Date().toISOString();
+
+    return {
+      id: '',
+      name: '',
+      wallet: 1_000,
+      stats: {
+        muscles: 10,
+        toughness: 10,
+        speed: 10,
+        stealth: 10,
+        smarts: 10,
+        ocuware: 10,
+        cred: 10,
+        luck: 2,
+        hacking: 10
+      },
+      images: {
+        normal: '',
+        shocked: '',
+        angry: '',
+        sad: '',
+        happy: ''
+      },
+      notes: '',
+      builtIn: false,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  function openCharacter(character: CharacterRecord): void {
+    editingCharacter = structuredClone(character);
+    deleteArmed = false;
+    clearMessages();
+  }
+
+  function startCharacter(): void {
+    editingCharacter = createDraft();
+    deleteArmed = false;
+    clearMessages();
+  }
+
+  function closeEditor(): void {
+    editingCharacter = null;
+    deleteArmed = false;
+    clearMessages();
+  }
+
+  function clearMessages(): void {
+    errorMessage = '';
+    statusMessage = '';
+  }
+
+  function removeExpression(expression: CharacterExpression): void {
+    if (!editingCharacter) {
+      return;
+    }
+
+    editingCharacter.images[expression] = '';
+    editingCharacter = editingCharacter;
+  }
+
+  function saveCharacter(): void {
+    if (!editingCharacter) {
+      return;
+    }
+
+    clearMessages();
+
+    const eventName = editingCharacter.id
+      ? 'characters:update'
+      : 'characters:create';
+    const payload = editingCharacter.id
+      ? {
+          characterId: editingCharacter.id,
+          character: editingCharacter
+        }
+      : editingCharacter;
+
+    socket.emit(eventName, payload, (result: {
+      ok: boolean;
+      character?: CharacterRecord;
+      error?: string;
+    }) => {
+      if (!result.ok || !result.character) {
+        errorMessage = result.error ?? 'The character could not be saved.';
+        return;
+      }
+
+      editingCharacter = structuredClone(result.character);
+      statusMessage = 'Character saved to the shared library.';
+    });
+  }
+
+  function selectCharacter(character: CharacterRecord): void {
+    clearMessages();
+
+    socket.emit('characters:select', character.id, (result: {
+      ok: boolean;
+      error?: string;
+    }) => {
+      if (result.ok) {
+        statusMessage = `${character.name} is now your active character.`;
+      } else {
+        errorMessage = result.error ?? 'The character could not be selected.';
+      }
+    });
+  }
+
+  function deleteCharacter(): void {
+    if (!editingCharacter?.id) {
+      return;
+    }
+
+    if (!deleteArmed) {
+      deleteArmed = true;
+      return;
+    }
+
+    socket.emit('characters:delete', editingCharacter.id, (result: {
+      ok: boolean;
+      error?: string;
+    }) => {
+      if (!result.ok) {
+        errorMessage = result.error ?? 'The character could not be deleted.';
+        deleteArmed = false;
+        return;
+      }
+
+      closeEditor();
+      statusMessage = 'Character deleted.';
+    });
+  }
+
+  async function uploadExpression(
+    event: Event,
+    expression: CharacterExpression
+  ): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+
+    if (!file || !editingCharacter) {
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      errorMessage = 'Character images must be 8 MB or smaller.';
+      input.value = '';
+      return;
+    }
+
+    uploadingExpression = expression;
+    clearMessages();
+
+    try {
+      const response = await fetch('/api/character-assets/images', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type
+        },
+        body: file
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.path) {
+        throw new Error(result.error ?? 'The image upload failed.');
+      }
+
+      editingCharacter.images[expression] = result.path;
+      editingCharacter = editingCharacter;
+      statusMessage = `${expressions.find((item) => item.id === expression)?.label} expression uploaded.`;
+    } catch (error) {
+      errorMessage = error instanceof Error
+        ? error.message
+        : 'The image upload failed.';
+    } finally {
+      uploadingExpression = null;
+      input.value = '';
+    }
+  }
 </script>
 
 <section
-  class="character-terminal"
+  class="character-library"
   class:hide={$location !== 'character'}
   transition:blur={{ duration: 300 }}
   aria-labelledby="character-title"
 >
   <header>
-    <span>DEJAVU://IDENTITY</span>
+    <span>DEJAVU://CHARACTER_LIBRARY</span>
     <span>{$sessionState.playerId?.toUpperCase()}</span>
   </header>
 
   <div class="screen">
-    <p class="eyebrow">SYMBI BIOLINK PROFILE</p>
-    <h1 id="character-title">{$localPlayer?.name ?? 'Unknown player'}</h1>
-
-    {#if $localPlayer}
-      <dl class="stats-grid">
-        <div class="krypto-stat">
-          <dt>₭rypto</dt>
-          <dd>{$netRunnersGameState.p1.money}₭</dd>
-        </div>
-        {#each Object.entries($localPlayer.stats) as [stat, value]}
-          <div>
-            <dt>{stat}</dt>
-            <dd>{value}</dd>
-          </div>
-        {/each}
-      </dl>
-
-      <div class="profile-summary">
-        <p>
-          <span>STATUS</span>
-          {$localPlayer.statusEffects.length > 0
-            ? $localPlayer.statusEffects.join(', ')
-            : 'STABLE'}
-        </p>
-        <p>
-          <span>CAMPAIGN</span>
-          {$campaignState?.campaignId.slice(0, 8)}
-        </p>
+    <div class="title-row">
+      <div>
+        <p class="eyebrow">CENTRAL CAST DATABASE</p>
+        <h1 id="character-title">Characters</h1>
+        <p>Create reusable players and NPCs. Their stats, wallet, and expression set follow them into games and stories.</p>
       </div>
+      <button class="primary-button" type="button" on:click={startCharacter}>
+        New character
+      </button>
+    </div>
 
-      <section class="equipment-section" aria-labelledby="equipment-title">
-        <p class="eyebrow">CARRIED EQUIPMENT</p>
-        <h2 id="equipment-title">Bag and known contacts</h2>
+    {#if statusMessage}
+      <p class="status-message" role="status">{statusMessage}</p>
+    {/if}
 
-        <div class="bag-grid">
-          <article>
-            <h3>Inventory</h3>
-            {#if $localPlayer.inventory.length}
-              <ul class="inventory-list">
-                {#each $localPlayer.inventory as item}
-                  <li>{item}</li>
-                {/each}
-              </ul>
-            {:else}
-              <p class="empty-state">Your bag is empty.</p>
-            {/if}
+    {#if errorMessage}
+      <p class="error-message" role="alert">{errorMessage}</p>
+    {/if}
 
-            <h3 class="mods-heading">Installed neuro mods</h3>
-            {#if $campaignState?.installedMods.length}
-              <ul class="inventory-list">
-                {#each $campaignState.installedMods as modId}
-                  <li>{modId === 'neuro-link-chat' ? 'Neuro-Link Chat' : modId}</li>
-                {/each}
-              </ul>
-            {:else}
-              <p class="empty-state">No neuro mods installed.</p>
-            {/if}
-          </article>
-
-          <article>
-            <h3>Known contacts</h3>
-            {#if $localPlayer.knownCharacters.length}
-              <div class="contact-list">
-                {#each $localPlayer.knownCharacters as characterId}
-                  {@const character = characterRegistry[characterId]}
-                  {#if character}
-                    <div class="contact-card">
-                      {#if character.image}
-                        <img src={character.image} alt="">
-                      {/if}
-                      <div>
-                        <h4>{character.name}</h4>
-                        <p class="contact-role">
-                          {character.association} · {character.role}
-                        </p>
-                        <p>{character.summary}</p>
-                      </div>
-                    </div>
-                  {/if}
-                {/each}
-              </div>
-            {:else}
-              <p class="empty-state">No contacts have been identified.</p>
-            {/if}
-          </article>
+    {#if editingCharacter}
+      <form class="character-form" on:submit|preventDefault={saveCharacter}>
+        <div class="form-heading">
+          <div>
+            <p class="eyebrow">{editingCharacter.id ? 'EDIT CHARACTER' : 'NEW CHARACTER'}</p>
+            <h2>{editingCharacter.name || 'Unnamed character'}</h2>
+          </div>
+          <button type="button" on:click={closeEditor}>Close</button>
         </div>
-      </section>
+
+        <div class="field-grid">
+          <label>
+            <span>Name</span>
+            <input bind:value={editingCharacter.name} maxlength="48">
+          </label>
+
+          <label>
+            <span>Wallet</span>
+            <input type="number" min="0" max="999999999" bind:value={editingCharacter.wallet}>
+          </label>
+        </div>
+
+        <label>
+          <span>Notes and role</span>
+          <textarea bind:value={editingCharacter.notes} maxlength="500" rows="4"></textarea>
+        </label>
+
+        <fieldset>
+          <legend>Stats</legend>
+          <div class="stats-grid">
+            {#each Object.keys(editingCharacter.stats) as stat}
+              <label>
+                <span>{stat}</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  bind:value={editingCharacter.stats[stat]}
+                >
+              </label>
+            {/each}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Dialogue expressions</legend>
+          <p class="fieldset-help">Upload a head-and-shoulders portrait for each emotional state.</p>
+          <div class="expression-grid">
+            {#each expressions as expression}
+              <article>
+                {#if editingCharacter.images[expression.id]}
+                  <img src={editingCharacter.images[expression.id]} alt={`${editingCharacter.name} ${expression.label.toLowerCase()} expression`}>
+                {:else}
+                  <div class="image-placeholder">NO IMAGE</div>
+                {/if}
+                <strong>{expression.label}</strong>
+                <label class="upload-button">
+                  {uploadingExpression === expression.id ? 'Uploading…' : 'Upload image'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml"
+                    disabled={uploadingExpression !== null}
+                    on:change={(event) => {
+                      uploadExpression(event, expression.id);
+                    }}
+                  >
+                </label>
+                {#if editingCharacter.images[expression.id]}
+                  <button type="button" on:click={() => {
+                    removeExpression(expression.id);
+                  }}>Remove</button>
+                {/if}
+              </article>
+            {/each}
+          </div>
+        </fieldset>
+
+        <div class="form-actions">
+          {#if editingCharacter.id && !editingCharacter.builtIn}
+            <button class="danger-button" type="button" on:click={deleteCharacter}>
+              {deleteArmed ? 'Confirm delete' : 'Delete'}
+            </button>
+          {/if}
+          <button class="primary-button" type="submit" disabled={!editingCharacter.name.trim()}>
+            Save character
+          </button>
+        </div>
+      </form>
+    {:else}
+      {#if $activeCharacter}
+        <section class="active-profile" aria-label="Active character">
+          <div>
+            <p class="eyebrow">ACTIVE CHARACTER</p>
+            <h2>{$activeCharacter.name}</h2>
+          </div>
+          <strong>{$activeCharacter.wallet.toLocaleString()}₭</strong>
+        </section>
+      {/if}
+
+      <div class="character-grid">
+        {#each $characterLibraryState.characters as character}
+          <article class:active={character.id === $activeCharacter?.id}>
+            {#if character.images.normal}
+              <img src={character.images.normal} alt="">
+            {:else}
+              <div class="portrait-placeholder">{character.name.slice(0, 1).toUpperCase()}</div>
+            {/if}
+            <div>
+              <span>{character.builtIn ? 'BUILT-IN' : 'CUSTOM'}</span>
+              <h2>{character.name}</h2>
+              <p>{character.notes || 'No character notes yet.'}</p>
+              <strong>{character.wallet.toLocaleString()}₭</strong>
+            </div>
+            <div class="card-actions">
+              <button type="button" on:click={() => {
+                selectCharacter(character);
+              }}>
+                {character.id === $activeCharacter?.id ? 'Selected' : 'Play as'}
+              </button>
+              <button type="button" on:click={() => {
+                openCharacter(character);
+              }}>Edit</button>
+            </div>
+          </article>
+        {/each}
+      </div>
     {/if}
   </div>
 </section>
 
 <style lang="scss">
-  .character-terminal {
+  .character-library {
     width: 100%;
     height: 95vh;
-    max-width: 1100px;
     overflow: hidden;
+    color: #e8edf6;
     background: #150510;
     border: 1px solid #ff3dbb;
     border-radius: 8px;
     box-shadow: 0 0 34px #ff3dbb55;
 
-    header {
+    > header {
       min-height: 38px;
       padding: 8px 14px;
       color: #ff9ada;
@@ -139,166 +399,286 @@
 
   .screen {
     height: calc(100% - 38px);
-    padding: clamp(24px, 5vw, 64px);
+    padding: clamp(22px, 4vw, 52px);
     overflow-y: auto;
   }
 
+  .title-row,
+  .form-heading,
+  .active-profile,
+  .form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .title-row {
+    margin-bottom: 30px;
+
+    h1 {
+      margin-bottom: 10px;
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: clamp(2rem, 5vw, 4rem);
+    }
+
+    p:last-child {
+      max-width: 720px;
+      color: #9ca8bb;
+      line-height: 1.6;
+    }
+  }
+
   .eyebrow {
-    margin-bottom: 8px;
+    margin-bottom: 7px;
     color: #ff75c8;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     letter-spacing: 2px;
   }
 
-  h1 {
-    margin-bottom: 32px;
+  button,
+  .upload-button {
+    min-height: 40px;
+    padding: 9px 13px;
     color: #e8edf6;
-    font-family: "Orbitron", "Space Mono", sans-serif;
-    font-size: clamp(2rem, 5vw, 4rem);
+    background: #24162c;
+    border: 1px solid #76537f;
+    cursor: pointer;
+    font-weight: 700;
   }
 
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
+  .primary-button {
+    color: #170612;
+    background: #ff75c8;
+    border-color: #ffc3e7;
+  }
 
-    div {
+  .danger-button {
+    color: #ffc5d5;
+    background: #451225;
+    border-color: #d34270;
+  }
+
+  .status-message,
+  .error-message {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+  }
+
+  .status-message {
+    color: #bfffd9;
+    background: #0d3423;
+    border: 1px solid #36b873;
+  }
+
+  .error-message {
+    color: #ffc5d5;
+    background: #3d0e20;
+    border: 1px solid #e94c7d;
+  }
+
+  .active-profile {
+    margin-bottom: 20px;
+    padding: 18px;
+    background: #211027;
+    border: 1px solid #d44ba3;
+
+    h2 {
+      color: #ffffff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    > strong {
+      color: #55f09a;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 1.4rem;
+    }
+  }
+
+  .character-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 16px;
+
+    > article {
       padding: 16px;
       background: #210a19;
       border: 1px solid #6b1f50;
-      border-left: 3px solid #ff3dbb;
-    }
 
-    dt {
-      margin-bottom: 8px;
-      color: #8893a2;
-      font-size: 0.7rem;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-    }
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 14px;
 
-    dd {
-      color: #ff75c8;
-      font-family: "Orbitron", "Space Mono", sans-serif;
-      font-size: 1.5rem;
-    }
+      &.active {
+        border-color: #55f09a;
+        box-shadow: inset 3px 0 #55f09a;
+      }
 
-    .krypto-stat {
-      border-left-color: #55f09a;
+      > img,
+      > .portrait-placeholder {
+        width: 82px;
+        height: 82px;
+        object-fit: cover;
+        border: 1px solid #ff3dbb;
+      }
 
-      dd {
+      h2 {
+        margin: 5px 0 8px;
+        color: #ffffff;
+      }
+
+      p {
+        min-height: 2.8em;
+        color: #9ba7b9;
+        line-height: 1.4;
+      }
+
+      span {
+        color: #ff75c8;
+        font-size: 0.65rem;
+        letter-spacing: 1px;
+      }
+
+      strong {
         color: #55f09a;
       }
     }
   }
 
-  .profile-summary {
-    margin-top: 32px;
-    padding-top: 18px;
-    border-top: 1px dashed #334155;
+  .portrait-placeholder {
+    color: #ff75c8;
+    background: #190711;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 1.5rem;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .card-actions {
+    grid-column: 1 / -1;
 
     display: flex;
-    flex-wrap: wrap;
-    gap: 28px;
-
-    p {
-      color: #e8edf6;
-    }
-
-    span {
-      margin-right: 8px;
-      color: #ff75c8;
-    }
+    justify-content: flex-end;
+    gap: 8px;
   }
 
-  .equipment-section {
-    margin-top: 52px;
-    padding-top: 30px;
-    border-top: 1px solid #6b1f50;
+  .character-form {
+    padding: clamp(18px, 3vw, 32px);
+    background: #170b19;
+    border: 1px solid #67365e;
 
     h2 {
-      margin: 8px 0 24px;
-      color: #e8edf6;
+      color: #ffffff;
       font-family: "Orbitron", "Space Mono", sans-serif;
-      font-size: clamp(1.35rem, 3vw, 2rem);
+    }
+
+    > label,
+    .field-grid label,
+    .stats-grid label {
+      margin-top: 18px;
+
+      display: grid;
+      gap: 7px;
+    }
+
+    label > span,
+    legend {
+      color: #f1b5dc;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      color: #ffffff;
+      background: #080710;
+      border: 1px solid #65485f;
+    }
+
+    fieldset {
+      margin-top: 26px;
+      padding: 18px;
+      border: 1px solid #5e2c55;
     }
   }
 
-  .bag-grid {
+  .field-grid,
+  .stats-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
-    gap: 20px;
-
-    article {
-      padding: 20px;
-      background: #210a19;
-      border: 1px solid #6b1f50;
-    }
-
-    h3 {
-      margin-bottom: 18px;
-      color: #9dffa6;
-      font-size: 1rem;
-    }
-  }
-
-  .inventory-list {
-    list-style: square inside;
-
-    li {
-      padding: 8px 0;
-      color: #e8edf6;
-      border-bottom: 1px dashed #6b1f50;
-    }
-  }
-
-  .mods-heading {
-    margin-top: 30px;
-  }
-
-  .contact-list {
-    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 12px;
   }
 
-  .contact-card {
-    padding: 14px;
-    background: #190711;
-    border-left: 3px solid #ff3dbb;
+  .fieldset-help {
+    margin: 7px 0 16px;
+    color: #97a3b5;
+  }
 
+  .expression-grid {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
 
-    img {
-      width: 72px;
-      height: 72px;
+    article {
+      padding: 12px;
+      background: #0b0910;
+      border: 1px solid #4b3047;
+
+      display: grid;
+      gap: 9px;
+    }
+
+    img,
+    .image-placeholder {
+      width: 100%;
+      aspect-ratio: 1;
       object-fit: cover;
-      border: 1px solid #4f813d;
+      background: #17121a;
+      border: 1px solid #4b3047;
     }
 
-    h4 {
-      color: #d7f0bb;
+    .image-placeholder {
+      color: #715f70;
+      font-size: 0.66rem;
+      letter-spacing: 1px;
+
+      display: grid;
+      place-items: center;
     }
 
-    p {
-      margin-top: 5px;
-      line-height: 1.4;
+    strong {
+      color: #ffffff;
     }
   }
 
-  .contact-role {
-    color: #7fa66c;
-    font-size: 0.75rem;
+  .upload-button {
+    text-align: center;
+
+    input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
   }
 
-  .empty-state {
-    color: #8893a2;
+  .form-actions {
+    margin-top: 24px;
   }
 
-  @media (max-width: 850px) {
-    .bag-grid {
-      grid-template-columns: 1fr;
+  @media (max-width: 700px) {
+    .title-row,
+    .form-heading,
+    .active-profile {
+      align-items: flex-start;
+      flex-direction: column;
     }
   }
 </style>

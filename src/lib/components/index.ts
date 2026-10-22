@@ -3,6 +3,7 @@ import BagMenu from './BagMenu.svelte';
 import Billywig from './Billywig.svelte';
 import Client from './Client.svelte';
 import CharacterMenu from './CharacterMenu.svelte';
+import CharacterLanding from './CharacterLanding.svelte';
 import ChatPanel from './ChatPanel.svelte';
 import Chopsticks from './Chopsticks.svelte';
 import Dice from './Dice.svelte';
@@ -45,6 +46,7 @@ export {
   PacketWar,
   PlayerGamblingCard,
   CharacterMenu,
+  CharacterLanding,
   ChatPanel,
   SaveMenu,
   SettingsMenu,

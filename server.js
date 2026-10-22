@@ -64,6 +64,7 @@ import {
   voteArcadeRematch
 } from './server/arcadeSessions.js';
 import { createStoryRepository } from './server/storyRepository.js';
+import { createCharacterRepository } from './server/characterRepository.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -72,6 +73,7 @@ const host = process.env.HOST ?? '0.0.0.0';
 const savesDirectory = join(__dirname, 'data', 'saves');
 const storyDatabasePath = join(__dirname, 'data', 'dejavu.sqlite');
 const storyImageDirectory = join(__dirname, 'public', 'uploads', 'stories');
+const characterImageDirectory = join(__dirname, 'public', 'uploads', 'characters');
 const reconnectGraceMs = 60_000;
 const storyImageExtensions = new Map([
   ['image/avif', 'avif'],
@@ -97,6 +99,11 @@ const playerSlots = {
 };
 
 const storyRepository = createStoryRepository(storyDatabasePath);
+const characterRepository = createCharacterRepository(storyDatabasePath);
+const characterSelections = {
+  p1: null,
+  p2: null
+};
 const storySelections = {
   p1: null,
   p2: null
@@ -242,6 +249,38 @@ app.delete('/api/story-assets/images/:fileName', async (request, response) => {
   }
 });
 
+app.post(
+  '/api/character-assets/images',
+  express.raw({
+    type: [...storyImageExtensions.keys()],
+    limit: '8mb'
+  }),
+  async (request, response) => {
+    const extension = storyImageExtensions.get(request.headers['content-type']);
+
+    if (!extension || !Buffer.isBuffer(request.body) || request.body.length === 0) {
+      response.status(415).json({
+        error: 'Choose a PNG, JPEG, WebP, GIF, AVIF, or SVG image.'
+      });
+      return;
+    }
+
+    try {
+      await mkdir(characterImageDirectory, { recursive: true });
+      const fileName = `${randomUUID()}.${extension}`;
+      await writeFile(join(characterImageDirectory, fileName), request.body);
+      response.status(201).json({
+        path: `/uploads/characters/${fileName}`
+      });
+    } catch (error) {
+      console.error('Could not store a character image.', error);
+      response.status(500).json({
+        error: 'The character image could not be stored on the host.'
+      });
+    }
+  }
+);
+
 app.use(express.static(join(__dirname, 'public')));
 
 app.get('/', (_request, response) => {
@@ -267,6 +306,7 @@ io.on('connection', (socket) => {
 
   socket.emit('session:status', createSessionStatus(playerId));
   socket.emit('campaign:state', getCampaignSnapshot(campaignState));
+  socket.emit('characters:state', createCharacterLibraryState());
   socket.emit('library:state', createLibraryState());
   socket.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
   socket.emit('pigz:state', getPigzSnapshot(pigzState));
@@ -277,6 +317,120 @@ io.on('connection', (socket) => {
     socket.emit('chat:history', chatMessages);
   }
   broadcastSessionStatus();
+
+  socket.on('characters:create', (input, acknowledge = () => {}) => {
+    try {
+      const character = characterRepository.createCharacter(input ?? {});
+      acknowledge({
+        ok: true,
+        character
+      });
+      broadcastCharacterLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not create the character.'
+      });
+    }
+  });
+
+  socket.on('characters:update', (request, acknowledge = () => {}) => {
+    try {
+      const character = characterRepository.updateCharacter(
+        String(request?.characterId ?? ''),
+        request?.character ?? {}
+      );
+      acknowledge({
+        ok: true,
+        character
+      });
+      broadcastCharacterLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not update the character.'
+      });
+    }
+  });
+
+  socket.on('characters:delete', (characterId, acknowledge = () => {}) => {
+    const normalizedCharacterId = String(characterId ?? '');
+    const referencedStories = storyRepository.listStories().filter((story) => {
+      const document = storyRepository.getStory(story.id);
+      return document?.characterIds?.includes(normalizedCharacterId);
+    });
+
+    if (referencedStories.length > 0) {
+      acknowledge({
+        ok: false,
+        error: `This character is used by ${referencedStories.map((story) => story.title).join(', ')}.`
+      });
+      return;
+    }
+
+    try {
+      characterRepository.deleteCharacter(normalizedCharacterId);
+
+      for (const participantId of ['p1', 'p2']) {
+        if (characterSelections[participantId] === normalizedCharacterId) {
+          characterSelections[participantId] = null;
+        }
+      }
+
+      acknowledge({ ok: true });
+      broadcastCharacterLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not delete the character.'
+      });
+    }
+  });
+
+  socket.on('characters:select', (characterId, acknowledge = () => {}) => {
+    const character = characterRepository.getCharacter(String(characterId ?? ''));
+
+    if (!character) {
+      acknowledge({
+        ok: false,
+        error: 'Character not found.'
+      });
+      return;
+    }
+
+    characterSelections[playerId] = character.id;
+    acknowledge({
+      ok: true,
+      character
+    });
+    broadcastCharacterLibraryState();
+  });
+
+  socket.on('characters:adjust-wallet', (amount, acknowledge = () => {}) => {
+    const characterId = characterSelections[playerId];
+
+    if (!characterId) {
+      acknowledge({
+        ok: false,
+        error: 'Select a character before placing a wager.'
+      });
+      return;
+    }
+
+    try {
+      const character = characterRepository.adjustWallet(characterId, amount);
+      acknowledge({
+        ok: true,
+        character
+      });
+      broadcastCharacterLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not update the wallet.'
+      });
+    }
+  });
 
   socket.on('library:get-story', (storyId, acknowledge = () => {}) => {
     const story = storyRepository.getStory(String(storyId ?? ''));
@@ -294,6 +448,7 @@ io.on('connection', (socket) => {
 
   socket.on('library:create-story', (input, acknowledge = () => {}) => {
     try {
+      validateStoryCharacterReferences(input ?? {});
       const story = storyRepository.createStory(input ?? {});
       acknowledge({
         ok: true,
@@ -310,6 +465,7 @@ io.on('connection', (socket) => {
 
   socket.on('library:update-story', (request, acknowledge = () => {}) => {
     try {
+      validateStoryCharacterReferences(request?.story ?? {});
       const story = storyRepository.updateStory(
         String(request?.storyId ?? ''),
         request?.story
@@ -511,7 +667,8 @@ io.on('connection', (socket) => {
 
     campaignState = createCampaignState(story, {
       mode: activeStoryMode,
-      soloPlayerId: activeSoloPlayerId
+      soloPlayerId: activeSoloPlayerId,
+      characters: getStoryCharacters(story)
     });
     initializeDeadlines(campaignState);
     resetBillywigCompletion();
@@ -608,7 +765,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('netrunners:join', () => {
-    joinNetRunners(netRunnersState, playerId, campaignState.players[playerId].name);
+    const character = selectedCharacter(playerId);
+
+    joinNetRunners(
+      netRunnersState,
+      playerId,
+      character?.name ?? campaignState.players[playerId].name,
+      character?.wallet ?? 0
+    );
     io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
   });
 
@@ -710,7 +874,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('pigz:join', () => {
-    joinPigz(pigzState, playerId, campaignState.players[playerId].name);
+    const character = selectedCharacter(playerId);
+
+    joinPigz(
+      pigzState,
+      playerId,
+      character?.name ?? campaignState.players[playerId].name,
+      character?.wallet ?? 0
+    );
     io.emit('pigz:state', getPigzSnapshot(pigzState));
   });
 
@@ -742,6 +913,7 @@ io.on('connection', (socket) => {
     acknowledge(result);
 
     if (result.ok) {
+      synchronizeCharacterWallet(playerId, pigzState.players[playerId].money);
       io.emit('pigz:state', getPigzSnapshot(pigzState));
     }
   });
@@ -1021,6 +1193,15 @@ setInterval(() => {
   }
 
   if (netRunnersChanged) {
+    if (netRunnersState.status === 'finished') {
+      for (const playerId of ['p1', 'p2']) {
+        synchronizeCharacterWallet(
+          playerId,
+          netRunnersState.players[playerId].money
+        );
+      }
+    }
+
     io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
   }
 }, 250);
@@ -1184,9 +1365,11 @@ function scheduleSlotRelease(playerId, expectedToken) {
     playerSlots[playerId] = createEmptySlot();
     storySelections[playerId] = null;
     storySelectionModes[playerId] = null;
+    characterSelections[playerId] = null;
     synchronizeActiveStory();
     broadcastSessionStatus();
     broadcastLibraryState();
+    broadcastCharacterLibraryState();
   }, reconnectGraceMs);
 }
 
@@ -1203,6 +1386,67 @@ function createLibraryState() {
     activeStoryMode,
     activeSoloPlayerId
   };
+}
+
+function createCharacterLibraryState() {
+  return {
+    characters: characterRepository.listCharacters(),
+    selections: {
+      ...characterSelections
+    }
+  };
+}
+
+function broadcastCharacterLibraryState() {
+  io.emit('characters:state', createCharacterLibraryState());
+}
+
+function selectedCharacter(playerId) {
+  const characterId = characterSelections[playerId];
+  return characterId ? characterRepository.getCharacter(characterId) : null;
+}
+
+function synchronizeCharacterWallet(playerId, wallet) {
+  const character = selectedCharacter(playerId);
+
+  if (!character || character.wallet === wallet) {
+    return;
+  }
+
+  characterRepository.setWallet(character.id, wallet);
+  broadcastCharacterLibraryState();
+}
+
+function validateStoryCharacterReferences(story) {
+  const playModes = story.playModes ?? {
+    singleplayer: false,
+    multiplayer: true
+  };
+  const mainCharacterIds = story.mainCharacterIds ?? {};
+  const requiredIds = [];
+
+  if (playModes.singleplayer) {
+    requiredIds.push(mainCharacterIds.singleplayer);
+  }
+
+  if (playModes.multiplayer) {
+    requiredIds.push(
+      mainCharacterIds.multiplayer?.p1,
+      mainCharacterIds.multiplayer?.p2
+    );
+  }
+
+  for (const characterId of requiredIds) {
+    if (!characterId || !characterRepository.getCharacter(characterId)) {
+      throw new Error('Every playable role must reference an existing character.');
+    }
+  }
+}
+
+function getStoryCharacters(story) {
+  return (story.characterIds ?? [])
+    .map((characterId) => characterRepository.getCharacter(characterId))
+    .filter(Boolean);
 }
 
 function broadcastLibraryState() {
@@ -1244,7 +1488,8 @@ function synchronizeActiveStory(preferredPlayerId = null) {
   if (story) {
     campaignState = createCampaignState(story, {
       mode: nextMode,
-      soloPlayerId: activeSoloPlayerId
+      soloPlayerId: activeSoloPlayerId,
+      characters: getStoryCharacters(story)
     });
     initializeDeadlines(campaignState);
   }

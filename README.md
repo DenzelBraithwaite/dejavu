@@ -31,6 +31,8 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 ### Story cartridges and local builder
 
 - Story Mode starts without a cartridge selected.
+- Each story assigns one main character to its solo map and two different main characters to its multiplayer map.
+- Dialogue nodes can reference any library character and select that character's normal, shocked, angry, sad, or happy expression.
 - The Library lists persistent story documents and shows each player's current cartridge.
 - Solo cartridges launch for their selecting player. Multiplayer cartridges unlock when both players select the same story and mode.
 - Selecting a different matching story starts a fresh shared campaign for that story.
@@ -50,7 +52,8 @@ The server owns the canonical campaign state. Browsers submit actions such as ch
 The campaign state includes:
 
 - Current node for each player.
-- Player names, stats, status effects, inventory, and known characters.
+- Snapshots of the story's referenced characters, including player names, wallets, stats, and expression images.
+- Player status effects, inventory, and known characters.
 - Story flags.
 - Checkpoint arrivals.
 - Conversation messages and active speaker.
@@ -95,10 +98,13 @@ The terminal uses a game-specific typewriter rather than `typed.js`. It supports
 
 Each browser stores independent music and sound-effect mute and volume settings. Both channels start muted by default. Story scenes can start or stop looping music and trigger a one-shot sound. Audio assets live under `public/audio/music` and `public/audio/sounds`; the folders currently contain no playable assets.
 
-### Character, journal, settings, and saves
+### Characters, journal, settings, and saves
 
 - The journal displays decisions and transcript entries.
-- The character screen displays stats, inventory, installed mods, and known contacts in one scrollable view.
+- Every browser chooses an active character before entering the main application.
+- The Characters screen creates and edits reusable players and NPCs with a name, wallet, stats, notes, and five dialogue expressions.
+- Active-character wallets are shared with main-menu betting games, while story campaigns use the characters assigned by the story.
+- Stories keep character IDs and snapshot the referenced records when a campaign starts, so later library edits do not rewrite a campaign already in progress.
 - Save and load controls live beneath the local audio controls in Settings.
 - Versioned JSON saves are stored by the LAN host in `data/saves/`.
 - Loading a save restores the shared campaign for both clients.
@@ -167,6 +173,7 @@ The ignored `Notes/character_images/` directory contains additional character re
 │   └── GAME_BUILDER_DIRECTION.md
 ├── public/                         Built client and tracked artwork
 ├── server/
+│   ├── characterRepository.js     Persistent SQLite character CRUD
 │   ├── gameSession.js              Campaign rules and scene execution
 │   ├── netRunnersSession.js        Multiplayer NetRunners authority
 │   └── storyRepository.js          Persistent SQLite story CRUD

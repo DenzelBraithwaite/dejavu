@@ -1,9 +1,12 @@
 import { derived, writable } from 'svelte/store';
 import type { StoryDocument } from './library';
+import type { CharacterRecord } from './characters';
 import { sessionState, type PlayerId } from './session';
 
 export type CampaignPlayer = {
+  characterId: string | null;
   name: string;
+  wallet: number;
   stats: Record<string, number>;
   inventory: string[];
   knownCharacters: string[];
@@ -40,6 +43,7 @@ export type CampaignState = {
   soloPlayerId: PlayerId | null;
   currentScene: Record<PlayerId, string>;
   players: Record<PlayerId, CampaignPlayer>;
+  characters: CharacterRecord[];
   installedMods: string[];
   flags: Record<string, string | number | boolean>;
   checkpoints: Record<string, PlayerId[]>;

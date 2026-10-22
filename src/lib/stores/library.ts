@@ -6,6 +6,8 @@ export type StoryNode = {
   type: string;
   audience?: 'both' | PlayerId;
   speaker?: string;
+  characterId?: string;
+  expression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
   portrait?: string;
   portraitAlt?: string;
   text?: string;
@@ -59,6 +61,11 @@ export type StoryDocument = {
     singleplayer: boolean;
     multiplayer: boolean;
   };
+  mainCharacterIds: {
+    singleplayer: string | null;
+    multiplayer: Record<PlayerId, string | null>;
+  };
+  characterIds: string[];
   singleplayerInitialSceneId: string;
   initialSceneIds: Record<PlayerId, string>;
   nodes: StoryNode[];

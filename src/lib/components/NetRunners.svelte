@@ -337,6 +337,8 @@
   // Determines how much the player wins based on the odds of their winning bet.
   // In all cases, for every time the color bet appears in the odds lane (reducing odds of winning) gain 25%. e.g. 2/7 odds cards are pink, pink gets + 50% on win.
   function calculateWinnings(player: {name: string; money: number; amountBet: number; colorBet: string; points: number}, playerNum: 'p1' | 'p2' | 'p3' | 'p4') {
+    const walletBeforeSettlement = $netRunnersGameState[playerNum].money;
+
     if (player.colorBet === $netRunnersGameState.lastWinningColor) {
       netRunnersGameState.update($netRunnersGameState => {
         if ($netRunnersGameState[playerNum].amountBet === 0) {
@@ -364,6 +366,13 @@
         $netRunnersGameState[playerNum].money -= $netRunnersGameState[playerNum].amountBet;
         return $netRunnersGameState;
       });
+    }
+
+    if (playerNum === 'p1' && $netRunnersGameState.singleplayer) {
+      socket.emit(
+        'characters:adjust-wallet',
+        $netRunnersGameState.p1.money - walletBeforeSettlement
+      );
     }
   }
 

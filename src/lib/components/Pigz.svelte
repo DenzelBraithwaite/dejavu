@@ -295,6 +295,8 @@
         money: state.p1.money + balanceChange
       }
     }));
+
+    socket.emit('characters:adjust-wallet', balanceChange);
   }
 
   function resetLocalRound(): void {

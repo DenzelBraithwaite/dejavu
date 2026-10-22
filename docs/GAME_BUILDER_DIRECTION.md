@@ -10,7 +10,7 @@ The existing campaign becomes one story built with the same tools available to o
 
 ### Story library
 
-The story library lists drafts, published stories, shared projects, and recent playtests. A story owns its graph, terminal themes, assets, variables, character records, and supported minigames.
+The story library lists drafts, published stories, shared projects, and recent playtests. A story owns its graph, terminal themes, assets, variables, references to reusable character records, and supported minigames.
 
 Creators can:
 

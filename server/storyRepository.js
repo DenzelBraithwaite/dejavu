@@ -144,6 +144,8 @@ export function createStoryRepository(databasePath) {
         initialSceneIds: existing.initialSceneIds,
         singleplayerInitialSceneId: existing.singleplayerInitialSceneId,
         playModes: existing.playModes,
+        mainCharacterIds: existing.mainCharacterIds,
+        characterIds: existing.characterIds,
         theme: existing.theme,
         supportedMinigames: existing.supportedMinigames
       });
@@ -189,9 +191,11 @@ function seedBuiltInStory(database, document) {
     ];
 
     const requiresStatusMigration = storedDocument.status !== 'playable';
+    const requiresCharacterMigration = !storedDocument.mainCharacterIds;
 
     if (supportedMinigames.length === storedDocument.supportedMinigames?.length
-      && !requiresStatusMigration) {
+      && !requiresStatusMigration
+      && !requiresCharacterMigration) {
       return;
     }
 
@@ -200,7 +204,9 @@ function seedBuiltInStory(database, document) {
       ...storedDocument,
       version: nextVersion,
       status: 'playable',
-      supportedMinigames
+      supportedMinigames,
+      mainCharacterIds: storedDocument.mainCharacterIds ?? document.mainCharacterIds,
+      characterIds: storedDocument.characterIds ?? document.characterIds
     };
 
     database.prepare(`
@@ -268,6 +274,8 @@ function createStoryDocument(input) {
     },
     singleplayerInitialSceneId: input.singleplayerInitialSceneId ?? `${id}.solo.start`,
     playModes,
+    mainCharacterIds: normalizeMainCharacterIds(input.mainCharacterIds),
+    characterIds: normalizeCharacterIds(input.characterIds, input.mainCharacterIds),
     nodes: startNodes,
     theme: input.theme ?? {
       id: 'default-terminal',
@@ -300,6 +308,8 @@ function normalizeStoryDocument(document) {
     version: Math.max(1, Number(document.version ?? 1)),
     builtIn: Boolean(document.builtIn),
     playModes: normalizePlayModes(document.playModes),
+    mainCharacterIds: normalizeMainCharacterIds(document.mainCharacterIds),
+    characterIds: normalizeCharacterIds(document.characterIds, document.mainCharacterIds),
     singleplayerInitialSceneId: String(
       document.singleplayerInitialSceneId
         ?? document.initialSceneIds?.p1
@@ -309,6 +319,35 @@ function normalizeStoryDocument(document) {
       ? document.supportedMinigames
       : []
   };
+}
+
+function normalizeMainCharacterIds(value) {
+  return {
+    singleplayer: normalizeOptionalId(value?.singleplayer),
+    multiplayer: {
+      p1: normalizeOptionalId(value?.multiplayer?.p1),
+      p2: normalizeOptionalId(value?.multiplayer?.p2)
+    }
+  };
+}
+
+function normalizeCharacterIds(value, mainCharacterIds) {
+  const normalizedMainCharacters = normalizeMainCharacterIds(mainCharacterIds);
+  const characterIds = [
+    ...(Array.isArray(value) ? value : []),
+    normalizedMainCharacters.singleplayer,
+    normalizedMainCharacters.multiplayer.p1,
+    normalizedMainCharacters.multiplayer.p2
+  ]
+    .map(normalizeOptionalId)
+    .filter(Boolean);
+
+  return [...new Set(characterIds)];
+}
+
+function normalizeOptionalId(value) {
+  const id = String(value ?? '').trim();
+  return id || null;
 }
 
 function validateStoryStructure(document) {
@@ -329,6 +368,24 @@ function validateStoryStructure(document) {
   }
 
   const playModes = normalizePlayModes(document.playModes);
+  const mainCharacterIds = normalizeMainCharacterIds(document.mainCharacterIds);
+
+  if (playModes.singleplayer && !mainCharacterIds.singleplayer) {
+    throw new Error('Choose a main character for the single-player story.');
+  }
+
+  if (playModes.multiplayer) {
+    const playerOneCharacterId = mainCharacterIds.multiplayer.p1;
+    const playerTwoCharacterId = mainCharacterIds.multiplayer.p2;
+
+    if (!playerOneCharacterId || !playerTwoCharacterId) {
+      throw new Error('Choose both main characters for the multiplayer story.');
+    }
+
+    if (playerOneCharacterId === playerTwoCharacterId) {
+      throw new Error('Player 1 and Player 2 must use different characters.');
+    }
+  }
 
   if (playModes.multiplayer) {
     for (const playerId of ['p1', 'p2']) {

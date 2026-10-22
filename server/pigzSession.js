@@ -36,7 +36,11 @@ function createPlayer(name) {
   };
 }
 
-export function joinPigz(state, playerId, playerName) {
+export function joinPigz(state, playerId, playerName, wallet = STARTING_MONEY) {
+  if (!state.participants[playerId]) {
+    state.players[playerId].money = Math.max(0, Math.trunc(Number(wallet) || 0));
+  }
+
   state.participants[playerId] = true;
   state.players[playerId].name = playerName;
   state.departureNotice = null;

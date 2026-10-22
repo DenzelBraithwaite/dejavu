@@ -3,6 +3,11 @@
   import { fade } from 'svelte/transition';
   import { socket } from '../socket';
   import {
+    characterLibraryState,
+    type CharacterExpression,
+    type CharacterRecord
+  } from '../stores/characters';
+  import {
     libraryState,
     type StoryDocument,
     type StoryNode
@@ -77,6 +82,13 @@
     singleplayer: false,
     multiplayer: true
   };
+  let newMainCharacterIds = {
+    singleplayer: '',
+    multiplayer: {
+      p1: '',
+      p2: ''
+    }
+  };
   let activeStoryMap: StoryPlayMode = 'multiplayer';
   let editingStory: StoryDocument | null = null;
   let selectedNodeId = '';
@@ -124,6 +136,17 @@
   $: selectedNode = editingStory?.nodes.find(
     (node) => node.id === selectedNodeId
   ) ?? null;
+  $: newStoryHasCharacters = (
+    !newPlayModes.singleplayer
+      || Boolean(newMainCharacterIds.singleplayer)
+  ) && (
+    !newPlayModes.multiplayer
+      || (
+        Boolean(newMainCharacterIds.multiplayer.p1)
+        && Boolean(newMainCharacterIds.multiplayer.p2)
+        && newMainCharacterIds.multiplayer.p1 !== newMainCharacterIds.multiplayer.p2
+      )
+  );
   $: if ($location !== lastLocation) {
     lastLocation = $location;
 
@@ -187,6 +210,14 @@
     errorMessage = '';
   }
 
+  function characterExpressionImage(
+    character: CharacterRecord,
+    expression: unknown
+  ): string {
+    const normalizedExpression = String(expression ?? 'normal') as CharacterExpression;
+    return character.images[normalizedExpression] ?? '';
+  }
+
   function showLibrary(): void {
     mode = 'library';
     location.set('library');
@@ -228,7 +259,13 @@
       title: newTitle,
       description: newDescription,
       author: newAuthor,
-      playModes: newPlayModes
+      playModes: newPlayModes,
+      mainCharacterIds: newMainCharacterIds,
+      characterIds: [
+        newMainCharacterIds.singleplayer,
+        newMainCharacterIds.multiplayer.p1,
+        newMainCharacterIds.multiplayer.p2
+      ].filter(Boolean)
     }, (result: {
       ok: boolean;
       story?: StoryDocument;
@@ -245,6 +282,13 @@
       newPlayModes = {
         singleplayer: false,
         multiplayer: true
+      };
+      newMainCharacterIds = {
+        singleplayer: '',
+        multiplayer: {
+          p1: '',
+          p2: ''
+        }
       };
       editingStory = prepareStoryForEditor(result.story);
       activeStoryMap = editingStory.playModes.singleplayer
@@ -291,6 +335,7 @@
     }
 
     clearMessages();
+    synchronizeStoryCharacterIds();
     socket.emit('library:update-story', {
       storyId: editingStory.id,
       story: editingStory
@@ -310,12 +355,35 @@
     });
   }
 
+  function synchronizeStoryCharacterIds(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const characterIds = [
+      editingStory.mainCharacterIds.singleplayer,
+      editingStory.mainCharacterIds.multiplayer.p1,
+      editingStory.mainCharacterIds.multiplayer.p2,
+      ...editingStory.nodes.map((node) => node.characterId)
+    ].filter((characterId): characterId is string => Boolean(characterId));
+
+    editingStory.characterIds = [...new Set(characterIds)];
+  }
+
   function prepareStoryForEditor(story: StoryDocument): StoryDocument {
     const prepared = structuredClone(story);
     prepared.playModes ??= {
       singleplayer: false,
       multiplayer: true
     };
+    prepared.mainCharacterIds ??= {
+      singleplayer: null,
+      multiplayer: {
+        p1: null,
+        p2: null
+      }
+    };
+    prepared.characterIds ??= [];
 
     if (!prepared.singleplayerInitialSceneId
       || !prepared.nodes.some((node) => node.id === prepared.singleplayerInitialSceneId)) {
@@ -1654,6 +1722,8 @@
         return {
           ...baseNode,
           speaker: '',
+          characterId: '',
+          expression: 'normal',
           portrait: '',
           portraitAlt: ''
         };
@@ -1930,10 +2000,46 @@
           <p>If both are enabled, the editor keeps a separate node map for each mode.</p>
         </fieldset>
 
+        <fieldset class="play-mode-fieldset">
+          <legend>Main characters</legend>
+          <p>Stories reference the central character library. Multiplayer roles must use different characters.</p>
+
+          {#if newPlayModes.singleplayer}
+            <label for="new-solo-character">Singleplayer character</label>
+            <select id="new-solo-character" bind:value={newMainCharacterIds.singleplayer}>
+              <option value="">Choose a character</option>
+              {#each $characterLibraryState.characters as character}
+                <option value={character.id}>{character.name}</option>
+              {/each}
+            </select>
+          {/if}
+
+          {#if newPlayModes.multiplayer}
+            <label for="new-p1-character">Player 1 character</label>
+            <select id="new-p1-character" bind:value={newMainCharacterIds.multiplayer.p1}>
+              <option value="">Choose a character</option>
+              {#each $characterLibraryState.characters as character}
+                <option value={character.id}>{character.name}</option>
+              {/each}
+            </select>
+
+            <label for="new-p2-character">Player 2 character</label>
+            <select id="new-p2-character" bind:value={newMainCharacterIds.multiplayer.p2}>
+              <option value="">Choose a different character</option>
+              {#each $characterLibraryState.characters as character}
+                <option
+                  value={character.id}
+                  disabled={character.id === newMainCharacterIds.multiplayer.p1}
+                >{character.name}</option>
+              {/each}
+            </select>
+          {/if}
+        </fieldset>
+
         <button
           class="primary-button"
           type="button"
-          disabled={!newTitle.trim()}
+          disabled={!newTitle.trim() || !newStoryHasCharacters}
           on:click={createStory}
         >
           Create story graph
@@ -2002,6 +2108,41 @@
             >
             Multiplayer playable
           </label>
+        </div>
+        <div class="cast-controls">
+          {#if activeStoryMap === 'singleplayer'}
+            <label>
+              <span>Main character</span>
+              <select bind:value={editingStory.mainCharacterIds.singleplayer}>
+                <option value="">Choose a character</option>
+                {#each $characterLibraryState.characters as character}
+                  <option value={character.id}>{character.name}</option>
+                {/each}
+              </select>
+            </label>
+          {:else}
+            <label>
+              <span>Player 1</span>
+              <select bind:value={editingStory.mainCharacterIds.multiplayer.p1}>
+                <option value="">Choose a character</option>
+                {#each $characterLibraryState.characters as character}
+                  <option value={character.id}>{character.name}</option>
+                {/each}
+              </select>
+            </label>
+            <label>
+              <span>Player 2</span>
+              <select bind:value={editingStory.mainCharacterIds.multiplayer.p2}>
+                <option value="">Choose a different character</option>
+                {#each $characterLibraryState.characters as character}
+                  <option
+                    value={character.id}
+                    disabled={character.id === editingStory.mainCharacterIds.multiplayer.p1}
+                  >{character.name}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
         </div>
       </div>
 
@@ -2277,37 +2418,47 @@
             {#if selectedNode.type === 'dialogue'
               || (selectedNode.type === 'effect' && selectedNode.attachedTo === undefined)}
               <label for="node-speaker">Speaker</label>
-              <input id="node-speaker" bind:value={selectedNode.speaker}>
+              {#if selectedNode.type === 'dialogue'}
+                <select id="node-speaker" bind:value={selectedNode.characterId}>
+                  <option value="">Custom speaker</option>
+                  {#each $characterLibraryState.characters as character}
+                    <option value={character.id}>{character.name}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input id="node-speaker" bind:value={selectedNode.speaker}>
+              {/if}
             {/if}
 
             {#if selectedNode.type === 'dialogue'}
-              <label for="dialogue-portrait-upload">Speaker portrait</label>
-              <div class="asset-actions">
-                <label class="upload-button" for="dialogue-portrait-upload">
-                  {imageUploading ? 'Uploading portrait…' : 'Upload portrait'}
-                </label>
-                <button type="button" on:click={() => openImageLibrary('portrait')}>Select from library</button>
-              </div>
-              <input
-                class="visually-hidden"
-                id="dialogue-portrait-upload"
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml"
-                disabled={imageUploading}
-                on:change={uploadImage}
-              >
-              {#if selectedNode.portrait}
-                <div class="image-preview image-preview--portrait">
-                  <img src={selectedNode.portrait} alt={selectedNode.portraitAlt || 'Dialogue portrait preview'}>
-                  <span>{selectedNode.portrait}</span>
-                  <button type="button" on:click={() => {
-                    selectedNode.portrait = '';
-                    selectedNode.portraitAlt = '';
-                  }}>Remove portrait</button>
-                </div>
+              {#if selectedNode.characterId}
+                <label for="dialogue-expression">Expression</label>
+                <select id="dialogue-expression" bind:value={selectedNode.expression}>
+                  <option value="normal">Normal</option>
+                  <option value="shocked">Shocked</option>
+                  <option value="angry">Angry</option>
+                  <option value="sad">Sad</option>
+                  <option value="happy">Happy</option>
+                </select>
+                {@const dialogueCharacter = $characterLibraryState.characters.find(
+                  (character) => character.id === selectedNode.characterId
+                )}
+                {#if dialogueCharacter && characterExpressionImage(dialogueCharacter, selectedNode.expression)}
+                  <div class="image-preview image-preview--portrait">
+                    <img
+                      src={characterExpressionImage(dialogueCharacter, selectedNode.expression)}
+                      alt={`${dialogueCharacter.name} ${selectedNode.expression ?? 'normal'} expression`}
+                    >
+                    <span>{dialogueCharacter.name} · {selectedNode.expression ?? 'normal'}</span>
+                  </div>
+                {:else}
+                  <p class="inspector-help">This expression has no image yet. Add it in Characters.</p>
+                {/if}
+              {:else}
+                <label for="custom-speaker-name">Custom speaker name</label>
+                <input id="custom-speaker-name" bind:value={selectedNode.speaker}>
+                <p class="inspector-help">Custom speakers remain supported for system messages and unnamed extras.</p>
               {/if}
-              <label for="dialogue-portrait-alt">Portrait alternative text</label>
-              <input id="dialogue-portrait-alt" bind:value={selectedNode.portraitAlt}>
             {/if}
 
             {#if routeFields(selectedNode).includes('next')}
@@ -3064,6 +3215,36 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .cast-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+
+    label {
+      display: grid;
+      gap: 4px;
+    }
+
+    span {
+      color: #6dc2fb;
+      font-size: 0.62rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    select {
+      min-width: 150px;
+      padding: 6px 8px;
+    }
+  }
+
+  .inspector-help {
+    margin: 8px 0 14px;
+    color: #8893a2;
+    font-size: 0.75rem;
+    line-height: 1.5;
   }
 
   .map-tabs button {

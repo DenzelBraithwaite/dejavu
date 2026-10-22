@@ -36,6 +36,15 @@ export function createCampaignState(story = null, options = {}) {
     && PLAYER_IDS.includes(options.soloPlayerId)
     ? options.soloPlayerId
     : null;
+  const characters = Array.isArray(options.characters)
+    ? structuredClone(options.characters)
+    : [];
+  const playerCharacters = resolvePlayerCharacters(
+    story,
+    sessionMode,
+    soloPlayerId,
+    characters
+  );
   const state = {
     version: 1,
     campaignId: randomUUID(),
@@ -47,9 +56,10 @@ export function createCampaignState(story = null, options = {}) {
       p2: ''
     },
     players: {
-      p1: createPlayerState('Nova', DEFAULT_STATS.p1),
-      p2: createPlayerState('Avona', DEFAULT_STATS.p2)
+      p1: createPlayerState(playerCharacters.p1, 'Nova', DEFAULT_STATS.p1),
+      p2: createPlayerState(playerCharacters.p2, 'Avona', DEFAULT_STATS.p2)
     },
+    characters,
     installedMods: [],
     flags: {},
     checkpoints: {},
@@ -89,15 +99,36 @@ export function createCampaignState(story = null, options = {}) {
   return state;
 }
 
-function createPlayerState(name, stats) {
+function createPlayerState(character, fallbackName, fallbackStats) {
   return {
-    name,
+    characterId: character?.id ?? null,
+    name: character?.name ?? fallbackName,
+    wallet: Number(character?.wallet ?? 0),
     stats: {
-      ...stats
+      ...(character?.stats ?? fallbackStats)
     },
     inventory: [],
     knownCharacters: [],
     statusEffects: []
+  };
+}
+
+function resolvePlayerCharacters(story, sessionMode, soloPlayerId, characters) {
+  const byId = new Map(characters.map((character) => [character.id, character]));
+  const mainCharacterIds = story?.mainCharacterIds ?? {};
+  const multiplayer = mainCharacterIds.multiplayer ?? {};
+  const soloCharacter = byId.get(mainCharacterIds.singleplayer);
+
+  if (sessionMode === 'singleplayer' && soloPlayerId) {
+    return {
+      p1: soloPlayerId === 'p1' ? soloCharacter : null,
+      p2: soloPlayerId === 'p2' ? soloCharacter : null
+    };
+  }
+
+  return {
+    p1: byId.get(multiplayer.p1),
+    p2: byId.get(multiplayer.p2)
   };
 }
 
@@ -130,6 +161,7 @@ export function restoreCampaignState(candidate) {
     sessionMode: candidate.sessionMode ?? 'multiplayer',
     soloPlayerId: candidate.soloPlayerId ?? null,
     installedMods: candidate.installedMods ?? [],
+    characters: candidate.characters ?? [],
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
     pendingDice: candidate.pendingDice ?? {},
@@ -660,14 +692,20 @@ function evaluateCondition(state, playerId, condition = {}) {
 
 function archiveSceneForPlayer(state, playerId, scene, response = '') {
   const text = scene.text ?? scene.prompt ?? '';
+  const character = state.characters.find(
+    (candidate) => candidate.id === scene.characterId
+  );
+  const expression = scene.expression ?? 'normal';
 
   if (text) {
     appendTerminalEntry(state, playerId, {
       sceneId: scene.id,
-      speaker: scene.speaker ?? 'SYSTEM',
+      speaker: character?.name ?? scene.speaker ?? 'SYSTEM',
       text,
-      portrait: scene.portrait ?? '',
-      portraitAlt: scene.portraitAlt ?? ''
+      portrait: character?.images?.[expression] ?? scene.portrait ?? '',
+      portraitAlt: character
+        ? `${character.name}, ${expression} expression`
+        : scene.portraitAlt ?? ''
     });
   }
 

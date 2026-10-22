@@ -45,8 +45,8 @@
   </Item>
 
   <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'pink'} iconType={'player'}>
-    <span slot="title">Character</span>
-    <span slot="description">Check your stats</span>
+    <span slot="title">Characters</span>
+    <span slot="description">Create and manage the cast</span>
   </Item>
 
   <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'brown'} iconType={'journal'}>
