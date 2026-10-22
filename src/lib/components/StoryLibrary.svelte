@@ -63,7 +63,8 @@
 
   const companionNodeTypes = [
     { type: 'effect', label: 'Item / effect' },
-    { type: 'ambience', label: 'Music / atmosphere' }
+    { type: 'ambience', label: 'Music / atmosphere' },
+    { type: 'screen-effect', label: 'Terminal effect' }
   ];
 
   const nodeTypes = [...flowNodeTypes, ...companionNodeTypes];
@@ -785,6 +786,10 @@
       return;
     }
 
+    if ((selectedNode.choices?.length ?? 0) >= 5) {
+      return;
+    }
+
     rememberForUndo();
     selectedNode.choices ??= [];
     selectedNode.choices = [
@@ -798,10 +803,56 @@
   }
 
   function removeChoice(index: number): void {
+    if ((selectedNode?.choices?.length ?? 0) <= 1) {
+      return;
+    }
+
     rememberForUndo();
     selectedNode.choices = selectedNode.choices.filter(
       (_choice: unknown, choiceIndex: number) => choiceIndex !== index
     );
+
+    if (selectedNode.type === 'timed-choice'
+      && !selectedNode.choices.some(
+        (choice: { id: string }) => choice.id === selectedNode.fallbackChoiceId
+      )) {
+      selectedNode.fallbackChoiceId = selectedNode.choices[0].id;
+    }
+  }
+
+  function setChoiceCount(event: Event): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    const input = event.currentTarget as HTMLInputElement;
+    const requestedCount = Math.trunc(Number(input.value));
+    const choiceCount = Math.min(5, Math.max(1, requestedCount || 1));
+    const choices = [...(selectedNode.choices ?? [])];
+
+    // Preserve existing routes while adding or trimming only the requested rows.
+    rememberForUndo();
+
+    while (choices.length < choiceCount) {
+      const optionNumber = choices.length + 1;
+
+      choices.push({
+        id: `option-${optionNumber}`,
+        label: `Option ${optionNumber}`,
+        next: ''
+      });
+    }
+
+    selectedNode.choices = choices.slice(0, choiceCount);
+
+    if (selectedNode.type === 'timed-choice'
+      && !selectedNode.choices.some(
+        (choice: { id: string }) => choice.id === selectedNode.fallbackChoiceId
+      )) {
+      selectedNode.fallbackChoiceId = selectedNode.choices[0].id;
+    }
+
+    refreshStory();
   }
 
   function getLaneNodes(lane: LaneId): StoryNode[] {
@@ -1820,6 +1871,15 @@
           music: null,
           sound: ''
         };
+      case 'screen-effect':
+        // Presentation effects are companions, so they never receive a route.
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          screenEffect: 'shake'
+        };
       case 'minigame':
         return {
           ...baseNode,
@@ -2560,10 +2620,26 @@
                 <label for="choice-duration">Timer in milliseconds</label>
                 <input id="choice-duration" type="number" min="1000" bind:value={selectedNode.durationMs}>
               {/if}
+              <label for="choice-count">Number of buttons</label>
+              <input
+                id="choice-count"
+                type="number"
+                min="1"
+                max="5"
+                value={selectedNode.choices?.length ?? 1}
+                on:input={setChoiceCount}
+              >
+              <p class="inspector-help">
+                Add between one and five buttons. Every button can route forward or loop back to an earlier node.
+              </p>
               <div class="choice-editor">
                 <div class="choice-heading">
                   <h3>Options</h3>
-                  <button type="button" on:click={addChoice}>+ Option</button>
+                  <button
+                    type="button"
+                    disabled={(selectedNode.choices?.length ?? 0) >= 5}
+                    on:click={addChoice}
+                  >+ Option</button>
                 </div>
                 {#each selectedNode.choices ?? [] as choice, index}
                   <div class="choice-row">
@@ -2573,10 +2649,26 @@
                       <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
                       <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
                     </div>
-                    <button type="button" on:click={() => removeChoice(index)}>×</button>
+                    <button
+                      type="button"
+                      aria-label={`Remove option ${index + 1}`}
+                      disabled={(selectedNode.choices?.length ?? 0) <= 1}
+                      on:click={() => removeChoice(index)}
+                    >×</button>
                   </div>
                 {/each}
               </div>
+            {/if}
+
+            {#if selectedNode.type === 'screen-effect'}
+              <label for="screen-effect-type">Terminal effect</label>
+              <select id="screen-effect-type" bind:value={selectedNode.screenEffect}>
+                <option value="shake">Screen shake</option>
+                <option value="blink">Terminal blink</option>
+              </select>
+              <p class="inspector-help">
+                The effect plays when the attached host node becomes active and does not add a step to the story path.
+              </p>
             {/if}
 
             {#if selectedNode.type === 'effect'}
@@ -2779,10 +2871,10 @@
               <li><strong>Add to Player</strong> appends a new node to the bottom of that lane. It only auto-connects when the previous node has an unused normal route.</li>
               <li><strong>+ next, + yes, or + no</strong> creates a node directly on that exact route. Use these when building a connected sequence or branch.</li>
               <li><strong>Select next node</strong> connects to an existing node. <strong>Select previous node</strong> makes an existing node lead into the selected node.</li>
-              <li><strong>Loops are supported.</strong> Make a Choice node the area's hub. Route Talk, Search, or Play branches through their scenes and connect their last nodes back to the hub. Route Leave forward to the next area. Backward routes are marked <strong>↻ LOOP</strong>.</li>
+              <li><strong>Loops are supported.</strong> Give a Choice node one to five buttons and make it the area's hub. Route Talk, Search, or Play branches through their scenes and connect their last nodes back to the hub. Route Leave forward to the next area. Backward routes are marked <strong>↻ LOOP</strong>.</li>
               <li>For a locked exit, route the hub's <strong>Leave</strong> choice into a Condition. Its true route leaves the area; its false route shows a denial message and returns to the hub. Conditions resolve immediately, so never point one directly to itself.</li>
               <li>For a repeatable minigame, connect its Finished and Exited Early routes back to the hub. The runtime resets its launch checkpoint each time the players return.</li>
-              <li><strong>Image nodes</strong> are part of the main terminal flow and use normal previous and next routes. <strong>Companion changes</strong> update inventory or atmosphere beside a host node without becoming its next destination.</li>
+              <li><strong>Image nodes</strong> are part of the main terminal flow and use normal previous and next routes. <strong>Companion changes</strong> update inventory, atmosphere, or terminal presentation beside a host node without becoming its next destination.</li>
               <li>Red nodes have a missing or invalid connection. Save only after every playable route reaches another node or an Ending.</li>
             </ol>
             <button class="primary-button" type="button" on:click={() => tutorialOpen = false}>Got it</button>

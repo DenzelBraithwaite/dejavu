@@ -51,7 +51,7 @@ NetRunners could expose results such as `won`, `lost`, `cancelled`, and faction-
 The editor is a directed graph.
 
 - The canvas displays nodes and their connections.
-- A palette creates dialogue, choice, checkpoint, conversation, dice, vote, timer, image, and minigame nodes.
+- A palette creates dialogue, choice, checkpoint, conversation, dice, vote, timer, image, minigame, and companion presentation-effect nodes.
 - Every node can deliberately clear accumulated terminal output; otherwise previous output remains visible.
 - Story effects can install or remove game-world mods such as Neuro-Link Chat, revealing their associated interface only while installed.
 - An inspector edits the selected node.
@@ -79,7 +79,11 @@ The inspector controls:
 
 ### Choice node
 
-The inspector adds and reorders options. Each option has a label, destination, conditions, and effects.
+The inspector adds between one and five options. Each option has a label and destination, including intentional backward routes for reusable question or location hubs. Per-option conditions and effects remain part of the longer-term schema.
+
+### Terminal-effect companion
+
+The creator attaches a presentation effect to a routed host node without inserting another step into the story path. Screen shake and terminal blink are implemented first; future effects should remain declarative and respect reduced-motion preferences.
 
 ### Checkpoint node
 
@@ -230,6 +234,8 @@ The first local builder foundation is now implemented:
 - Per-player cartridge selection with a two-player matching requirement.
 - A wide three-lane node editor with type-specific inspector, branch-aware insertion, click-to-connect routes, reordering, copy/paste, labels, node counts, and visual validation.
 - Effect and condition nodes for inventory, flags, stats, characters, mods, and dice outcomes.
+- Companion terminal effects for screen shake and terminal blink.
+- Choice, timed-choice, and vote controls with one to five independently routed buttons and loop support.
 - A separate Minigames catalog with NetRunners registered.
 - Server-owned campaigns that execute the selected story document.
 
@@ -248,7 +254,7 @@ The current canvas uses readable route chips, connector lines, and click-to-sele
 
 - Story library backed by local storage or local files. **Implemented with SQLite.**
 - Flowchart canvas and node inspector. **Inspector and lane canvas implemented; drawn connections remain.**
-- Dialogue, choice, checkpoint, conversation, dice, vote, timer, and image nodes.
+- Dialogue, choice, checkpoint, conversation, dice, vote, timer, image, and terminal-effect nodes. **Implemented.**
 - Side-by-side playtest mode.
 - JSON import and export.
 
@@ -256,7 +262,7 @@ The current canvas uses readable route chips, connector lines, and click-to-sele
 
 - Terminal theme designer.
 - Asset library and image-node tooling.
-- Character records and portraits.
+- Character records and portraits. **Implemented locally with five expression images per reusable character.**
 - Accessibility validation.
 
 ### Phase 4 Database and accounts
@@ -275,3 +281,17 @@ The current canvas uses readable route chips, connector lines, and click-to-sele
 - Additional coded minigames.
 
 The first visual-builder milestone is successful when a non-developer can create a two-player branching terminal story, add a checkpoint and dice roll, playtest both perspectives, export it, and run it through the same authoritative LAN runtime.
+
+## Recommended near-term backlog
+
+Before expanding the complete Déjà Vu story, the highest-value builder work is:
+
+1. Add full graph validation with actionable errors for broken routes, invalid character or asset references, checkpoint mismatches, and accidental dead-end cycles.
+2. Add a side-by-side playtest mode with jump-to-node, controlled dice results, state inspection, and a direct return to the selected editor node.
+3. Add JSON import and export so story projects can be backed up and moved between installations.
+4. Add draft autosave and explicit version history before the editor grows further.
+5. Add opposed checks and story-minigame opponent configuration that can reference another character's stats and wallet.
+6. Add the terminal theme designer and accessibility validation, including contrast and reduced-motion previews.
+7. Improve large-graph navigation with drawn cross-node connections, search, a minimap, and collapsible chapter subgraphs.
+
+Publishing, user accounts, cloud saves, and PostgreSQL remain later product phases. They should follow a dependable local authoring and playtest loop rather than block it.

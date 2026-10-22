@@ -365,6 +365,14 @@ function validateStoryStructure(document) {
     }
 
     nodeIds.add(nodeId);
+
+    if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+      const choiceCount = Array.isArray(node.choices) ? node.choices.length : 0;
+
+      if (choiceCount < 1 || choiceCount > 5) {
+        throw new Error(`${nodeId} must contain between one and five choices.`);
+      }
+    }
   }
 
   const playModes = normalizePlayModes(document.playModes);

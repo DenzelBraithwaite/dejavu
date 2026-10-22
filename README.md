@@ -42,6 +42,8 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - The Editor is a dedicated sidebar destination, while every Library cartridge still links directly into it.
 - The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, previous/next click-to-connect routes, drag-and-drop organization, labels, validation, undo/redo, quick node actions, and a type-specific inspector.
 - Inventory/effect and music/atmosphere changes are attached to main-flow nodes as visually offset companions. Image nodes are normal routed steps that display artwork inside the terminal.
+- Terminal-effect companions can shake the screen or blink the terminal when their host node becomes active.
+- Choice, timed-choice, and shared-vote nodes expose one to five labelled buttons, each with its own route. Routes may intentionally loop back to an earlier node.
 - Story images can be uploaded as PNG, JPEG, WebP, GIF, AVIF, or SVG files up to 8 MB and are stored by the LAN host. The editor asset picker also lists compatible files copied directly into `public/uploads/stories/`.
 - Stories may expose a solo map, a multiplayer map, or both. Disabling a mode preserves its nodes; the solo map greys out the Player 2 and Shared lanes.
 

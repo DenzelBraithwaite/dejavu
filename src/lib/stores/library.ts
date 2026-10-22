@@ -36,6 +36,7 @@ export type StoryNode = {
   background?: string;
   music?: string | null;
   sound?: string;
+  screenEffect?: 'shake' | 'blink';
   attachedTo?: string;
   clearTerminal?: boolean;
   minigameId?: string;

@@ -244,7 +244,7 @@ defineScene({
 })
 ```
 
-The server records choices in the decision log.
+The editor exposes an explicit button count from one through five. Each button has an ID, player-facing label, and destination. A destination may be an earlier node, so a hub choice can send several branches through dialogue and back to itself while one option exits the loop. The server records choices in the decision log.
 
 ## Effects
 
@@ -281,6 +281,22 @@ effects: [
 Use namespaced flag keys. Flags should describe a fact that occurred, not a temporary UI state.
 
 An `effect` node exposes these operations in the visual inspector and applies them when the player continues. Choice-level effects remain supported for branches that should change state immediately.
+
+## Terminal effects
+
+Terminal effects are presentation-only companion nodes. Like item/effect and ambience companions, they use `attachedTo`, have no previous or next route, and play when their host node becomes active.
+
+```js
+defineScene({
+  id: 'chapter-01.explosion-shake',
+  type: 'screen-effect',
+  audience: 'p1',
+  attachedTo: 'chapter-01.explosion',
+  screenEffect: 'shake'
+})
+```
+
+Supported values are `shake` and `blink`. Both respect the browser's reduced-motion preference. These effects do not change authoritative campaign state and therefore do not need to be applied by the server.
 
 ## Conditions
 

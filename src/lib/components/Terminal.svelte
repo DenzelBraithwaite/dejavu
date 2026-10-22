@@ -52,6 +52,16 @@
     ? $campaignState?.story?.nodes.filter((candidate) => candidate.attachedTo === sceneId) ?? []
     : [];
   $: companionImages = companionNodes.filter((candidate) => candidate.type === 'image' && candidate.src);
+
+  // Presentation companions remain client-only because they never alter story state.
+  $: screenShakeActive = companionNodes.some(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'shake'
+  );
+  $: terminalBlinkActive = companionNodes.some(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'blink'
+  );
   $: {
     scenePresentation = {
       background: scene?.background,
@@ -327,6 +337,8 @@
   <div
     class="terminal-screen"
     class:has-scene-background={Boolean(scenePresentation.background)}
+    class:terminal-screen--shake={screenShakeActive}
+    class:terminal-screen--blink={terminalBlinkActive}
     style:background-image={scenePresentation.background
       ? `linear-gradient(#070b16dd, #070b16ee), url(${scenePresentation.background})`
       : undefined}
@@ -648,6 +660,20 @@
     &.has-scene-background {
       background-position: center;
       background-size: cover;
+    }
+
+    &.terminal-screen--shake {
+      animation: terminal-shake 560ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
+
+    &.terminal-screen--blink {
+      animation: terminal-blink 720ms steps(2, end) both;
+    }
+
+    &.terminal-screen--shake.terminal-screen--blink {
+      animation:
+        terminal-shake 560ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both,
+        terminal-blink 720ms steps(2, end) both;
     }
   }
 
@@ -997,8 +1023,49 @@
     }
   }
 
+  @keyframes terminal-shake {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+
+    15%,
+    45%,
+    75% {
+      transform: translate3d(-8px, 2px, 0);
+    }
+
+    30%,
+    60%,
+    90% {
+      transform: translate3d(8px, -2px, 0);
+    }
+  }
+
+  @keyframes terminal-blink {
+    0%,
+    100% {
+      filter: brightness(1);
+      opacity: 1;
+    }
+
+    25%,
+    65% {
+      filter: brightness(2.1);
+      opacity: 0.2;
+    }
+
+    45%,
+    85% {
+      filter: brightness(0.5);
+      opacity: 0.72;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .scene-text::after {
+    .scene-text::after,
+    .terminal-screen--shake,
+    .terminal-screen--blink {
       animation: none;
     }
   }
