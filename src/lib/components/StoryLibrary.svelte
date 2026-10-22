@@ -2382,7 +2382,7 @@
             </div>
           {/if}
 
-          <div class="flow-lanes">
+          <div class="flow-lanes" class:singleplayer-map={activeStoryMap === 'singleplayer'}>
             {#each lanes as lane (`${lane.id}:${storyRevision}`)}
               {@const laneGraph = getLaneGraph(lane.id)}
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -3696,6 +3696,17 @@
     align-items: stretch;
   }
 
+  // A solo graph has one usable lane, so keep it visually balanced on desktop.
+  .flow-lanes.singleplayer-map {
+    width: 100%;
+    min-width: 100%;
+    justify-content: center;
+
+    .singleplayer-disabled {
+      display: none;
+    }
+  }
+
   .link-mode-banner {
     position: sticky;
     z-index: 6;
@@ -4892,6 +4903,11 @@
     .editor-workspace {
       overflow-x: auto;
       grid-template-columns: 760px 280px;
+    }
+
+    // Start the solo lane at the edge on phones so it is immediately reachable by touch.
+    .flow-lanes.singleplayer-map {
+      justify-content: flex-start;
     }
 
     .editor-toolbar {

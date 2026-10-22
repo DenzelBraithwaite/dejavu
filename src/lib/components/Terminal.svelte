@@ -654,6 +654,7 @@
   }
 
   .terminal-screen {
+    min-height: 0;
     padding: clamp(20px, 4vw, 52px);
     overflow-y: auto;
 
