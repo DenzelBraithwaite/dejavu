@@ -39,6 +39,15 @@ export type TerminalOutputEntry = {
   createdAt: string;
 };
 
+export type TerminalImage = {
+  src: string;
+  alt: string;
+  logText: string;
+  imagePositionX: number;
+  imagePositionY: number;
+  imageBorderColor: string;
+};
+
 export type CampaignState = {
   version: number;
   campaignId: string;
@@ -74,6 +83,7 @@ export type CampaignState = {
   pendingDice: Partial<Record<PlayerId, DiceRollResult>>;
   appliedCompanions: Record<PlayerId, string[]>;
   terminalOutput: Record<PlayerId, TerminalOutputEntry[]>;
+  terminalImages: Record<PlayerId, TerminalImage[]>;
   deadlines: Partial<Record<PlayerId, number>>;
   transcript: Array<Record<string, unknown>>;
   decisions: Array<Record<string, unknown>>;

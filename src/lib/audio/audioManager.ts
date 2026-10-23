@@ -3,72 +3,75 @@ import { audioSettings, getAudioSettings } from '../stores/audio';
 export type SceneAudio = {
   music?: string | null;
   sound?: string;
+  stopMusic?: boolean;
 };
 
-let musicPlayer: HTMLAudioElement | null = null;
-let currentMusic = '';
+const activeMusic = new Map<string, HTMLAudioElement>();
 const activeSounds = new Set<HTMLAudioElement>();
 
 if (typeof window !== 'undefined') {
-  musicPlayer = new Audio();
-  musicPlayer.loop = true;
-
   audioSettings.subscribe((settings) => {
-    if (!musicPlayer) {
-      return;
-    }
+    for (const music of activeMusic.values()) {
+      music.volume = settings.musicVolume;
+      music.muted = !settings.musicEnabled;
 
-    musicPlayer.volume = settings.musicVolume;
-    musicPlayer.muted = !settings.musicEnabled;
+      if (settings.musicEnabled) {
+        void safelyPlay(music);
+      } else {
+        music.pause();
+      }
+    }
 
     for (const sound of activeSounds) {
       sound.volume = settings.soundsVolume;
       sound.muted = !settings.soundsEnabled;
     }
-
-    if (settings.musicEnabled && currentMusic) {
-      void safelyPlay(musicPlayer);
-    }
   });
 }
 
-export function applySceneAudio(scene: SceneAudio): void {
-  if (scene.music !== undefined) {
-    if (scene.music) {
-      playMusic(scene.music);
-    } else {
+export function applySceneAudio(sceneAudio: SceneAudio | SceneAudio[]): void {
+  const cues = Array.isArray(sceneAudio) ? sceneAudio : [sceneAudio];
+
+  for (const cue of cues) {
+    if (cue.stopMusic || cue.music === null) {
       stopMusic();
     }
-  }
 
-  if (scene.sound) {
-    playSound(scene.sound);
+    if (cue.music) {
+      playMusic(cue.music);
+    }
+
+    if (cue.sound) {
+      playSound(cue.sound);
+    }
   }
 }
 
 export function playMusic(source: string): void {
-  if (!musicPlayer || currentMusic === source) {
+  if (typeof window === 'undefined' || activeMusic.has(source)) {
     return;
   }
 
-  currentMusic = source;
-  musicPlayer.src = source;
-  musicPlayer.load();
+  const settings = getAudioSettings();
+  const music = new Audio(source);
+  music.loop = true;
+  music.volume = settings.musicVolume;
+  music.muted = !settings.musicEnabled;
+  activeMusic.set(source, music);
 
-  if (getAudioSettings().musicEnabled) {
-    void safelyPlay(musicPlayer);
+  if (settings.musicEnabled) {
+    void safelyPlay(music);
   }
 }
 
 export function stopMusic(): void {
-  if (!musicPlayer) {
-    return;
+  for (const music of activeMusic.values()) {
+    music.pause();
+    music.removeAttribute('src');
+    music.load();
   }
 
-  musicPlayer.pause();
-  musicPlayer.removeAttribute('src');
-  musicPlayer.load();
-  currentMusic = '';
+  activeMusic.clear();
 }
 
 export function playSound(source: string): void {

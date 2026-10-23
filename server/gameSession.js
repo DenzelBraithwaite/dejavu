@@ -76,6 +76,10 @@ export function createCampaignState(story = null, options = {}) {
       p1: [],
       p2: []
     },
+    terminalImages: {
+      p1: [],
+      p2: []
+    },
     deadlines: {},
     transcript: [],
     decisions: [],
@@ -156,7 +160,7 @@ export function restoreCampaignState(candidate) {
     }
   }
 
-  return structuredClone({
+  const restored = structuredClone({
     ...candidate,
     sessionMode: candidate.sessionMode ?? 'multiplayer',
     soloPlayerId: candidate.soloPlayerId ?? null,
@@ -172,8 +176,26 @@ export function restoreCampaignState(candidate) {
     terminalOutput: candidate.terminalOutput ?? {
       p1: [],
       p2: []
+    },
+    terminalImages: candidate.terminalImages ?? {
+      p1: [],
+      p2: []
     }
   });
+
+  // Older saves did not store persistent terminal images. Rebuild the visible
+  // image from the restored scene so loading an image node never appears blank.
+  if (!candidate.terminalImages) {
+    for (const playerId of restoredPlayerIds) {
+      const scene = getScene(restored, restored.currentScene[playerId]);
+
+      if (scene) {
+        applySceneImages(restored, playerId, scene);
+      }
+    }
+  }
+
+  return restored;
 }
 
 export function handleCampaignAction(state, playerId, action) {
@@ -338,7 +360,7 @@ function handleChoice(state, playerId, scene, action) {
 
   const choice = scene.choices?.find((candidate) => candidate.id === action.choiceId);
 
-  if (!choice) {
+  if (!choice || choice.disabled) {
     return actionError('That choice is not available.');
   }
 
@@ -524,7 +546,7 @@ function handleVote(state, playerId, scene, action) {
 
   const choice = scene.choices?.find((candidate) => candidate.id === action.choiceId);
 
-  if (!choice) {
+  if (!choice || choice.disabled) {
     return actionError('That vote is not available.');
   }
 
@@ -576,9 +598,10 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
       continue;
     }
 
-    const fallback = scene.choices?.find(
+    const enabledChoices = scene.choices?.filter((choice) => !choice.disabled) ?? [];
+    const fallback = enabledChoices.find(
       (choice) => choice.id === scene.fallbackChoiceId
-    ) ?? scene.choices?.[Math.floor(Math.random() * scene.choices.length)];
+    ) ?? enabledChoices[Math.floor(Math.random() * enabledChoices.length)];
 
     if (!fallback) {
       continue;
@@ -618,11 +641,41 @@ function setPlayerScene(state, playerId, nextSceneId) {
 
   state.currentScene[playerId] = nextScene.id;
   applyAttachedCompanions(state, playerId, nextScene);
+  applySceneImages(state, playerId, nextScene);
   delete state.deadlines[playerId];
 
   if (nextScene.type === 'conversation') {
     initializeConversation(state, nextScene);
   }
+}
+
+function applySceneImages(state, playerId, scene) {
+  const attachedImages = state.story?.nodes.filter(
+    (node) => node.type === 'image'
+      && node.attachedTo === scene.id
+      && node.src
+      && (node.audience === 'both' || node.audience === playerId)
+  ) ?? [];
+  const imageNodes = scene.type === 'image' && scene.src
+    ? [scene]
+    : attachedImages;
+
+  if (imageNodes.length === 0) {
+    return;
+  }
+
+  state.terminalImages ??= {
+    p1: [],
+    p2: []
+  };
+  state.terminalImages[playerId] = imageNodes.map((image) => ({
+    src: image.src,
+    alt: image.alt ?? '',
+    logText: image.logText ?? image.alt ?? '',
+    imagePositionX: Number(image.imagePositionX ?? 50),
+    imagePositionY: Number(image.imagePositionY ?? 50),
+    imageBorderColor: image.imageBorderColor ?? '#1472bf'
+  }));
 }
 
 function applyAttachedCompanions(state, playerId, scene) {
@@ -662,6 +715,11 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
 
     if (scene.type === 'clear-terminal') {
       state.terminalOutput[playerId] = [];
+      state.terminalImages ??= {
+        p1: [],
+        p2: []
+      };
+      state.terminalImages[playerId] = [];
       scene = getScene(state, scene.next);
       continue;
     }

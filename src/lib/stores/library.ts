@@ -15,6 +15,7 @@ export type StoryNode = {
     y: number;
   };
   text?: string;
+  continueLabel?: string;
   prompt?: string;
   placeholder?: string;
   next?: string;
@@ -22,6 +23,7 @@ export type StoryNode = {
     id: string;
     label: string;
     next: string;
+    disabled?: boolean;
     effects?: Array<Record<string, unknown>>;
   }>;
   maxLength?: number;
@@ -40,10 +42,14 @@ export type StoryNode = {
   logText?: string;
   imagePositionX?: number;
   imagePositionY?: number;
+  imageBorderColor?: string;
   background?: string;
   music?: string | null;
   sound?: string;
+  stopMusic?: boolean;
   screenEffect?: 'shake' | 'blink';
+  effectDurationSeconds?: number;
+  effectIterations?: number;
   attachedTo?: string;
   minigameId?: string;
   resultNext?: Record<string, string>;

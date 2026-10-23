@@ -1,7 +1,7 @@
 /**
  * @typedef {'p1' | 'p2'} PlayerId
  * @typedef {'both' | PlayerId} Audience
- * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'screen-effect' | 'condition' | 'clear-terminal' | 'label' | 'ending'} SceneType
+ * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'background' | 'music' | 'sound-effect' | 'stop-music' | 'screen-effect' | 'condition' | 'clear-terminal' | 'label' | 'ending'} SceneType
  *
  * @typedef SceneEffect
  * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat' | 'install-mod' | 'remove-mod'} type
@@ -12,6 +12,7 @@
  * @property {string} id
  * @property {string} label
  * @property {string} next
+ * @property {boolean} [disabled]
  * @property {SceneEffect[]} [effects]
  *
  * @typedef SceneNode
@@ -25,6 +26,7 @@
  * @property {string} [portrait]
  * @property {string} [portraitAlt]
  * @property {string} [text]
+ * @property {string} [continueLabel]
  * @property {string} [next]
  * @property {SceneChoice[]} [choices]
  * @property {string} [prompt]
@@ -44,10 +46,14 @@
  * @property {string} [src]
  * @property {string} [alt]
  * @property {string} [logText]
+ * @property {string} [imageBorderColor]
  * @property {string} [background]
  * @property {string | null} [music]
  * @property {string} [sound]
+ * @property {boolean} [stopMusic]
  * @property {'shake' | 'blink'} [screenEffect]
+ * @property {number} [effectDurationSeconds]
+ * @property {number} [effectIterations]
  * @property {string} [attachedTo]
  * @property {string} [minigameId]
  * @property {Record<string, string>} [resultNext]

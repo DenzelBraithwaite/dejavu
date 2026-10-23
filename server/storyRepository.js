@@ -368,9 +368,19 @@ function validateStoryStructure(document) {
 
     if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
       const choiceCount = Array.isArray(node.choices) ? node.choices.length : 0;
+      const enabledChoices = node.choices?.filter((choice) => !choice.disabled) ?? [];
 
-      if (choiceCount < 1 || choiceCount > 5) {
-        throw new Error(`${nodeId} must contain between one and five choices.`);
+      if (choiceCount < 2 || choiceCount > 5) {
+        throw new Error(`${nodeId} must contain between two and five choices.`);
+      }
+
+      if (enabledChoices.length === 0) {
+        throw new Error(`${nodeId} must keep at least one choice enabled.`);
+      }
+
+      if (node.type === 'timed-choice'
+        && !enabledChoices.some((choice) => choice.id === node.fallbackChoiceId)) {
+        throw new Error(`${nodeId} requires an enabled fallback choice.`);
       }
     }
   }

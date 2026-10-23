@@ -4,7 +4,7 @@
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
   import { applySceneAudio } from '../audio/audioManager';
   import { socket } from '../socket';
-  import { campaignState } from '../stores/campaign';
+  import { campaignState, type TerminalImage } from '../stores/campaign';
   import { editorHandoff, libraryState } from '../stores/library';
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
@@ -23,7 +23,11 @@
   let lastScrollKey = '';
   let lastAudioSceneId = '';
   let diceTerminalOpen = false;
-  let scenePresentation: Pick<StoryNode, 'background' | 'music' | 'sound'> = {};
+  let scenePresentation: Pick<StoryNode, 'background'> = {};
+  let sceneAudioCues: Array<Pick<StoryNode, 'music' | 'sound' | 'stopMusic'>> = [];
+  let persistentImages: TerminalImage[] = [];
+  let shakeEffect: StoryNode | undefined;
+  let blinkEffect: StoryNode | undefined;
   let sceneSpeaker = '';
   let scenePortrait = '';
   let scenePortraitAlt = '';
@@ -54,38 +58,39 @@
   $: companionNodes = sceneId
     ? $campaignState?.story?.nodes.filter((candidate) => candidate.attachedTo === sceneId) ?? []
     : [];
-  $: companionImages = companionNodes.filter((candidate) => candidate.type === 'image' && candidate.src);
-
   // Presentation companions remain client-only because they never alter story state.
-  $: screenShakeActive = companionNodes.some(
+  $: shakeEffect = companionNodes.find(
     (candidate) => candidate.type === 'screen-effect'
       && candidate.screenEffect === 'shake'
   );
-  $: terminalBlinkActive = companionNodes.some(
+  $: blinkEffect = companionNodes.find(
     (candidate) => candidate.type === 'screen-effect'
       && candidate.screenEffect === 'blink'
   );
+  $: screenShakeActive = Boolean(shakeEffect);
+  $: terminalBlinkActive = Boolean(blinkEffect);
   $: {
     scenePresentation = {
-      background: scene?.background,
-      music: scene?.music,
-      sound: scene?.sound
+      background: scene?.background
     };
 
     for (const companion of companionNodes) {
       if (companion.background !== undefined) {
         scenePresentation.background = companion.background;
       }
-
-      if (companion.music !== undefined) {
-        scenePresentation.music = companion.music;
-      }
-
-      if (companion.sound !== undefined) {
-        scenePresentation.sound = companion.sound;
-      }
     }
   }
+  $: sceneAudioCues = [scene, ...companionNodes]
+    .filter((candidate): candidate is StoryNode => Boolean(candidate))
+    .map((candidate) => ({
+      music: candidate.music,
+      sound: candidate.sound,
+      stopMusic: candidate.stopMusic || candidate.type === 'stop-music'
+    }));
+  $: persistentImages = playerId && $campaignState
+    ? $campaignState.terminalImages?.[playerId] ?? []
+    : [];
+
   $: player = playerId && $campaignState
     ? $campaignState.players[playerId]
     : null;
@@ -141,7 +146,7 @@
 
   $: if (scene && sceneId !== lastAudioSceneId) {
     lastAudioSceneId = sceneId;
-    applySceneAudio(scenePresentation);
+    applySceneAudio(sceneAudioCues);
   }
 
   $: if (sceneId) {
@@ -357,6 +362,10 @@
     class:has-scene-background={Boolean(scenePresentation.background)}
     class:terminal-screen--shake={screenShakeActive}
     class:terminal-screen--blink={terminalBlinkActive}
+    style:--shake-duration={`${Math.max(0.1, Number(shakeEffect?.effectDurationSeconds ?? 0.6))}s`}
+    style:--shake-iterations={Math.max(1, Math.trunc(Number(shakeEffect?.effectIterations ?? 1)))}
+    style:--blink-duration={`${Math.max(0.1, Number(blinkEffect?.effectDurationSeconds ?? 0.75))}s`}
+    style:--blink-iterations={Math.max(1, Math.trunc(Number(blinkEffect?.effectIterations ?? 1)))}
     style:background-image={scenePresentation.background
       ? `linear-gradient(#070b16dd, #070b16ee), url(${scenePresentation.background})`
       : undefined}
@@ -424,19 +433,8 @@
 
       <p class="scene-id">{scene.id}</p>
 
-      {#if scene.type === 'image' && scene.src}
-        <figure class="scene-image-wrapper">
-          <img
-            class="scene-image"
-            src={scene.src}
-            alt={scene.logText ?? scene.alt ?? ''}
-            style:object-position={`${scene.imagePositionX ?? 50}% ${scene.imagePositionY ?? 50}%`}
-          >
-        </figure>
-      {/if}
-
-      {#each companionImages as image}
-        <figure class="scene-image-wrapper">
+      {#each persistentImages as image}
+        <figure class="scene-image-wrapper" style:border-color={image.imageBorderColor}>
           <img
             class="scene-image"
             src={image.src}
@@ -505,7 +503,7 @@
     <div class="terminal-controls">
       {#if ['dialogue', 'image', 'effect', 'ambience'].includes(scene.type)}
         <button type="button" disabled={!typingComplete} on:click={advance}>
-          Continue
+          {scene.continueLabel?.trim() || 'Continue'}
         </button>
       {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
         {#if scene.type === 'timed-choice' && typingComplete && remainingMs}
@@ -517,7 +515,7 @@
         {#each scene.choices ?? [] as choice}
           <button
             type="button"
-            disabled={!typingComplete}
+            disabled={!typingComplete || choice.disabled}
             on:click={() => choose(choice.id)}
           >
             {choice.label}
@@ -588,7 +586,7 @@
           {#each scene.choices ?? [] as choice}
             <button
               type="button"
-              disabled={!typingComplete}
+              disabled={!typingComplete || choice.disabled}
               on:click={() => choose(choice.id)}
             >
               Vote: {choice.label}
@@ -695,17 +693,17 @@
     }
 
     &.terminal-screen--shake {
-      animation: terminal-shake 560ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+      animation: terminal-shake var(--shake-duration) cubic-bezier(0.36, 0.07, 0.19, 0.97) var(--shake-iterations) both;
     }
 
     &.terminal-screen--blink {
-      animation: terminal-blink 720ms steps(2, end) both;
+      animation: terminal-blink var(--blink-duration) steps(2, end) var(--blink-iterations) both;
     }
 
     &.terminal-screen--shake.terminal-screen--blink {
       animation:
-        terminal-shake 560ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both,
-        terminal-blink 720ms steps(2, end) both;
+        terminal-shake var(--shake-duration) cubic-bezier(0.36, 0.07, 0.19, 0.97) var(--shake-iterations) both,
+        terminal-blink var(--blink-duration) steps(2, end) var(--blink-iterations) both;
     }
   }
 

@@ -78,7 +78,10 @@
 
   const companionNodeTypes = [
     { type: 'effect', label: 'Item / effect' },
-    { type: 'ambience', label: 'Music / atmosphere' },
+    { type: 'background', label: 'Background' },
+    { type: 'music', label: 'Play music' },
+    { type: 'sound-effect', label: 'Sound effect' },
+    { type: 'stop-music', label: 'Stop music' },
     { type: 'screen-effect', label: 'Terminal effect' }
   ];
 
@@ -117,8 +120,8 @@
         {
           name: 'Choice',
           type: 'choice',
-          description: 'Shows one to five labelled buttons with an independent destination for each button.',
-          usage: 'Set the button count and labels, then connect every option. Options may loop back to this node.'
+          description: 'Shows two to five labelled buttons, including optional visible-but-disabled choices.',
+          usage: 'Set labels and availability, then connect every enabled option. Routes may loop back to this node.'
         },
         {
           name: 'Timed choice',
@@ -142,7 +145,7 @@
           name: 'Shared vote',
           type: 'vote',
           description: 'Collects a button choice from both players and resolves the shared result.',
-          usage: 'Create one to five options and connect every result. Use it only on the Shared lane.'
+          usage: 'Create two to five options and connect every enabled result. Use it only on the Shared lane.'
         }
       ]
     },
@@ -151,10 +154,22 @@
       description: 'Change the atmosphere, show visual content, or launch a coded game.',
       nodes: [
         {
-          name: 'Music / atmosphere',
-          type: 'ambience',
-          description: 'Changes the terminal background, looping music, or one-shot sound.',
-          usage: 'Provide the desired asset paths and attach the companion to its host scene.'
+          name: 'Background',
+          type: 'background',
+          description: 'Changes the terminal background without affecting music or sound effects.',
+          usage: 'Provide an image path and attach it to the scene where the new background should appear.'
+        },
+        {
+          name: 'Play music',
+          type: 'music',
+          description: 'Starts a looping music track without stopping tracks already playing.',
+          usage: 'Provide a music path and attach it to the scene where playback should begin.'
+        },
+        {
+          name: 'Sound effect',
+          type: 'sound-effect',
+          description: 'Plays a one-shot sound while existing music continues.',
+          usage: 'Provide a short sound path and attach it to the scene that triggers it.'
         },
         {
           name: 'Show image',
@@ -184,7 +199,7 @@
           name: 'Terminal effect',
           type: 'screen-effect',
           description: 'Shakes the screen or blinks the terminal when its host becomes active.',
-          usage: 'Choose Shake or Blink and attach it to a routed node. Reduced-motion settings disable animation.'
+          usage: 'Choose Shake or Blink, duration and repeat count, then attach it. Reduced-motion settings disable animation.'
         }
       ]
     },
@@ -203,6 +218,12 @@
           type: 'clear-terminal',
           description: 'Clears all terminal text and images before immediately continuing.',
           usage: 'Place it in the route exactly where the old terminal history should disappear, then connect Next.'
+        },
+        {
+          name: 'Stop music',
+          type: 'stop-music',
+          description: 'Stops every music track currently playing without adding another story step.',
+          usage: 'Attach it to the scene where the active musical layers should end.'
         },
         {
           name: 'Visual label',
@@ -344,7 +365,7 @@
 
     if ($location === 'library') {
       mode = 'library';
-    } else if ($location === 'editor') {
+    } else if ($location === 'editor' && mode === 'library') {
       mode = 'editor';
     }
   }
@@ -430,9 +451,16 @@
     return character.imagePositions[normalizedExpression] ?? { x: 50, y: 50 };
   }
 
-  function showLibrary(): void {
-    mode = 'library';
-    location.set('library');
+  function openCreateStory(): void {
+    mode = 'create';
+    location.set('editor');
+  }
+
+  function showEditorHome(): void {
+    editingStory = null;
+    selectedNodeId = '';
+    mode = 'editor';
+    location.set('editor');
   }
 
   function showEditor(): void {
@@ -441,10 +469,7 @@
   }
 
   function closeStoryEditor(): void {
-    editingStory = null;
-    selectedNodeId = '';
-    mode = 'editor';
-    location.set('editor');
+    showEditorHome();
   }
 
   function selectStory(storyId: string, playMode: StoryPlayMode): void {
@@ -587,9 +612,12 @@
         return;
       }
 
+      const changedDuringSave = Boolean(
+        editingStory && storyContentKey(editingStory) !== submittedKey
+      );
       lastSavedStoryKey = submittedKey;
 
-      if (editingStory && storyContentKey(editingStory) === submittedKey) {
+      if (editingStory && !changedDuringSave) {
         editingStory = prepareStoryForEditor(result.story);
         selectedNodeId = editingStory.nodes.some((node) => node.id === selectedBeforeSave)
           ? selectedBeforeSave
@@ -609,6 +637,12 @@
       statusMessage = source === 'auto'
         ? `Autosaved version ${result.story.version}.`
         : `Saved version ${result.story.version}.`;
+
+      if (afterSave && changedDuringSave) {
+        saveStory(source, afterSave);
+        return;
+      }
+
       afterSave?.();
     });
   }
@@ -657,12 +691,9 @@
       });
     };
 
-    if (storyContentKey(editingStory) !== lastSavedStoryKey) {
-      saveStory('manual', launch);
-      return;
-    }
-
-    launch();
+    // Playtesting always waits for a confirmed server save, even when the local
+    // document appears unchanged, so the cartridge can never launch stale data.
+    saveStory('manual', launch);
   }
 
   function synchronizeStoryCharacterIds(): void {
@@ -746,6 +777,39 @@
         node.imagePositionX ??= 50;
         node.imagePositionY ??= 50;
         node.logText ??= node.alt ?? '';
+        node.imageBorderColor ??= '#1472bf';
+      }
+
+      if (node.type === 'dialogue') {
+        node.continueLabel ??= 'Continue';
+      }
+
+      if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+        node.choices ??= [];
+
+        while (node.choices.length < 2) {
+          const optionNumber = node.choices.length + 1;
+
+          node.choices.push({
+            id: `option-${optionNumber}`,
+            label: `Option ${optionNumber}`,
+            next: ''
+          });
+        }
+
+        const enabledFallback = node.choices.find((choice) => !choice.disabled);
+
+        if (node.type === 'timed-choice'
+          && !node.choices.some(
+            (choice) => choice.id === node.fallbackChoiceId && !choice.disabled
+          )) {
+          node.fallbackChoiceId = enabledFallback?.id ?? node.choices[0].id;
+        }
+      }
+
+      if (node.type === 'screen-effect') {
+        node.effectDurationSeconds ??= node.screenEffect === 'blink' ? 0.75 : 0.6;
+        node.effectIterations ??= 1;
       }
     }
 
@@ -823,13 +887,13 @@
       shapeClass = 'node-shape-dialogue';
     } else if (type === 'checkpoint') {
       shapeClass = 'node-shape-checkpoint';
-    } else if (type === 'clear-terminal') {
+    } else if (['clear-terminal', 'stop-music'].includes(type)) {
       shapeClass = 'node-shape-clear';
     } else if (type === 'label') {
       shapeClass = 'node-shape-label';
-    } else if (type === 'ambience') {
+    } else if (['ambience', 'music', 'sound-effect'].includes(type)) {
       shapeClass = 'node-shape-audio';
-    } else if (type === 'image') {
+    } else if (['background', 'image'].includes(type)) {
       shapeClass = 'node-shape-image';
     } else if (type === 'minigame') {
       shapeClass = 'node-shape-minigame';
@@ -847,17 +911,19 @@
   }
 
   function isCompanionNodeType(type: string): boolean {
-    return companionNodeTypes.some((nodeType) => nodeType.type === type);
+    return type === 'ambience'
+      || companionNodeTypes.some((nodeType) => nodeType.type === type);
   }
 
   function isCompactSpecialNode(node: StoryNode): boolean {
-    return ['checkpoint', 'clear-terminal', 'label', 'ending'].includes(node.type);
+    return ['checkpoint', 'clear-terminal', 'stop-music', 'label', 'ending'].includes(node.type);
   }
 
   function compactNodeTitle(node: StoryNode): string {
     const titles: Record<string, string> = {
       checkpoint: 'CHECKPOINT',
       'clear-terminal': 'CLEAR',
+      'stop-music': 'STOP MUSIC',
       label: 'LABEL',
       ending: 'END'
     };
@@ -1209,13 +1275,20 @@
       {
         id: `option-${selectedNode.choices.length + 1}`,
         label: 'New option',
-        next: ''
+        next: '',
+        disabled: false
       }
     ];
   }
 
+  function enabledNodeChoices(node: StoryNode): NonNullable<StoryNode['choices']> {
+    return (node.choices ?? []).filter((choice) => {
+      return !choice.disabled;
+    });
+  }
+
   function removeChoice(index: number): void {
-    if ((selectedNode?.choices?.length ?? 0) <= 1) {
+    if ((selectedNode?.choices?.length ?? 0) <= 2) {
       return;
     }
 
@@ -1224,11 +1297,45 @@
       (_choice: unknown, choiceIndex: number) => choiceIndex !== index
     );
 
-    if (selectedNode.type === 'timed-choice'
-      && !selectedNode.choices.some(
-        (choice: { id: string }) => choice.id === selectedNode.fallbackChoiceId
-      )) {
-      selectedNode.fallbackChoiceId = selectedNode.choices[0].id;
+    ensureTimedChoiceFallback();
+  }
+
+  function setChoiceDisabled(index: number, disabled: boolean): void {
+    if (!selectedNode?.choices?.[index]) {
+      return;
+    }
+
+    const enabledChoiceCount = selectedNode.choices.filter(
+      (choice: { disabled?: boolean }) => !choice.disabled
+    ).length;
+
+    if (disabled && enabledChoiceCount <= 1) {
+      errorMessage = 'At least one choice must remain available to the player.';
+      refreshStory();
+      return;
+    }
+
+    rememberForUndo();
+    selectedNode.choices[index].disabled = disabled;
+    ensureTimedChoiceFallback();
+    refreshStory();
+  }
+
+  function ensureTimedChoiceFallback(): void {
+    if (!selectedNode || selectedNode.type !== 'timed-choice') {
+      return;
+    }
+
+    const fallbackIsEnabled = selectedNode.choices?.some(
+      (choice: { id: string; disabled?: boolean }) => (
+        choice.id === selectedNode.fallbackChoiceId && !choice.disabled
+      )
+    );
+
+    if (!fallbackIsEnabled) {
+      selectedNode.fallbackChoiceId = selectedNode.choices?.find(
+        (choice: { disabled?: boolean }) => !choice.disabled
+      )?.id ?? '';
     }
   }
 
@@ -1239,7 +1346,7 @@
 
     const input = event.currentTarget as HTMLInputElement;
     const requestedCount = Math.trunc(Number(input.value));
-    const choiceCount = Math.min(5, Math.max(1, requestedCount || 1));
+    const choiceCount = Math.min(5, Math.max(2, requestedCount || 2));
     const choices = [...(selectedNode.choices ?? [])];
 
     // Preserve existing routes while adding or trimming only the requested rows.
@@ -1251,18 +1358,14 @@
       choices.push({
         id: `option-${optionNumber}`,
         label: `Option ${optionNumber}`,
-        next: ''
+        next: '',
+        disabled: false
       });
     }
 
     selectedNode.choices = choices.slice(0, choiceCount);
 
-    if (selectedNode.type === 'timed-choice'
-      && !selectedNode.choices.some(
-        (choice: { id: string }) => choice.id === selectedNode.fallbackChoiceId
-      )) {
-      selectedNode.fallbackChoiceId = selectedNode.choices[0].id;
-    }
+    ensureTimedChoiceFallback();
 
     refreshStory();
   }
@@ -1803,7 +1906,9 @@
     }
 
     if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
-      return (node.choices ?? []).map((_choice, index) => `choices.${index}.next`);
+      return (node.choices ?? []).flatMap((choice, index) => (
+        choice.disabled ? [] : [`choices.${index}.next`]
+      ));
     }
 
     if (node.type === 'minigame') {
@@ -1819,7 +1924,7 @@
   }
 
   function isCompanionNode(node: StoryNode): boolean {
-    return companionNodeTypes.some((nodeType) => nodeType.type === node.type);
+    return isCompanionNodeType(node.type);
   }
 
   function canAttachToNode(companion: StoryNode, host: StoryNode): boolean {
@@ -2195,7 +2300,8 @@
           characterId: '',
           expression: 'normal',
           portrait: '',
-          portraitAlt: ''
+          portraitAlt: '',
+          continueLabel: 'Continue'
         };
       case 'choice':
       case 'vote':
@@ -2205,7 +2311,12 @@
           choices: [
             {
               id: 'option-1',
-              label: 'New option',
+              label: 'Option 1',
+              next: ''
+            },
+            {
+              id: 'option-2',
+              label: 'Option 2',
               next: ''
             }
           ],
@@ -2279,7 +2390,8 @@
           src: '',
           logText: '',
           imagePositionX: 50,
-          imagePositionY: 50
+          imagePositionY: 50,
+          imageBorderColor: '#1472bf'
         };
       case 'clear-terminal':
         return {
@@ -2297,6 +2409,38 @@
           music: null,
           sound: ''
         };
+      case 'background':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          background: ''
+        };
+      case 'music':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          music: ''
+        };
+      case 'sound-effect':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          sound: ''
+        };
+      case 'stop-music':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          stopMusic: true
+        };
       case 'screen-effect':
         // Presentation effects are companions, so they never receive a route.
         return {
@@ -2304,7 +2448,9 @@
           type,
           audience: 'both',
           attachedTo: '',
-          screenEffect: 'shake'
+          screenEffect: 'shake',
+          effectDurationSeconds: 0.6,
+          effectIterations: 1
         };
       case 'minigame':
         return {
@@ -2359,7 +2505,7 @@
             Solo cartridges launch immediately. Multiplayer cartridges activate when both players stage the same story and mode.
           </p>
         </div>
-        <button class="primary-button" type="button" on:click={() => mode = 'create'}>
+        <button class="primary-button" type="button" on:click={openCreateStory}>
           Make new story
         </button>
       </div>
@@ -2418,30 +2564,15 @@
                   {localSelection === story.id && localSelectionMode === 'multiplayer' ? 'Linked selected' : 'Play multiplayer'}
                 </button>
               {/if}
-              <button type="button" on:click={() => openEditor(story.id)}>
-                Edit
-              </button>
-              <button type="button" on:click={() => duplicateStory(story.id)}>
-                Duplicate
-              </button>
-              {#if !story.builtIn}
-                <button
-                  class="danger-button"
-                  type="button"
-                  on:click={() => deleteStory(story.id)}
-                >
-                  {deleteArmedId === story.id ? 'Confirm delete' : 'Delete'}
-                </button>
-              {/if}
             </div>
           </article>
         {/each}
       </div>
     </div>
-  {:else if $location === 'library' && mode === 'create'}
+  {:else if $location === 'editor' && mode === 'create'}
     <div class="form-screen">
-      <button class="back-button" type="button" on:click={showLibrary}>
-        ← Back to library
+      <button class="back-button" type="button" on:click={showEditorHome}>
+        ← Back to editor
       </button>
       <p class="eyebrow">NEW CARTRIDGE</p>
       <h1>Create a story</h1>
@@ -2964,6 +3095,13 @@
                 <input id="custom-speaker-name" bind:value={selectedNode.speaker}>
                 <p class="inspector-help">Custom speakers remain supported for system messages and unnamed extras.</p>
               {/if}
+              <label for="dialogue-continue-label">Continue button text</label>
+              <input
+                id="dialogue-continue-label"
+                bind:value={selectedNode.continueLabel}
+                maxlength="60"
+                placeholder="Continue"
+              >
             {/if}
 
             {#if routeFields(selectedNode).includes('next')}
@@ -3069,14 +3207,22 @@
               <input
                 id="choice-count"
                 type="number"
-                min="1"
+                min="2"
                 max="5"
-                value={selectedNode.choices?.length ?? 1}
+                value={selectedNode.choices?.length ?? 2}
                 on:input={setChoiceCount}
               >
               <p class="inspector-help">
-                Add between one and five buttons. Every button can route forward or loop back to an earlier node.
+                Add between two and five buttons. Disabled buttons remain visible but cannot be selected.
               </p>
+              {#if selectedNode.type === 'timed-choice'}
+                <label for="fallback-choice">Automatic fallback</label>
+                <select id="fallback-choice" bind:value={selectedNode.fallbackChoiceId}>
+                  {#each enabledNodeChoices(selectedNode) as choice}
+                    <option value={choice.id}>{choice.label || choice.id}</option>
+                  {/each}
+                </select>
+              {/if}
               <div class="choice-editor">
                 <div class="choice-heading">
                   <h3>Options</h3>
@@ -3090,6 +3236,14 @@
                   <div class="choice-row">
                     <input aria-label="Option ID" bind:value={choice.id} placeholder="option-id">
                     <input aria-label="Option label" bind:value={choice.label} placeholder="Player-facing label">
+                    <label class="choice-disabled-toggle">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(choice.disabled)}
+                        on:change={(event) => setChoiceDisabled(index, event.currentTarget.checked)}
+                      >
+                      Disabled
+                    </label>
                     <div class="choice-route">
                       <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
                       <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
@@ -3097,7 +3251,7 @@
                     <button
                       type="button"
                       aria-label={`Remove option ${index + 1}`}
-                      disabled={(selectedNode.choices?.length ?? 0) <= 1}
+                      disabled={(selectedNode.choices?.length ?? 0) <= 2}
                       on:click={() => removeChoice(index)}
                     >×</button>
                   </div>
@@ -3111,8 +3265,32 @@
                 <option value="shake">Screen shake</option>
                 <option value="blink">Terminal blink</option>
               </select>
+              <div class="field-grid">
+                <div>
+                  <label for="screen-effect-duration">Seconds per trigger</label>
+                  <input
+                    id="screen-effect-duration"
+                    type="number"
+                    min="0.1"
+                    max="20"
+                    step="0.1"
+                    bind:value={selectedNode.effectDurationSeconds}
+                  >
+                </div>
+                <div>
+                  <label for="screen-effect-iterations">Trigger count</label>
+                  <input
+                    id="screen-effect-iterations"
+                    type="number"
+                    min="1"
+                    max="20"
+                    step="1"
+                    bind:value={selectedNode.effectIterations}
+                  >
+                </div>
+              </div>
               <p class="inspector-help">
-                The effect plays when the attached host node becomes active and does not add a step to the story path.
+                The effect plays for the chosen duration and repeat count when its host node becomes active.
               </p>
             {/if}
 
@@ -3203,6 +3381,14 @@
                       <input type="range" min="0" max="100" bind:value={selectedNode.imagePositionY}>
                     </label>
                   </div>
+                  <label class="image-color-control" for="image-border-color">
+                    <span>Terminal border color</span>
+                    <input
+                      id="image-border-color"
+                      type="color"
+                      bind:value={selectedNode.imageBorderColor}
+                    >
+                  </label>
                   <button type="button" on:click={() => {
                     rememberForUndo();
                     selectedNode.src = '';
@@ -3226,6 +3412,29 @@
               <input id="music-source" bind:value={selectedNode.music} placeholder="/audio/music/theme.mp3">
               <label for="sound-source">Sound effect path</label>
               <input id="sound-source" bind:value={selectedNode.sound} placeholder="/audio/sounds/door.mp3">
+              <p class="inspector-warning">Legacy atmosphere node. New stories should use separate Music and Sound effect companions.</p>
+            {/if}
+
+            {#if selectedNode.type === 'background'}
+              <label for="background-source">Background image path</label>
+              <input id="background-source" bind:value={selectedNode.background} placeholder="/backgrounds/location.webp">
+              <p class="inspector-help">The background is displayed while the attached host scene is active.</p>
+            {/if}
+
+            {#if selectedNode.type === 'music'}
+              <label for="music-source">Music path</label>
+              <input id="music-source" bind:value={selectedNode.music} placeholder="/audio/music/theme.mp3">
+              <p class="inspector-help">The track loops and overlaps music already playing until a Stop music node runs.</p>
+            {/if}
+
+            {#if selectedNode.type === 'sound-effect'}
+              <label for="sound-source">Sound effect path</label>
+              <input id="sound-source" bind:value={selectedNode.sound} placeholder="/audio/sounds/door.wav">
+              <p class="inspector-help">Sound effects play once and do not interrupt active music.</p>
+            {/if}
+
+            {#if selectedNode.type === 'stop-music'}
+              <p class="inspector-help">Stops all music layers when the attached host node becomes active.</p>
             {/if}
 
             {#if selectedNode.type === 'minigame'}
@@ -3445,19 +3654,34 @@
   {:else if $location === 'editor'}
     <div class="editor-empty-state">
       <p class="eyebrow">STORY EDITOR</p>
-      <h1 id="library-title">Choose a story to edit</h1>
-      <p class="introduction">
-        Open an existing cartridge in the editor, or create a new story from the Library.
-      </p>
+      <div class="editor-home-heading">
+        <div>
+          <h1 id="library-title">Manage stories</h1>
+          <p class="introduction">
+            Create, edit, duplicate, or remove cartridges here. The Library remains focused on selecting stories to play.
+          </p>
+        </div>
+        <button class="primary-button" type="button" on:click={openCreateStory}>Create new story</button>
+      </div>
       <div class="editor-story-list">
         {#each $libraryState.stories as story}
-          <button type="button" on:click={() => openEditor(story.id)}>
-            <strong>{story.title}</strong>
-            <span>{story.builtIn ? 'BUILT-IN' : 'PLAYABLE'} · V{story.version}</span>
-          </button>
+          <article>
+            <button class="editor-story-open" type="button" on:click={() => openEditor(story.id)}>
+              <strong>{story.title}</strong>
+              <span>{story.builtIn ? 'BUILT-IN' : 'PLAYABLE'} · V{story.version}</span>
+            </button>
+            <div>
+              <button type="button" on:click={() => openEditor(story.id)}>Edit</button>
+              <button type="button" on:click={() => duplicateStory(story.id)}>Duplicate</button>
+              {#if !story.builtIn}
+                <button class="danger-button" type="button" on:click={() => deleteStory(story.id)}>
+                  {deleteArmedId === story.id ? 'Confirm delete' : 'Delete'}
+                </button>
+              {/if}
+            </div>
+          </article>
         {/each}
       </div>
-      <button class="back-button" type="button" on:click={showLibrary}>Open Library</button>
     </div>
   {/if}
 
@@ -4541,9 +4765,11 @@
   }
 
   .flow-node.selected {
-    background: #10263c;
-    border-color: #02fbfb;
-    box-shadow: 0 0 15px #02fbfb24;
+    background: #321b55 !important;
+    border-color: #c084fc !important;
+    outline: 3px solid #7e22ce;
+    outline-offset: 2px;
+    box-shadow: 0 0 22px #a855f766;
   }
 
   .flow-node.invalid {
@@ -4724,6 +4950,39 @@
 
     input {
       min-width: 0;
+    }
+  }
+
+  .choice-disabled-toggle {
+    grid-column: 1 / -1;
+    min-height: 34px;
+    padding: 5px 8px;
+    color: #c4b5fd;
+    background: #171329;
+    border: 1px solid #4c356f;
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    input {
+      width: 16px;
+      min-height: 16px;
+    }
+  }
+
+  .image-color-control {
+    color: #aeb9c9;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+
+    input[type='color'] {
+      width: 54px;
+      min-height: 36px;
+      padding: 3px;
     }
   }
 
@@ -5361,20 +5620,54 @@
     overflow-y: auto;
   }
 
+  .editor-home-heading {
+    width: min(980px, 100%);
+
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 24px;
+
+    > div {
+      min-width: 0;
+    }
+
+    .primary-button {
+      flex: 0 0 auto;
+    }
+  }
+
   .editor-story-list {
-    width: min(760px, 100%);
+    width: min(980px, 100%);
     margin: 26px 0;
 
     display: grid;
     gap: 8px;
 
-    button {
-      text-align: left;
+    article {
+      padding: 10px;
+      background: #0c1322;
+      border: 1px solid #2c3b54;
 
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 18px;
+
+      > div {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+    }
+
+    .editor-story-open {
+      min-width: 0;
+      text-align: left;
+
+      display: grid;
+      gap: 5px;
 
       strong {
         color: #02fbfb;
@@ -5463,6 +5756,20 @@
     .library-heading {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .editor-home-heading {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .editor-story-list article {
+      align-items: stretch;
+      flex-direction: column;
+
+      > div {
+        justify-content: flex-start;
+      }
     }
 
     .selection-panel {

@@ -36,7 +36,7 @@
 
   <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
     <span slot="title">Library</span>
-    <span slot="description">Select or create stories</span>
+    <span slot="description">Select and load stories</span>
   </Item>
 
   <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'} label="Minigames">
@@ -65,7 +65,7 @@
 
   <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'} label="Editor">
     <span slot="title">Editor</span>
-    <span slot="description">Build story flow charts</span>
+    <span slot="description">Create and manage stories</span>
   </Item>
 
   <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'} label="Settings">
