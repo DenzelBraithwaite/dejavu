@@ -24,6 +24,12 @@ export type StoryNode = {
     label: string;
     next: string;
     disabled?: boolean;
+    playerMode?: 'singleplayer' | 'multiplayer';
+    condition?: {
+      type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'relationship-at-least';
+      key: string;
+      value?: string | number | boolean;
+    };
     effects?: Array<Record<string, unknown>>;
   }>;
   maxLength?: number;
@@ -47,6 +53,15 @@ export type StoryNode = {
   music?: string | null;
   sound?: string;
   stopMusic?: boolean;
+  audioId?: string;
+  audioLayer?: number;
+  audioLoop?: boolean;
+  audioVolume?: number;
+  fadeInSeconds?: number;
+  fadeOutSeconds?: number;
+  stopMusicIds?: string[];
+  stopMusicLayers?: number[];
+  stopSounds?: boolean;
   screenEffect?: 'shake' | 'blink';
   effectDurationSeconds?: number;
   effectIterations?: number;
@@ -59,6 +74,12 @@ export type StoryNode = {
   falseNext?: string;
   [key: string]: unknown;
   map?: 'singleplayer' | 'multiplayer';
+};
+
+export type AudioAsset = {
+  name: string;
+  path: string;
+  kind: 'music' | 'sound';
 };
 
 export type EditorHandoff = {

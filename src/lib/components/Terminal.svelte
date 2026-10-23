@@ -4,7 +4,7 @@
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
   import { applySceneAudio } from '../audio/audioManager';
   import { socket } from '../socket';
-  import { campaignState, type TerminalImage } from '../stores/campaign';
+  import { campaignState } from '../stores/campaign';
   import { editorHandoff, libraryState } from '../stores/library';
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
@@ -24,8 +24,7 @@
   let lastAudioSceneId = '';
   let diceTerminalOpen = false;
   let scenePresentation: Pick<StoryNode, 'background'> = {};
-  let sceneAudioCues: Array<Pick<StoryNode, 'music' | 'sound' | 'stopMusic'>> = [];
-  let persistentImages: TerminalImage[] = [];
+  let sceneAudioCues: StoryNode[] = [];
   let shakeEffect: StoryNode | undefined;
   let blinkEffect: StoryNode | undefined;
   let sceneSpeaker = '';
@@ -81,15 +80,7 @@
     }
   }
   $: sceneAudioCues = [scene, ...companionNodes]
-    .filter((candidate): candidate is StoryNode => Boolean(candidate))
-    .map((candidate) => ({
-      music: candidate.music,
-      sound: candidate.sound,
-      stopMusic: candidate.stopMusic || candidate.type === 'stop-music'
-    }));
-  $: persistentImages = playerId && $campaignState
-    ? $campaignState.terminalImages?.[playerId] ?? []
-    : [];
+    .filter((candidate): candidate is StoryNode => Boolean(candidate));
 
   $: player = playerId && $campaignState
     ? $campaignState.players[playerId]
@@ -100,6 +91,9 @@
   $: pendingDice = playerId && $campaignState
     ? $campaignState.pendingDice[playerId]
     : undefined;
+  $: storyEnded = Boolean(
+    playerId && $campaignState?.endedPlayers?.includes(playerId)
+  );
   $: {
     textValues = {};
 
@@ -215,6 +209,27 @@
       sceneId: scene.id,
       choiceId
     });
+  }
+
+  function choiceIsAvailable(choice: NonNullable<StoryNode['choices']>[number]): boolean {
+    if (choice.disabled || !choice.condition || !player || !$campaignState) {
+      return !choice.disabled && !choice.condition;
+    }
+
+    const condition = choice.condition;
+
+    switch (condition.type) {
+      case 'has-item':
+        return player.inventory.includes(condition.key);
+      case 'flag-equals':
+        return $campaignState.flags[condition.key] === condition.value;
+      case 'stat-at-least':
+        return Number(player.stats[condition.key] ?? 0) >= Number(condition.value ?? 0);
+      case 'relationship-at-least':
+        return Number(player.relationships?.[condition.key] ?? 0) >= Number(condition.value ?? 0);
+      default:
+        return false;
+    }
   }
 
   function submitInput(): void {
@@ -408,72 +423,83 @@
         <p>Select a solo cartridge from Library to take control, or choose the same multiplayer cartridge together.</p>
         <button type="button" on:click={() => location.set('library')}>Open Library</button>
       </div>
+    {:else if storyEnded}
+      <div class="cartridge-status" role="status">
+        <p class="scene-id">END OF PATH</p>
+        <h1>This story branch has ended</h1>
+        <p>The cartridge had no next connection, so the terminal closed this path cleanly.</p>
+      </div>
     {:else if !$campaignState || !scene}
       <p class="system-message">Synchronizing campaign state...</p>
     {:else}
       <div class="terminal-history" aria-label="Previous terminal output">
         {#each terminalEntries as entry}
-          <article class="terminal-history-entry" class:terminal-history-entry--portrait={Boolean(entry.portrait)}>
-            {#if entry.portrait}
+          {#if entry.kind === 'image' && entry.src}
+            <figure
+              class="scene-image-wrapper terminal-image-entry"
+              style:border-color={entry.imageBorderColor ?? '#1472bf'}
+            >
               <img
-                class="history-portrait"
-                src={entry.portrait}
-                alt={entry.portraitAlt ?? ''}
-                style:object-position={`${entry.portraitPosition?.x ?? 50}% ${entry.portraitPosition?.y ?? 50}%`}
+                class="scene-image"
+                src={entry.src}
+                alt={entry.logText ?? entry.alt ?? ''}
+                style:object-position={`${entry.imagePositionX ?? 50}% ${entry.imagePositionY ?? 50}%`}
               >
-            {/if}
-            <div>
-              <p class="history-scene-id">{entry.sceneId}</p>
-              <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
-              <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
-            </div>
-          </article>
+            </figure>
+          {:else}
+            <article class="terminal-history-entry" class:terminal-history-entry--portrait={Boolean(entry.portrait)}>
+              {#if entry.portrait}
+                <img
+                  class="history-portrait"
+                  src={entry.portrait}
+                  alt={entry.portraitAlt ?? ''}
+                  style:object-position={`${entry.portraitPosition?.x ?? 50}% ${entry.portraitPosition?.y ?? 50}%`}
+                >
+              {/if}
+              <div>
+                <p class="history-scene-id">{entry.sceneId}</p>
+                <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
+                <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+              </div>
+            </article>
+          {/if}
         {/each}
       </div>
 
-      <p class="scene-id">{scene.id}</p>
+      {#if scene.type !== 'image' || sceneText}
+        <p class="scene-id">{scene.id}</p>
 
-      {#each persistentImages as image}
-        <figure class="scene-image-wrapper" style:border-color={image.imageBorderColor}>
-          <img
-            class="scene-image"
-            src={image.src}
-            alt={image.logText ?? image.alt ?? ''}
-            style:object-position={`${image.imagePositionX ?? 50}% ${image.imagePositionY ?? 50}%`}
-          >
-        </figure>
-      {/each}
-
-      <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scenePortrait)}>
-        {#if scene.type === 'dialogue' && scenePortrait}
-          <figure class="dialogue-portrait">
-            <img
-              src={scenePortrait}
-              alt={scenePortraitAlt}
-              style:object-position={`${scenePortraitPosition.x}% ${scenePortraitPosition.y}%`}
-            >
-          </figure>
-        {/if}
-
-        <div class="scene-copy__text">
-          {#if sceneSpeaker}
-            <p class="speaker">{interpolateSceneText(sceneSpeaker, textValues)}</p>
+        <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scenePortrait)}>
+          {#if scene.type === 'dialogue' && scenePortrait}
+            <figure class="dialogue-portrait">
+              <img
+                src={scenePortrait}
+                alt={scenePortraitAlt}
+                style:object-position={`${scenePortraitPosition.x}% ${scenePortraitPosition.y}%`}
+              >
+            </figure>
           {/if}
 
-          <p
-            class="scene-text"
-            class:scene-text-complete={typingComplete}
-            use:typewriter={{
-              text: sceneText,
-              timing: sceneSpeaker
-                ? typewriterProfiles.dialogue
-                : typewriterProfiles.narration,
-              onComplete: completeTyping
-            }}
-            aria-live="polite"
-          ></p>
+          <div class="scene-copy__text">
+            {#if sceneSpeaker}
+              <p class="speaker">{interpolateSceneText(sceneSpeaker, textValues)}</p>
+            {/if}
+
+            <p
+              class="scene-text"
+              class:scene-text-complete={typingComplete}
+              use:typewriter={{
+                text: sceneText,
+                timing: sceneSpeaker
+                  ? typewriterProfiles.dialogue
+                  : typewriterProfiles.narration,
+                onComplete: completeTyping
+              }}
+              aria-live="polite"
+            ></p>
+          </div>
         </div>
-      </div>
+      {/if}
 
       {#if scene.type === 'conversation' && conversation}
         <div class="conversation-status" aria-live="polite">
@@ -502,7 +528,7 @@
   {#if $campaignState && scene}
     <div class="terminal-controls">
       {#if ['dialogue', 'image', 'effect', 'ambience'].includes(scene.type)}
-        <button type="button" disabled={!typingComplete} on:click={advance}>
+        <button type="button" on:click={advance}>
           {scene.continueLabel?.trim() || 'Continue'}
         </button>
       {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
@@ -515,7 +541,7 @@
         {#each scene.choices ?? [] as choice}
           <button
             type="button"
-            disabled={!typingComplete || choice.disabled}
+            disabled={!typingComplete || !choiceIsAvailable(choice)}
             on:click={() => choose(choice.id)}
           >
             {choice.label}
@@ -586,7 +612,7 @@
           {#each scene.choices ?? [] as choice}
             <button
               type="button"
-              disabled={!typingComplete || choice.disabled}
+              disabled={!typingComplete || !choiceIsAvailable(choice)}
               on:click={() => choose(choice.id)}
             >
               Vote: {choice.label}

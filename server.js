@@ -74,6 +74,8 @@ const savesDirectory = join(__dirname, 'data', 'saves');
 const storyDatabasePath = join(__dirname, 'data', 'dejavu.sqlite');
 const storyImageDirectory = join(__dirname, 'public', 'uploads', 'stories');
 const characterImageDirectory = join(__dirname, 'public', 'uploads', 'characters');
+const musicDirectory = join(__dirname, 'public', 'audio', 'music');
+const soundDirectory = join(__dirname, 'public', 'audio', 'sounds');
 const reconnectGraceMs = 60_000;
 const storyImageExtensions = new Map([
   ['image/avif', 'avif'],
@@ -112,6 +114,7 @@ const storySelectionModes = {
   p1: null,
   p2: null
 };
+const storyEditLocks = new Map();
 let activeStoryId = null;
 let activeStoryMode = null;
 let activeSoloPlayerId = null;
@@ -245,6 +248,50 @@ app.delete('/api/story-assets/images/:fileName', async (request, response) => {
     console.error('Could not delete a story image.', error);
     response.status(500).json({
       error: 'The image could not be deleted from the host.'
+    });
+  }
+});
+
+app.get('/api/story-assets/audio', async (_request, response) => {
+  try {
+    const audioGroups = [
+      {
+        directory: musicDirectory,
+        kind: 'music',
+        publicDirectory: '/audio/music'
+      },
+      {
+        directory: soundDirectory,
+        kind: 'sound',
+        publicDirectory: '/audio/sounds'
+      }
+    ];
+    const assets = [];
+
+    for (const group of audioGroups) {
+      await mkdir(group.directory, { recursive: true });
+      const entries = await readdir(group.directory, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (!entry.isFile() || !/\.(aac|flac|m4a|mp3|ogg|opus|wav|webm)$/i.test(entry.name)) {
+          continue;
+        }
+
+        assets.push({
+          name: entry.name,
+          path: `${group.publicDirectory}/${entry.name}`,
+          kind: group.kind
+        });
+      }
+    }
+
+    response.json({
+      assets: assets.sort((left, right) => left.name.localeCompare(right.name))
+    });
+  } catch (error) {
+    console.error('Could not list story audio.', error);
+    response.status(500).json({
+      error: 'The story audio library could not be loaded.'
     });
   }
 });
@@ -433,7 +480,25 @@ io.on('connection', (socket) => {
   });
 
   socket.on('library:get-story', (storyId, acknowledge = () => {}) => {
-    const story = storyRepository.getStory(String(storyId ?? ''));
+    const normalizedStoryId = String(storyId ?? '');
+    const story = storyRepository.getStory(normalizedStoryId);
+    const lock = storyEditLocks.get(normalizedStoryId);
+
+    if (story && lock && lock.socketId !== socket.id) {
+      acknowledge({
+        ok: false,
+        error: `${lock.playerName} is already editing this story.`
+      });
+      return;
+    }
+
+    if (story) {
+      releaseEditorLocks(socket.id);
+      storyEditLocks.set(normalizedStoryId, {
+        socketId: socket.id,
+        playerName: campaignState.players[playerId].name
+      });
+    }
 
     acknowledge(story
       ? {
@@ -450,6 +515,11 @@ io.on('connection', (socket) => {
     try {
       validateStoryCharacterReferences(input ?? {});
       const story = storyRepository.createStory(input ?? {});
+      releaseEditorLocks(socket.id);
+      storyEditLocks.set(story.id, {
+        socketId: socket.id,
+        playerName: campaignState.players[playerId].name
+      });
       acknowledge({
         ok: true,
         story
@@ -465,9 +535,16 @@ io.on('connection', (socket) => {
 
   socket.on('library:update-story', (request, acknowledge = () => {}) => {
     try {
+      const storyId = String(request?.storyId ?? '');
+      const lock = storyEditLocks.get(storyId);
+
+      if (!lock || lock.socketId !== socket.id) {
+        throw new Error('This editor lock expired. Reopen the story before saving.');
+      }
+
       validateStoryCharacterReferences(request?.story ?? {});
       const story = storyRepository.updateStory(
-        String(request?.storyId ?? ''),
+        storyId,
         request?.story
       );
       acknowledge({
@@ -502,7 +579,14 @@ io.on('connection', (socket) => {
   socket.on('library:delete-story', (storyId, acknowledge = () => {}) => {
     try {
       const normalizedStoryId = String(storyId ?? '');
+      const lock = storyEditLocks.get(normalizedStoryId);
+
+      if (lock && lock.socketId !== socket.id) {
+        throw new Error(`${lock.playerName} is editing this story, so it cannot be deleted.`);
+      }
+
       storyRepository.deleteStory(normalizedStoryId);
+      storyEditLocks.delete(normalizedStoryId);
 
       for (const participantId of ['p1', 'p2']) {
         if (storySelections[participantId] === normalizedStoryId) {
@@ -529,15 +613,9 @@ io.on('connection', (socket) => {
     const requestedStoryId = typeof selection === 'object'
       ? selection?.storyId
       : selection;
-    const requestedMode = typeof selection === 'object'
-      ? selection?.mode
-      : 'multiplayer';
     const normalizedStoryId = requestedStoryId === null
       ? null
       : String(requestedStoryId ?? '');
-    const normalizedMode = requestedMode === 'singleplayer'
-      ? 'singleplayer'
-      : 'multiplayer';
 
     const story = normalizedStoryId
       ? storyRepository.getStory(normalizedStoryId)
@@ -555,6 +633,14 @@ io.on('connection', (socket) => {
       singleplayer: false,
       multiplayer: true
     };
+    const requestedMode = typeof selection === 'object'
+      ? selection?.mode
+      : null;
+    const normalizedMode = requestedMode === 'singleplayer' || requestedMode === 'multiplayer'
+      ? requestedMode
+      : supportedModes.singleplayer
+        ? 'singleplayer'
+        : 'multiplayer';
 
     if (story && !supportedModes[normalizedMode]) {
       acknowledge({
@@ -572,6 +658,10 @@ io.on('connection', (socket) => {
     });
     broadcastLibraryState();
     io.emit('campaign:state', getCampaignSnapshot(campaignState));
+  });
+
+  socket.on('library:release-story', () => {
+    releaseEditorLocks(socket.id);
   });
 
   socket.on('chat:send', (value, acknowledge = () => {}) => {
@@ -636,6 +726,23 @@ io.on('connection', (socket) => {
       acknowledge(result);
 
       if (result.ok) {
+        if (result.sessionMode) {
+          activeStoryMode = result.sessionMode;
+          activeSoloPlayerId = result.sessionMode === 'singleplayer' ? playerId : null;
+
+          if (result.sessionMode === 'multiplayer') {
+            storySelections.p1 = activeStoryId;
+            storySelections.p2 = activeStoryId;
+            storySelectionModes.p1 = 'multiplayer';
+            storySelectionModes.p2 = 'multiplayer';
+          } else {
+            storySelections[playerId] = activeStoryId;
+            storySelectionModes[playerId] = 'singleplayer';
+          }
+
+          broadcastLibraryState();
+        }
+
         io.emit('campaign:state', getCampaignSnapshot(campaignState));
       }
     } catch (error) {
@@ -1151,6 +1258,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    releaseEditorLocks(socket.id);
     const slot = playerSlots[playerId];
 
     if (slot.socketId === socket.id) {
@@ -1451,6 +1559,14 @@ function getStoryCharacters(story) {
 
 function broadcastLibraryState() {
   io.emit('library:state', createLibraryState());
+}
+
+function releaseEditorLocks(socketId) {
+  for (const [storyId, lock] of storyEditLocks.entries()) {
+    if (lock.socketId === socketId) {
+      storyEditLocks.delete(storyId);
+    }
+  }
 }
 
 function synchronizeActiveStory(preferredPlayerId = null) {

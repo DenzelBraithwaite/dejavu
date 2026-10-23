@@ -76,10 +76,7 @@ export function createCampaignState(story = null, options = {}) {
       p1: [],
       p2: []
     },
-    terminalImages: {
-      p1: [],
-      p2: []
-    },
+    endedPlayers: [],
     deadlines: {},
     transcript: [],
     decisions: [],
@@ -113,7 +110,8 @@ function createPlayerState(character, fallbackName, fallbackStats) {
     },
     inventory: [],
     knownCharacters: [],
-    statusEffects: []
+    statusEffects: [],
+    relationships: {}
   };
 }
 
@@ -155,7 +153,8 @@ export function restoreCampaignState(candidate) {
     : PLAYER_IDS;
 
   for (const playerId of restoredPlayerIds) {
-    if (!getScene(candidate, candidate.currentScene?.[playerId])) {
+    if (!candidate.endedPlayers?.includes(playerId)
+      && !getScene(candidate, candidate.currentScene?.[playerId])) {
       throw new Error(`Save references an unknown scene for ${playerId}.`);
     }
   }
@@ -177,21 +176,24 @@ export function restoreCampaignState(candidate) {
       p1: [],
       p2: []
     },
-    terminalImages: candidate.terminalImages ?? {
-      p1: [],
-      p2: []
-    }
+    endedPlayers: candidate.endedPlayers ?? []
   });
 
-  // Older saves did not store persistent terminal images. Rebuild the visible
-  // image from the restored scene so loading an image node never appears blank.
-  if (!candidate.terminalImages) {
-    for (const playerId of restoredPlayerIds) {
-      const scene = getScene(restored, restored.currentScene[playerId]);
+  for (const playerId of PLAYER_IDS) {
+    restored.players[playerId].relationships ??= {};
+  }
 
-      if (scene) {
-        applySceneImages(restored, playerId, scene);
-      }
+  // Migrate the short-lived persistent image format into the chronological
+  // terminal feed. Images now behave exactly like text output and never move.
+  for (const playerId of restoredPlayerIds) {
+    for (const image of candidate.terminalImages?.[playerId] ?? []) {
+      appendTerminalEntry(restored, playerId, {
+        kind: 'image',
+        sceneId: restored.currentScene[playerId] || 'restored-image',
+        speaker: '',
+        text: '',
+        ...image
+      });
     }
   }
 
@@ -205,6 +207,10 @@ export function handleCampaignAction(state, playerId, action) {
 
   if (state.sessionMode === 'singleplayer' && state.soloPlayerId !== playerId) {
     return actionError('The other player owns this single-player campaign.');
+  }
+
+  if (state.endedPlayers?.includes(playerId)) {
+    return actionError('This story path has ended.');
   }
 
   const sceneId = state.currentScene[playerId];
@@ -305,10 +311,6 @@ export function completeActiveMinigame(state, resultId) {
   const scene = getScene(state, state.activeMinigame.sceneId);
   const nextSceneId = scene?.resultNext?.[resultId];
 
-  if (!nextSceneId) {
-    return actionError(`The minigame result is not connected: ${resultId}`);
-  }
-
   state.decisions.push({
     type: 'minigame',
     sceneId: scene.id,
@@ -325,7 +327,7 @@ export function completeActiveMinigame(state, resultId) {
 }
 
 function handleAdvance(state, playerId, scene, action) {
-  if (action.type !== 'advance' || !scene.next) {
+  if (action.type !== 'advance') {
     return actionError('This scene requires an advance action.');
   }
 
@@ -338,7 +340,10 @@ function handleAdvance(state, playerId, scene, action) {
 
   recordTranscript(state, playerId, transcriptText, transcriptSpeaker, scene.id);
   applyEffects(state, playerId, scene.effects ?? []);
-  archiveSceneForPlayer(state, playerId, scene);
+  if (scene.type !== 'image') {
+    archiveSceneForPlayer(state, playerId, scene);
+  }
+
   setPlayerScene(state, playerId, scene.next);
 
   return actionSuccess();
@@ -360,13 +365,23 @@ function handleChoice(state, playerId, scene, action) {
 
   const choice = scene.choices?.find((candidate) => candidate.id === action.choiceId);
 
-  if (!choice || choice.disabled) {
+  if (!choice || !choiceIsAvailable(state, playerId, choice)) {
     return actionError('That choice is not available.');
   }
 
   applyEffects(state, playerId, choice.effects ?? []);
   recordDecision(state, playerId, scene.id, choice.id, choice.label);
   archiveSceneForPlayer(state, playerId, scene, `> ${choice.label}`);
+
+  if (choice.playerMode && choice.playerMode !== state.sessionMode) {
+    switchCampaignMode(state, choice.playerMode, playerId, choice.next);
+
+    return {
+      ok: true,
+      sessionMode: choice.playerMode
+    };
+  }
+
   setPlayerScene(state, playerId, choice.next);
 
   return actionSuccess();
@@ -546,7 +561,7 @@ function handleVote(state, playerId, scene, action) {
 
   const choice = scene.choices?.find((candidate) => candidate.id === action.choiceId);
 
-  if (!choice || choice.disabled) {
+  if (!choice || !choiceIsAvailable(state, playerId, choice)) {
     return actionError('That vote is not available.');
   }
 
@@ -598,12 +613,17 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
       continue;
     }
 
-    const enabledChoices = scene.choices?.filter((choice) => !choice.disabled) ?? [];
+    const enabledChoices = scene.choices?.filter(
+      (choice) => choiceIsAvailable(state, playerId, choice)
+    ) ?? [];
     const fallback = enabledChoices.find(
       (choice) => choice.id === scene.fallbackChoiceId
     ) ?? enabledChoices[Math.floor(Math.random() * enabledChoices.length)];
 
     if (!fallback) {
+      archiveSceneForPlayer(state, playerId, scene);
+      markPlayerEnded(state, playerId);
+      changed = true;
       continue;
     }
 
@@ -633,15 +653,24 @@ export function initializeDeadlines(state) {
 }
 
 function setPlayerScene(state, playerId, nextSceneId) {
+  if (!nextSceneId) {
+    markPlayerEnded(state, playerId);
+    return;
+  }
+
   const nextScene = resolveAutomaticNodes(state, playerId, nextSceneId);
 
   if (!nextScene) {
-    throw new Error(`Cannot advance to unknown scene: ${nextSceneId}`);
+    markPlayerEnded(state, playerId);
+    return;
   }
 
+  state.endedPlayers = (state.endedPlayers ?? []).filter(
+    (candidate) => candidate !== playerId
+  );
   state.currentScene[playerId] = nextScene.id;
   applyAttachedCompanions(state, playerId, nextScene);
-  applySceneImages(state, playerId, nextScene);
+  appendSceneImages(state, playerId, nextScene);
   delete state.deadlines[playerId];
 
   if (nextScene.type === 'conversation') {
@@ -649,7 +678,7 @@ function setPlayerScene(state, playerId, nextSceneId) {
   }
 }
 
-function applySceneImages(state, playerId, scene) {
+function appendSceneImages(state, playerId, scene) {
   const attachedImages = state.story?.nodes.filter(
     (node) => node.type === 'image'
       && node.attachedTo === scene.id
@@ -664,18 +693,20 @@ function applySceneImages(state, playerId, scene) {
     return;
   }
 
-  state.terminalImages ??= {
-    p1: [],
-    p2: []
-  };
-  state.terminalImages[playerId] = imageNodes.map((image) => ({
-    src: image.src,
-    alt: image.alt ?? '',
-    logText: image.logText ?? image.alt ?? '',
-    imagePositionX: Number(image.imagePositionX ?? 50),
-    imagePositionY: Number(image.imagePositionY ?? 50),
-    imageBorderColor: image.imageBorderColor ?? '#1472bf'
-  }));
+  for (const image of imageNodes) {
+    appendTerminalEntry(state, playerId, {
+      kind: 'image',
+      sceneId: image.id,
+      speaker: '',
+      text: '',
+      src: image.src,
+      alt: image.alt ?? '',
+      logText: image.logText ?? image.alt ?? '',
+      imagePositionX: Number(image.imagePositionX ?? 50),
+      imagePositionY: Number(image.imagePositionY ?? 50),
+      imageBorderColor: image.imageBorderColor ?? '#1472bf'
+    });
+  }
 }
 
 function applyAttachedCompanions(state, playerId, scene) {
@@ -715,11 +746,6 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
 
     if (scene.type === 'clear-terminal') {
       state.terminalOutput[playerId] = [];
-      state.terminalImages ??= {
-        p1: [],
-        p2: []
-      };
-      state.terminalImages[playerId] = [];
       scene = getScene(state, scene.next);
       continue;
     }
@@ -727,10 +753,6 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
     const destination = evaluateCondition(state, playerId, scene.condition)
       ? scene.trueNext
       : scene.falseNext;
-
-    if (!destination) {
-      throw new Error(`Condition node ${scene.id} has an unconnected branch.`);
-    }
 
     scene = getScene(state, destination);
   }
@@ -747,6 +769,9 @@ function evaluateCondition(state, playerId, condition = {}) {
     case 'stat-at-least':
       return Number(state.players[playerId].stats[condition.key] ?? 0)
         >= Number(condition.value ?? 0);
+    case 'relationship-at-least':
+      return Number(state.players[playerId].relationships?.[condition.key] ?? 0)
+        >= Number(condition.value ?? 0);
     case 'last-dice-success': {
       const lastDiceDecision = [...state.decisions].reverse().find(
         (decision) => decision.type === 'dice-check' && decision.playerId === playerId
@@ -756,6 +781,61 @@ function evaluateCondition(state, playerId, condition = {}) {
     }
     default:
       return false;
+  }
+}
+
+function choiceIsAvailable(state, playerId, choice) {
+  return !choice.disabled
+    && (!choice.condition || evaluateCondition(state, playerId, choice.condition));
+}
+
+function markPlayerEnded(state, playerId) {
+  state.endedPlayers ??= [];
+  addUnique(state.endedPlayers, playerId);
+  state.currentScene[playerId] = '';
+  delete state.deadlines[playerId];
+}
+
+function switchCampaignMode(state, mode, playerId, nextSceneId) {
+  if (!state.story?.playModes?.[mode]) {
+    throw new Error(`This cartridge does not support ${mode}.`);
+  }
+
+  state.sessionMode = mode;
+  state.soloPlayerId = mode === 'singleplayer' ? playerId : null;
+
+  const assignedCharacters = resolvePlayerCharacters(
+    state.story,
+    mode,
+    state.soloPlayerId,
+    state.characters
+  );
+
+  for (const participantId of PLAYER_IDS) {
+    const assignedCharacter = assignedCharacters[participantId];
+
+    if (!assignedCharacter) {
+      continue;
+    }
+
+    state.players[participantId] = {
+      ...state.players[participantId],
+      characterId: assignedCharacter.id,
+      name: assignedCharacter.name,
+      wallet: Number(assignedCharacter.wallet ?? 0),
+      stats: {
+        ...assignedCharacter.stats
+      }
+    };
+  }
+
+  if (mode === 'singleplayer') {
+    setPlayerScene(state, playerId, nextSceneId);
+    return;
+  }
+
+  for (const participantId of PLAYER_IDS) {
+    setPlayerScene(state, participantId, state.story.initialSceneIds[participantId]);
   }
 }
 
@@ -835,6 +915,12 @@ function applyEffects(state, playerId, effects) {
       case 'adjust-stat':
         state.players[playerId].stats[effect.key] = Number(
           state.players[playerId].stats[effect.key] ?? 0
+        ) + Number(effect.value ?? 0);
+        break;
+      case 'adjust-relationship':
+        state.players[playerId].relationships ??= {};
+        state.players[playerId].relationships[effect.key] = Number(
+          state.players[playerId].relationships[effect.key] ?? 0
         ) + Number(effect.value ?? 0);
         break;
       case 'install-mod':

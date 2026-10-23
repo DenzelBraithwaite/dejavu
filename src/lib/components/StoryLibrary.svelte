@@ -10,6 +10,7 @@
   import {
     editorHandoff,
     libraryState,
+    type AudioAsset,
     type StoryDocument,
     type StoryNode
   } from '../stores/library';
@@ -120,8 +121,8 @@
         {
           name: 'Choice',
           type: 'choice',
-          description: 'Shows two to five labelled buttons, including optional visible-but-disabled choices.',
-          usage: 'Set labels and availability, then connect every enabled option. Routes may loop back to this node.'
+          description: 'Shows two to five labelled buttons with static or campaign-state locks and optional player-mode changes.',
+          usage: 'Set labels, item/flag/stat/relationship requirements, and destinations. A mode-changing option starts the matching map.'
         },
         {
           name: 'Timed choice',
@@ -162,14 +163,14 @@
         {
           name: 'Play music',
           type: 'music',
-          description: 'Starts a looping music track without stopping tracks already playing.',
-          usage: 'Provide a music path and attach it to the scene where playback should begin.'
+          description: 'Starts layered music without stopping tracks already playing.',
+          usage: 'Choose a library track, ID, layer, volume, loop behavior, and fades, then attach it to its starting scene.'
         },
         {
           name: 'Sound effect',
           type: 'sound-effect',
-          description: 'Plays a one-shot sound while existing music continues.',
-          usage: 'Provide a short sound path and attach it to the scene that triggers it.'
+          description: 'Plays a one-shot or looping sound while existing music continues.',
+          usage: 'Choose a library sound, volume, loop behavior, and fades, then attach it to the triggering scene.'
         },
         {
           name: 'Show image',
@@ -222,8 +223,8 @@
         {
           name: 'Stop music',
           type: 'stop-music',
-          description: 'Stops every music track currently playing without adding another story step.',
-          usage: 'Attach it to the scene where the active musical layers should end.'
+          description: 'Stops every track or selected music IDs/layers without adding another story step.',
+          usage: 'Choose optional track IDs, layers, fade-out time, and whether looping sounds also stop, then attach it.'
         },
         {
           name: 'Visual label',
@@ -294,6 +295,9 @@
   let imageLibraryOpen = false;
   let imageLibraryTarget: 'portrait' | 'image' = 'image';
   let storyImages: string[] = [];
+  let audioLibraryOpen = false;
+  let audioLibraryTarget: 'music' | 'sound' = 'music';
+  let audioAssets: AudioAsset[] = [];
   let pendingAssetDeletion: {
     path: string;
     references: Array<{ id: string; title: string }>;
@@ -313,6 +317,7 @@
   let autosaveTimer: number | undefined;
   let savePulseTimer: number | undefined;
   let inspectorElement: HTMLElement;
+  let editorLockStoryId = '';
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -340,12 +345,6 @@
   $: partnerSelection = partnerId
     ? $libraryState.selections[partnerId]
     : null;
-  $: partnerSelectionMode = partnerId
-    ? $libraryState.selectionModes[partnerId]
-    : null;
-  $: localSelectionMode = playerId
-    ? $libraryState.selectionModes[playerId]
-    : null;
   $: selectedNode = editingStory?.nodes.find(
     (node) => node.id === selectedNodeId
   ) ?? null;
@@ -368,6 +367,11 @@
     } else if ($location === 'editor' && mode === 'library') {
       mode = 'editor';
     }
+  }
+  $: if ($location !== 'editor' && editorLockStoryId) {
+    socket.emit('library:release-story');
+    editorLockStoryId = '';
+    editingStory = null;
   }
   $: if ($location === 'editor' && $editorHandoff) {
     const handoff = $editorHandoff;
@@ -396,6 +400,8 @@
     window.clearTimeout(toastTimer);
     window.clearTimeout(savePulseTimer);
     window.clearInterval(autosaveTimer);
+    socket.emit('library:release-story');
+    editorLockStoryId = '';
   });
 
   function storyTitle(storyId: string | null): string {
@@ -405,15 +411,6 @@
 
     return $libraryState.stories.find((story) => story.id === storyId)?.title
       ?? storyId;
-  }
-
-  function storySupportsMode(story: { playModes?: StoryDocument['playModes'] }, map: StoryPlayMode): boolean {
-    const modes = story.playModes ?? {
-      singleplayer: false,
-      multiplayer: true
-    };
-
-    return Boolean(modes[map]);
   }
 
   function setNewStoryMode(map: StoryPlayMode, enabled: boolean): void {
@@ -457,6 +454,11 @@
   }
 
   function showEditorHome(): void {
+    if (editingStory) {
+      socket.emit('library:release-story');
+    }
+
+    editorLockStoryId = '';
     editingStory = null;
     selectedNodeId = '';
     mode = 'editor';
@@ -472,22 +474,19 @@
     showEditorHome();
   }
 
-  function selectStory(storyId: string, playMode: StoryPlayMode): void {
+  function selectStory(storyId: string): void {
     clearMessages();
     socket.emit('library:select-story', {
-      storyId,
-      mode: playMode
-    }, handleSimpleResult(playMode === 'singleplayer'
-      ? 'Solo cartridge staged. Story Mode is ready.'
-      : 'Cartridge staged. Story Mode will unlock when both players match.'));
+      storyId
+    }, handleSimpleResult('Cartridge inserted. Story Mode is ready.'));
   }
 
   function matchPartnerCartridge(): void {
-    if (!partnerSelection || !partnerSelectionMode) {
+    if (!partnerSelection) {
       return;
     }
 
-    selectStory(partnerSelection, partnerSelectionMode);
+    selectStory(partnerSelection);
   }
 
   function createStory(): void {
@@ -528,6 +527,7 @@
         }
       };
       editingStory = prepareStoryForEditor(result.story);
+      editorLockStoryId = result.story.id;
       activeStoryMap = editingStory.playModes.singleplayer
         ? 'singleplayer'
         : 'multiplayer';
@@ -559,6 +559,7 @@
       }
 
       editingStory = prepareStoryForEditor(result.story);
+      editorLockStoryId = result.story.id;
       activeStoryMap = preferredMap && editingStory.playModes[preferredMap]
         ? preferredMap
         : editingStory.playModes.multiplayer === false
@@ -774,6 +775,7 @@
       }
 
       if (node.type === 'image') {
+        node.text = undefined;
         node.imagePositionX ??= 50;
         node.imagePositionY ??= 50;
         node.logText ??= node.alt ?? '';
@@ -810,6 +812,22 @@
       if (node.type === 'screen-effect') {
         node.effectDurationSeconds ??= node.screenEffect === 'blink' ? 0.75 : 0.6;
         node.effectIterations ??= 1;
+      }
+
+      if (node.type === 'music' || node.type === 'sound-effect') {
+        node.audioId ??= `${node.id}.audio`;
+        node.audioLayer ??= 1;
+        node.audioLoop ??= node.type === 'music';
+        node.audioVolume ??= 1;
+        node.fadeInSeconds ??= 0;
+        node.fadeOutSeconds ??= 0;
+      }
+
+      if (node.type === 'stop-music') {
+        node.stopMusicIds ??= [];
+        node.stopMusicLayers ??= [];
+        node.stopSounds ??= false;
+        node.fadeOutSeconds ??= 0;
       }
     }
 
@@ -1907,7 +1925,10 @@
 
     if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
       return (node.choices ?? []).flatMap((choice, index) => (
-        choice.disabled ? [] : [`choices.${index}.next`]
+        choice.disabled
+          || (choice.playerMode && choice.playerMode !== nodeMap(node))
+          ? []
+          : [`choices.${index}.next`]
       ));
     }
 
@@ -1993,6 +2014,11 @@
     dragTargetId = '';
   }
 
+  function finishDragging(): void {
+    draggedNodeId = '';
+    dragTargetId = '';
+  }
+
   function updateDragTarget(event: DragEvent, targetNode: StoryNode): void {
     if (!draggedNodeId || draggedNodeId === targetNode.id) {
       return;
@@ -2014,7 +2040,13 @@
     const draggedNode = editingStory.nodes.find((node) => node.id === draggedNodeId);
 
     if (!draggedNode || draggedNode.audience !== targetNode.audience) {
-      errorMessage = 'Drop onto a node in the same lane, or drop onto a lane to move it.';
+      errorMessage = 'Nodes can only be reordered inside their current lane.';
+      draggedNodeId = '';
+      return;
+    }
+
+    if (graphDepthForNode(draggedNode) !== graphDepthForNode(targetNode)) {
+      errorMessage = 'Routes control vertical position. Drag only reorders nodes that share the same row.';
       draggedNodeId = '';
       return;
     }
@@ -2037,6 +2069,17 @@
     const draggedNode = editingStory.nodes.find((node) => node.id === draggedNodeId);
 
     if (!draggedNode) {
+      return;
+    }
+
+    const isConnected = Boolean(draggedNode.attachedTo)
+      || incomingConnections(draggedNode).length > 0
+      || routeFields(draggedNode).some((field) => Boolean(getRouteValue(draggedNode, field)));
+
+    if (isConnected) {
+      errorMessage = 'Disconnect this node before moving it to another lane. This prevents routes from changing unexpectedly.';
+      draggedNodeId = '';
+      dragTargetId = '';
       return;
     }
 
@@ -2151,6 +2194,90 @@
     refreshStory();
   }
 
+  async function openAudioLibrary(target: 'music' | 'sound'): Promise<void> {
+    audioLibraryTarget = target;
+    clearMessages();
+
+    try {
+      const response = await fetch('/api/story-assets/audio');
+      const result = await response.json();
+
+      if (!response.ok || !Array.isArray(result.assets)) {
+        throw new Error(result.error ?? 'The audio library could not be loaded.');
+      }
+
+      audioAssets = result.assets.filter((asset: AudioAsset) => asset.kind === target);
+      audioLibraryOpen = true;
+    } catch (error) {
+      errorMessage = error instanceof Error
+        ? error.message
+        : 'The audio library could not be loaded.';
+    }
+  }
+
+  function selectStoryAudio(asset: AudioAsset): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    rememberForUndo();
+
+    if (audioLibraryTarget === 'music') {
+      selectedNode.music = asset.path;
+    } else {
+      selectedNode.sound = asset.path;
+    }
+
+    audioLibraryOpen = false;
+    refreshStory();
+  }
+
+  function setStopMusicIds(event: Event): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    selectedNode.stopMusicIds = (event.currentTarget as HTMLInputElement).value
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    refreshStory();
+  }
+
+  function toggleStopMusicLayer(layer: number, enabled: boolean): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    const layers = new Set<number>(selectedNode.stopMusicLayers ?? []);
+
+    if (enabled) {
+      layers.add(layer);
+    } else {
+      layers.delete(layer);
+    }
+
+    selectedNode.stopMusicLayers = [...layers].sort((left, right) => left - right);
+    refreshStory();
+  }
+
+  function setChoiceCondition(index: number, enabled: boolean): void {
+    const choice = selectedNode?.choices?.[index];
+
+    if (!choice) {
+      return;
+    }
+
+    rememberForUndo();
+    choice.condition = enabled
+      ? {
+          type: 'has-item',
+          key: 'item-id'
+        }
+      : undefined;
+    refreshStory();
+  }
+
   async function deleteStoryImage(path: string, confirmed = false): Promise<void> {
     const fileName = path.split('/').at(-1);
 
@@ -2197,9 +2324,12 @@
       return;
     }
 
-    const laneNodes = getLaneNodes((selectedNode.audience ?? 'both') as LaneId);
-    const currentIndex = laneNodes.findIndex((node) => node.id === selectedNode.id);
-    const targetNode = laneNodes[currentIndex + direction];
+    const laneGraph = getLaneGraph((selectedNode.audience ?? 'both') as LaneId);
+    const level = laneGraph.levels.find((candidate) => (
+      candidate.nodes.some((node) => node.id === selectedNode.id)
+    ));
+    const currentIndex = level?.nodes.findIndex((node) => node.id === selectedNode.id) ?? -1;
+    const targetNode = level?.nodes[currentIndex + direction];
 
     if (!targetNode) {
       return;
@@ -2210,6 +2340,13 @@
     } else {
       moveNodeBefore(targetNode.id, selectedNode.id);
     }
+  }
+
+  function graphDepthForNode(node: StoryNode): number {
+    const graph = getLaneGraph((node.audience ?? 'both') as LaneId);
+    return graph.levels.find((level) => (
+      level.nodes.some((candidate) => candidate.id === node.id)
+    ))?.depth ?? -1;
   }
 
   function handleSimpleResult(successMessage: string) {
@@ -2386,7 +2523,7 @@
       case 'image':
         return {
           ...baseNode,
-          text: 'An image appears in the terminal.',
+          text: undefined,
           src: '',
           logText: '',
           imagePositionX: 50,
@@ -2423,7 +2560,13 @@
           type,
           audience: 'both',
           attachedTo: '',
-          music: ''
+          music: '',
+          audioId: `${id}.audio`,
+          audioLayer: 1,
+          audioLoop: true,
+          audioVolume: 1,
+          fadeInSeconds: 0,
+          fadeOutSeconds: 0
         };
       case 'sound-effect':
         return {
@@ -2431,7 +2574,13 @@
           type,
           audience: 'both',
           attachedTo: '',
-          sound: ''
+          sound: '',
+          audioId: `${id}.audio`,
+          audioLayer: 1,
+          audioLoop: false,
+          audioVolume: 1,
+          fadeInSeconds: 0,
+          fadeOutSeconds: 0
         };
       case 'stop-music':
         return {
@@ -2439,7 +2588,11 @@
           type,
           audience: 'both',
           attachedTo: '',
-          stopMusic: true
+          stopMusic: true,
+          stopMusicIds: [],
+          stopMusicLayers: [],
+          stopSounds: false,
+          fadeOutSeconds: 0
         };
       case 'screen-effect':
         // Presentation effects are companions, so they never receive a route.
@@ -2502,7 +2655,7 @@
           <p class="eyebrow">STORY CARTRIDGES</p>
           <h1 id="library-title">Library</h1>
           <p class="introduction">
-            Solo cartridges launch immediately. Multiplayer cartridges activate when both players stage the same story and mode.
+            Insert a cartridge to begin. Stories that support both modes start with one player; authors can use an opening choice to switch the campaign to two players.
           </p>
         </div>
         <button class="primary-button" type="button" on:click={openCreateStory}>
@@ -2513,22 +2666,21 @@
       <div class="selection-panel" class:matched={Boolean($libraryState.activeStoryId)}>
         <div>
           <span>YOUR CARTRIDGE</span>
-          <strong>{storyTitle(localSelection)}{localSelectionMode ? ` · ${localSelectionMode.toUpperCase()}` : ''}</strong>
+          <strong>{storyTitle(localSelection)}</strong>
         </div>
         <div>
           <span>PARTNER CARTRIDGE</span>
-          <strong>{storyTitle(partnerSelection)}{partnerSelectionMode ? ` · ${partnerSelectionMode.toUpperCase()}` : ''}</strong>
+          <strong>{storyTitle(partnerSelection)}</strong>
         </div>
         {#if partnerSelection && (
           partnerSelection !== localSelection
-          || partnerSelectionMode !== localSelectionMode
         )}
           <button type="button" on:click={matchPartnerCartridge}>Swap to partner cartridge</button>
         {/if}
         <p>
           {$libraryState.activeStoryId
             ? $libraryState.activeStoryMode === 'singleplayer'
-              ? 'SOLO CARTRIDGE ACTIVE — STORY MODE READY'
+              ? 'CARTRIDGE ACTIVE — STORY MODE READY'
               : 'LINK ESTABLISHED — STORY MODE READY'
             : 'WAITING FOR MATCHING CARTRIDGES'}
         </p>
@@ -2554,16 +2706,9 @@
               </div>
             </dl>
             <div class="card-actions">
-              {#if storySupportsMode(story, 'singleplayer')}
-                <button type="button" on:click={() => selectStory(story.id, 'singleplayer')}>
-                  {localSelection === story.id && localSelectionMode === 'singleplayer' ? 'Solo selected' : 'Play solo'}
-                </button>
-              {/if}
-              {#if storySupportsMode(story, 'multiplayer')}
-                <button type="button" on:click={() => selectStory(story.id, 'multiplayer')}>
-                  {localSelection === story.id && localSelectionMode === 'multiplayer' ? 'Linked selected' : 'Play multiplayer'}
-                </button>
-              {/if}
+              <button type="button" on:click={() => selectStory(story.id)}>
+                {localSelection === story.id ? 'Cartridge inserted' : 'Insert cartridge'}
+              </button>
             </div>
           </article>
         {/each}
@@ -2767,6 +2912,10 @@
         </div>
       </div>
 
+      <p class="graph-position-help">
+        Routes control rows. Use a node’s ↕ handle to reorder only within its current row; disconnect it before moving lanes.
+      </p>
+
       <div class="editor-workspace">
         <div
           class="flow-canvas"
@@ -2841,6 +2990,16 @@
                             <span class="branch-path-label merge-label">MERGED PATHS</span>
                           {/if}
                       <div class="node-quick-actions" draggable="false" aria-label={`Quick actions for ${displayNodeName(node)}`}>
+                        <button
+                          class="node-drag-handle"
+                          draggable="true"
+                          type="button"
+                          aria-label={`Reorder ${displayNodeName(node)}`}
+                          title="Reorder within this row"
+                          on:dragstart={() => startDragging(node.id)}
+                          on:dragend={finishDragging}
+                          on:click|stopPropagation
+                        >↕</button>
                         <button draggable="false" type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="8" y="8" width="11" height="11" rx="2"></rect>
@@ -2868,8 +3027,7 @@
                         class:valid-link-target={Boolean(linkSelection) && isValidLinkTarget(node)}
                         class:invalid-link-target={Boolean(linkSelection) && !isValidLinkTarget(node)}
                         type="button"
-                        draggable="true"
-                        on:dragstart={() => startDragging(node.id)}
+                        draggable="false"
                         on:click|stopPropagation={() => selectNode(node)}
                       >
                         {#if isCompactSpecialNode(node)}
@@ -3244,10 +3402,54 @@
                       >
                       Disabled
                     </label>
-                    <div class="choice-route">
-                      <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
-                      <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
-                    </div>
+                    <label>
+                      <span>Player mode</span>
+                      <select bind:value={choice.playerMode}>
+                        <option value={undefined}>Keep current mode</option>
+                        <option value="singleplayer">Set 1 player</option>
+                        <option value="multiplayer">Set 2 players</option>
+                      </select>
+                    </label>
+                    <label class="choice-disabled-toggle">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(choice.condition)}
+                        on:change={(event) => setChoiceCondition(index, event.currentTarget.checked)}
+                      >
+                      Require campaign state
+                    </label>
+                    {#if choice.condition}
+                      <div class="choice-condition-editor">
+                        <select aria-label="Requirement type" bind:value={choice.condition.type}>
+                          <option value="has-item">Has item</option>
+                          <option value="flag-equals">Flag equals</option>
+                          <option value="stat-at-least">Stat at least</option>
+                          <option value="relationship-at-least">Relationship at least</option>
+                        </select>
+                        <input
+                          aria-label="Requirement key"
+                          bind:value={choice.condition.key}
+                          placeholder="Item, flag, stat, or character ID"
+                        >
+                        {#if choice.condition.type !== 'has-item'}
+                          <input
+                            aria-label="Requirement value"
+                            bind:value={choice.condition.value}
+                            placeholder="Required value"
+                          >
+                        {/if}
+                      </div>
+                    {/if}
+                    {#if choice.playerMode && choice.playerMode !== nodeMap(selectedNode)}
+                      <p class="inspector-help">
+                        Starts at the configured {choice.playerMode === 'multiplayer' ? 'Player 1 and Player 2' : 'single-player'} opening node.
+                      </p>
+                    {:else}
+                      <div class="choice-route">
+                        <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
+                        <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
+                      </div>
+                    {/if}
                     <button
                       type="button"
                       aria-label={`Remove option ${index + 1}`}
@@ -3301,11 +3503,12 @@
                 <option value="remove-item">Remove item</option>
                 <option value="set-flag">Set story flag</option>
                 <option value="adjust-stat">Adjust stat</option>
+                <option value="adjust-relationship">Adjust relationship</option>
                 <option value="discover-character">Discover character</option>
                 <option value="install-mod">Install neuro mod</option>
                 <option value="remove-mod">Remove neuro mod</option>
               </select>
-              <label for="effect-key">Item, flag, stat, character, or mod ID</label>
+              <label for="effect-key">Item, flag, stat, relationship, character, or mod ID</label>
               <input id="effect-key" bind:value={selectedNode.effects[0].key}>
               <label for="effect-value">Optional value</label>
               <input id="effect-value" bind:value={selectedNode.effects[0].value}>
@@ -3317,13 +3520,14 @@
                 <option value="has-item">Player has item</option>
                 <option value="flag-equals">Story flag equals value</option>
                 <option value="stat-at-least">Player stat is at least value</option>
+                <option value="relationship-at-least">Relationship is at least value</option>
                 <option value="last-dice-success">Previous dice check succeeded</option>
               </select>
               {#if selectedNode.condition.type !== 'last-dice-success'}
-                <label for="condition-key">Item, flag, or stat ID</label>
+                <label for="condition-key">Item, flag, stat, or relationship ID</label>
                 <input id="condition-key" bind:value={selectedNode.condition.key}>
               {/if}
-              {#if ['flag-equals', 'stat-at-least'].includes(selectedNode.condition.type)}
+              {#if ['flag-equals', 'stat-at-least', 'relationship-at-least'].includes(selectedNode.condition.type)}
                 <label for="condition-value">Comparison value</label>
                 <input id="condition-value" bind:value={selectedNode.condition.value}>
               {/if}
@@ -3424,17 +3628,80 @@
             {#if selectedNode.type === 'music'}
               <label for="music-source">Music path</label>
               <input id="music-source" bind:value={selectedNode.music} placeholder="/audio/music/theme.mp3">
-              <p class="inspector-help">The track loops and overlaps music already playing until a Stop music node runs.</p>
+              <button type="button" on:click={() => openAudioLibrary('music')}>Select from audio library</button>
             {/if}
 
             {#if selectedNode.type === 'sound-effect'}
               <label for="sound-source">Sound effect path</label>
               <input id="sound-source" bind:value={selectedNode.sound} placeholder="/audio/sounds/door.wav">
-              <p class="inspector-help">Sound effects play once and do not interrupt active music.</p>
+              <button type="button" on:click={() => openAudioLibrary('sound')}>Select from audio library</button>
+            {/if}
+
+            {#if ['music', 'sound-effect'].includes(selectedNode.type)}
+              <div class="field-grid">
+                <div>
+                  <label for="audio-id">Track ID</label>
+                  <input id="audio-id" bind:value={selectedNode.audioId}>
+                </div>
+                <div>
+                  <label for="audio-layer">Layer</label>
+                  <input id="audio-layer" type="number" min="1" max="10" bind:value={selectedNode.audioLayer}>
+                </div>
+                <div>
+                  <label for="audio-volume">Volume</label>
+                  <input id="audio-volume" type="range" min="0" max="1" step="0.05" bind:value={selectedNode.audioVolume}>
+                  <span>{Math.round(Number(selectedNode.audioVolume ?? 1) * 100)}%</span>
+                </div>
+                <div>
+                  <label for="audio-fade-in">Fade in seconds</label>
+                  <input id="audio-fade-in" type="number" min="0" max="30" step="0.1" bind:value={selectedNode.fadeInSeconds}>
+                </div>
+                <div>
+                  <label for="audio-fade-out">Natural fade out seconds</label>
+                  <input id="audio-fade-out" type="number" min="0" max="30" step="0.1" bind:value={selectedNode.fadeOutSeconds}>
+                </div>
+              </div>
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.audioLoop}>
+                Loop until stopped
+              </label>
+              <p class="inspector-help">
+                Tracks overlap by default. IDs target one track; layers let a Stop music node control a group.
+              </p>
             {/if}
 
             {#if selectedNode.type === 'stop-music'}
-              <p class="inspector-help">Stops all music layers when the attached host node becomes active.</p>
+              <label for="stop-music-ids">Track IDs to stop</label>
+              <input
+                id="stop-music-ids"
+                value={(selectedNode.stopMusicIds ?? []).join(', ')}
+                placeholder="Leave blank to use layers or stop all"
+                on:input={setStopMusicIds}
+              >
+              <fieldset>
+                <legend>Layers to stop</legend>
+                <div class="audio-layer-grid">
+                  {#each Array.from({ length: 10 }, (_, index) => index + 1) as layer}
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={(selectedNode.stopMusicLayers ?? []).includes(layer)}
+                        on:change={(event) => toggleStopMusicLayer(layer, event.currentTarget.checked)}
+                      >
+                      {layer}
+                    </label>
+                  {/each}
+                </div>
+              </fieldset>
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.stopSounds}>
+                Stop sound effects too
+              </label>
+              <label for="audio-fade-out">Fade out seconds</label>
+              <input id="audio-fade-out" type="number" min="0" max="30" step="0.1" bind:value={selectedNode.fadeOutSeconds}>
+              <p class="inspector-help">
+                With no IDs or layers selected, every music track stops. Selected IDs and layers are combined.
+              </p>
             {/if}
 
             {#if selectedNode.type === 'minigame'}
@@ -3711,6 +3978,67 @@
                 </button>
                 <button class="asset-delete" type="button" on:click={() => deleteStoryImage(imagePath)}>
                   DELETE
+                </button>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    </div>
+  {/if}
+
+  {#if audioLibraryOpen}
+    <div class="image-library-backdrop">
+      <section class="image-library-modal audio-library-modal" role="dialog" aria-modal="true" aria-labelledby="audio-library-title">
+        <header>
+          <div>
+            <p class="eyebrow">STORY ASSETS</p>
+            <h2 id="audio-library-title">{audioLibraryTarget === 'music' ? 'Music' : 'Sound effect'} library</h2>
+          </div>
+          <button type="button" aria-label="Close audio library" on:click={() => audioLibraryOpen = false}>×</button>
+        </header>
+
+        <p class="inspector-help">
+          Preview files here, then select one. The player shows duration after the browser reads its metadata.
+        </p>
+
+        {#if selectedNode && ['music', 'sound-effect'].includes(selectedNode.type)}
+          <div class="audio-library-settings">
+            <label>
+              <span>Volume · {Math.round(Number(selectedNode.audioVolume ?? 1) * 100)}%</span>
+              <input type="range" min="0" max="1" step="0.05" bind:value={selectedNode.audioVolume}>
+            </label>
+            <label>
+              <span>Fade in</span>
+              <input type="number" min="0" max="30" step="0.1" bind:value={selectedNode.fadeInSeconds}>
+            </label>
+            <label>
+              <span>Fade out</span>
+              <input type="number" min="0" max="30" step="0.1" bind:value={selectedNode.fadeOutSeconds}>
+            </label>
+            <label class="choice-disabled-toggle">
+              <input type="checkbox" bind:checked={selectedNode.audioLoop}>
+              Loop
+            </label>
+          </div>
+        {/if}
+
+        {#if audioAssets.length === 0}
+          <p class="empty-inspector">
+            No matching audio files are available. Add them to
+            public/audio/{audioLibraryTarget === 'music' ? 'music' : 'sounds'}.
+          </p>
+        {:else}
+          <div class="audio-library-list">
+            {#each audioAssets as asset}
+              <article>
+                <div>
+                  <strong>{asset.name}</strong>
+                  <small>{asset.path}</small>
+                </div>
+                <audio controls preload="metadata" src={asset.path}></audio>
+                <button class="primary-button" type="button" on:click={() => selectStoryAudio(asset)}>
+                  Select
                 </button>
               </article>
             {/each}
@@ -4089,6 +4417,15 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .graph-position-help {
+    margin: 0;
+    padding: 7px 14px;
+    color: #7f96ae;
+    background: #070d18;
+    border-bottom: 1px solid #1f3045;
+    font-size: 0.7rem;
   }
 
   .cast-controls {
@@ -4572,6 +4909,15 @@
     .quick-delete:hover svg,
     .quick-delete:focus-visible svg {
       stroke: #e58271;
+    }
+
+    .node-drag-handle {
+      color: #f8e69a;
+      cursor: grab;
+
+      &:active {
+        cursor: grabbing;
+      }
     }
   }
 
@@ -5741,6 +6087,78 @@
     border-color: #cb381f;
   }
 
+  .audio-layer-grid {
+    margin-top: 8px;
+
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+  }
+
+  .audio-library-modal {
+    max-width: 760px;
+  }
+
+  .audio-library-list {
+    margin-top: 18px;
+
+    display: grid;
+    gap: 12px;
+
+    article {
+      padding: 12px;
+      background: #0a1220;
+      border: 1px solid #294668;
+
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) minmax(220px, 2fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    div {
+      min-width: 0;
+
+      display: grid;
+      gap: 4px;
+    }
+
+    small {
+      overflow: hidden;
+      color: #7f96ae;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    audio {
+      width: 100%;
+    }
+  }
+
+  .audio-library-settings {
+    margin-top: 16px;
+    padding: 12px;
+    background: #111a2c;
+    border: 1px solid #294668;
+
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+
+    label {
+      min-width: 0;
+
+      display: grid;
+      gap: 6px;
+    }
+  }
+
   @media (max-width: 1050px) {
     .editor-workspace {
       grid-template-columns: minmax(0, 1fr) 290px;
@@ -5829,6 +6247,14 @@
       .primary-button {
         width: 100%;
       }
+    }
+
+    .audio-library-list article {
+      grid-template-columns: 1fr;
+    }
+
+    .audio-library-settings {
+      grid-template-columns: 1fr 1fr;
     }
   }
 
