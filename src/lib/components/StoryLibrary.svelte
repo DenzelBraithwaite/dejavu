@@ -87,8 +87,8 @@
   // Keep the guide catalog beside the palette so every added node has a matching explanation.
   const tutorialNodeSections: TutorialSection[] = [
     {
-      title: 'Narrative and player input',
-      description: 'Present story text or collect a written response before continuing.',
+      title: 'Dialogue and player input',
+      description: 'Present story text, collect a written response, or open a direct player conversation.',
       nodes: [
         {
           name: 'Dialogue',
@@ -101,6 +101,12 @@
           type: 'input',
           description: 'Pauses for a player to enter free-form text, such as a name or answer.',
           usage: 'Write the prompt and placeholder, set a length limit, and connect the response to Next.'
+        },
+        {
+          name: 'Open floor',
+          type: 'conversation',
+          description: 'Runs a turn-based, face-to-face text conversation between the two players.',
+          usage: 'Choose the first speaker and each player’s turn count, then connect the shared Next route.'
         }
       ]
     },
@@ -141,32 +147,14 @@
       ]
     },
     {
-      title: 'Multiplayer coordination',
-      description: 'Synchronize players or let them speak directly during a shared scene.',
+      title: 'Media',
+      description: 'Change the atmosphere, show visual content, or launch a coded game.',
       nodes: [
         {
-          name: 'Checkpoint',
-          type: 'checkpoint',
-          description: 'Stops one player until both players reach the same checkpoint key.',
-          usage: 'Place matching checkpoint nodes on both player lanes, give them the same key, and connect Next.'
-        },
-        {
-          name: 'Open floor',
-          type: 'conversation',
-          description: 'Runs a turn-based, face-to-face text conversation between the two players.',
-          usage: 'Choose the first speaker and each player’s turn count, then connect the shared Next route.'
-        }
-      ]
-    },
-    {
-      title: 'Media, games, and structure',
-      description: 'Show visual content, launch coded games, organize the graph, or finish a path.',
-      nodes: [
-        {
-          name: 'Clear terminal',
-          type: 'clear-terminal',
-          description: 'Clears all terminal text and images before immediately continuing.',
-          usage: 'Place it in the route exactly where the old terminal history should disappear, then connect Next.'
+          name: 'Music / atmosphere',
+          type: 'ambience',
+          description: 'Changes the terminal background, looping music, or one-shot sound.',
+          usage: 'Provide the desired asset paths and attach the companion to its host scene.'
         },
         {
           name: 'Show image',
@@ -179,6 +167,42 @@
           type: 'minigame',
           description: 'Launches a registered coded minigame from the story.',
           usage: 'Choose the game and connect both Finished Game and Exited Early destinations.'
+        }
+      ]
+    },
+    {
+      title: 'Effects',
+      description: 'Attach state changes or terminal presentation effects to another story node.',
+      nodes: [
+        {
+          name: 'Item / effect',
+          type: 'effect',
+          description: 'Changes campaign state by giving items, setting flags, adjusting stats, or managing mods.',
+          usage: 'Select the operation and value, then attach it to the flow node where the change occurs.'
+        },
+        {
+          name: 'Terminal effect',
+          type: 'screen-effect',
+          description: 'Shakes the screen or blinks the terminal when its host becomes active.',
+          usage: 'Choose Shake or Blink and attach it to a routed node. Reduced-motion settings disable animation.'
+        }
+      ]
+    },
+    {
+      title: 'Special nodes',
+      description: 'Use compact utility markers to synchronize, clear, organize, or end a path.',
+      nodes: [
+        {
+          name: 'Checkpoint',
+          type: 'checkpoint',
+          description: 'Stops one player until both players reach the same checkpoint key.',
+          usage: 'Place matching checkpoint nodes on both player lanes, give them the same key, and connect Next.'
+        },
+        {
+          name: 'Clear terminal',
+          type: 'clear-terminal',
+          description: 'Clears all terminal text and images before immediately continuing.',
+          usage: 'Place it in the route exactly where the old terminal history should disappear, then connect Next.'
         },
         {
           name: 'Visual label',
@@ -191,30 +215,6 @@
           type: 'ending',
           description: 'Marks the final destination of a playable route.',
           usage: 'Write the closing terminal text. Ending nodes intentionally have no outgoing route.'
-        }
-      ]
-    },
-    {
-      title: 'Companion changes',
-      description: 'Attach these beside a host node. They activate with that host and never become another path step.',
-      nodes: [
-        {
-          name: 'Item / effect',
-          type: 'effect',
-          description: 'Changes campaign state by giving items, setting flags, adjusting stats, or managing mods.',
-          usage: 'Select the operation and value, then attach it to the flow node where the change occurs.'
-        },
-        {
-          name: 'Music / atmosphere',
-          type: 'ambience',
-          description: 'Changes the terminal background, looping music, or one-shot sound.',
-          usage: 'Provide the desired asset paths and attach the companion to its host scene.'
-        },
-        {
-          name: 'Terminal effect',
-          type: 'screen-effect',
-          description: 'Shakes the screen or blinks the terminal when its host becomes active.',
-          usage: 'Choose Shake or Blink and attach it to a routed node. Reduced-motion settings disable animation.'
         }
       ]
     }
@@ -813,39 +813,56 @@
   }
 
   function nodeShapeClass(type: string, isStart = false): string {
-    if (isStart) {
-      return 'node-shape-start';
-    }
+    let shapeClass = 'node-shape-process';
 
     if (type === 'ending') {
-      return 'node-shape-ending';
+      shapeClass = 'node-shape-ending';
+    } else if (['choice', 'timed-choice', 'vote', 'dice-check', 'condition'].includes(type)) {
+      shapeClass = 'node-shape-branch';
+    } else if (['dialogue', 'input', 'conversation'].includes(type)) {
+      shapeClass = 'node-shape-dialogue';
+    } else if (type === 'checkpoint') {
+      shapeClass = 'node-shape-checkpoint';
+    } else if (type === 'clear-terminal') {
+      shapeClass = 'node-shape-clear';
+    } else if (type === 'label') {
+      shapeClass = 'node-shape-label';
+    } else if (type === 'ambience') {
+      shapeClass = 'node-shape-audio';
+    } else if (type === 'image') {
+      shapeClass = 'node-shape-image';
+    } else if (type === 'minigame') {
+      shapeClass = 'node-shape-minigame';
+    } else if (['effect', 'screen-effect'].includes(type)) {
+      shapeClass = 'node-shape-effect';
     }
 
-    if (['choice', 'timed-choice', 'vote', 'dice-check', 'condition'].includes(type)) {
-      return 'node-shape-branch';
-    }
+    return isStart
+      ? `${shapeClass} node-is-start`
+      : shapeClass;
+  }
 
-    if (['checkpoint', 'conversation'].includes(type)) {
-      return 'node-shape-sync';
-    }
+  function isMultiplayerNodeType(type: string): boolean {
+    return ['checkpoint', 'conversation', 'vote'].includes(type);
+  }
 
-    if (['effect', 'ambience', 'screen-effect'].includes(type)) {
-      return 'node-shape-companion';
-    }
+  function isCompanionNodeType(type: string): boolean {
+    return companionNodeTypes.some((nodeType) => nodeType.type === type);
+  }
 
-    if (['image', 'minigame'].includes(type)) {
-      return 'node-shape-media';
-    }
+  function isCompactSpecialNode(node: StoryNode): boolean {
+    return ['checkpoint', 'clear-terminal', 'label', 'ending'].includes(node.type);
+  }
 
-    if (type === 'label') {
-      return 'node-shape-label';
-    }
+  function compactNodeTitle(node: StoryNode): string {
+    const titles: Record<string, string> = {
+      checkpoint: 'CHECKPOINT',
+      'clear-terminal': 'CLEAR',
+      label: 'LABEL',
+      ending: 'END'
+    };
 
-    if (type === 'clear-terminal') {
-      return 'node-shape-clear';
-    }
-
-    return 'node-shape-process';
+    return titles[node.type] ?? nodeTypeName(node.type).toUpperCase();
   }
 
   function nodeIsStart(node: StoryNode): boolean {
@@ -2724,12 +2741,22 @@
                         on:dragstart={() => startDragging(node.id)}
                         on:click|stopPropagation={() => selectNode(node)}
                       >
-                        <span>{nodeOrdinal(node)}</span>
-                        {#if isCompanionNode(node)}
-                          <span class="companion-badge">COMPANION</span>
-                        {/if}
-                        <strong>{displayNodeName(node)}</strong>
-                        {#if node.type !== 'label'}
+                        {#if isCompactSpecialNode(node)}
+                          <strong class="compact-node-title">{compactNodeTitle(node)}</strong>
+                          {#if isMultiplayerNodeType(node.type)}
+                            <span class="multiplayer-badge">MULTIPLAYER</span>
+                          {/if}
+                        {:else}
+                          <span>{nodeOrdinal(node)}</span>
+                          <div class="node-badge-row">
+                            {#if isCompanionNode(node)}
+                              <span class="companion-badge">COMPANION</span>
+                            {/if}
+                            {#if isMultiplayerNodeType(node.type)}
+                              <span class="multiplayer-badge">MULTIPLAYER</span>
+                            {/if}
+                          </div>
+                          <strong>{displayNodeName(node)}</strong>
                           <small>{nodeIsInvalid(node) ? 'INCOMPLETE CONNECTION' : node.id}</small>
                           <span class="node-route-list">
                             {#if isCompanionNode(node) && node.attachedTo !== undefined}
@@ -3277,6 +3304,14 @@
               <div class="node-type-grid">
                 {#each recentNodeDefinitions() as node}
                   <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
+                    <span class="node-badge-row">
+                      {#if isCompanionNodeType(node.type)}
+                        <span class="node-type-badge companion">COMPANION</span>
+                      {/if}
+                      {#if isMultiplayerNodeType(node.type)}
+                        <span class="node-type-badge multiplayer">MULTIPLAYER</span>
+                      {/if}
+                    </span>
                     <strong>{node.name}</strong>
                     <small>{node.description}</small>
                   </button>
@@ -3292,6 +3327,14 @@
                 <div class="node-type-grid">
                   {#each visibleNodes as node}
                     <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
+                      <span class="node-badge-row">
+                        {#if isCompanionNodeType(node.type)}
+                          <span class="node-type-badge companion">COMPANION</span>
+                        {/if}
+                        {#if isMultiplayerNodeType(node.type)}
+                          <span class="node-type-badge multiplayer">MULTIPLAYER</span>
+                        {/if}
+                      </span>
                       <strong>{node.name}</strong>
                       <small>{node.description}</small>
                     </button>
@@ -3357,6 +3400,14 @@
                   <div class="tutorial-node-grid">
                     {#each section.nodes as node}
                       <article class={nodeShapeClass(node.type)}>
+                        <div class="node-badge-row">
+                          {#if isCompanionNodeType(node.type)}
+                            <span class="node-type-badge companion">COMPANION</span>
+                          {/if}
+                          {#if isMultiplayerNodeType(node.type)}
+                            <span class="node-type-badge multiplayer">MULTIPLAYER</span>
+                          {/if}
+                        </div>
                         <div class="tutorial-node-heading">
                           <h4>{node.name}</h4>
                           <code>{node.type}</code>
@@ -4359,51 +4410,134 @@
       }
     }
 
-    .companion-badge {
+    .companion-badge,
+    .multiplayer-badge {
       width: max-content;
       padding: 2px 5px;
-      color: #f8e69a;
-      background: #332b0a;
-      border: 1px solid #ad781c;
       font-size: 0.52rem;
       letter-spacing: 1px;
     }
+
+    .companion-badge {
+      color: #f8e69a;
+      background: #332b0a;
+      border: 1px solid #ad781c;
+    }
+
+    .multiplayer-badge {
+      color: #d5b8ff;
+      background: #25143d;
+      border: 1px solid #8f62cb;
+    }
   }
 
-  .node-shape-start {
+  .node-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .node-type-badge {
+    width: max-content;
+    padding: 2px 5px !important;
+    font-size: 0.52rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+
+    &.companion {
+      color: #f8e69a;
+      background: #332b0a;
+      border: 1px solid #ad781c;
+    }
+
+    &.multiplayer {
+      color: #d5b8ff;
+      background: #25143d;
+      border: 1px solid #8f62cb;
+    }
+  }
+
+  .node-is-start {
     border-left: 7px solid #55f09a !important;
-    border-radius: 4px 24px 24px 4px !important;
   }
 
-  .node-shape-ending {
-    border: 3px double #ff75fd !important;
-    border-radius: 28px !important;
+  .node-shape-dialogue {
+    border-radius: 0 !important;
   }
 
   .node-shape-branch {
-    border-radius: 4px 24px !important;
+    border-radius: 22px 22px 0 0 !important;
   }
 
-  .node-shape-sync {
-    border-radius: 18px !important;
-  }
+  .node-shape-checkpoint {
+    color: #ffffff;
+    background: repeating-conic-gradient(#ffffff 0 25%, #000000 0 50%) !important;
+    background-size: 18px 18px !important;
+    border: 2px solid #ffffff !important;
+    border-radius: 0 !important;
 
-  .node-shape-companion {
-    border-style: dashed !important;
-    border-radius: 14px 3px !important;
-  }
-
-  .node-shape-media {
-    border-radius: 2px 20px 2px 20px !important;
-  }
-
-  .node-shape-label {
-    border-style: dotted !important;
+    > * {
+      padding: 3px 5px;
+      background: #050912ee;
+    }
   }
 
   .node-shape-clear {
-    border: 3px double #e58271 !important;
-    border-radius: 3px !important;
+    background: #111820 !important;
+    border: 2px solid #aeb9c9 !important;
+    border-radius: 0 !important;
+  }
+
+  .node-shape-label {
+    border: 2px dotted #6dc2fb !important;
+    border-radius: 0 !important;
+  }
+
+  .node-shape-ending {
+    background: repeating-conic-gradient(#d94646 0 25%, #050505 0 50%) !important;
+    background-size: 18px 18px !important;
+    border: 2px solid #e74f4f !important;
+    border-radius: 0 !important;
+
+    > * {
+      padding: 3px 5px;
+      background: #120606ee;
+    }
+  }
+
+  .node-shape-audio {
+    border-radius: 0 22px 0 22px !important;
+  }
+
+  .node-shape-image {
+    border-radius: 22px 0 22px 0 !important;
+  }
+
+  .node-shape-minigame {
+    border-radius: 28px !important;
+  }
+
+  .node-shape-effect {
+    border-radius: 8px !important;
+  }
+
+  .flow-node.node-shape-checkpoint,
+  .flow-node.node-shape-clear,
+  .flow-node.node-shape-label,
+  .flow-node.node-shape-ending {
+    min-height: 58px;
+    padding: 10px 88px 10px 14px;
+    align-content: center;
+  }
+
+  .compact-node-title {
+    width: max-content;
+    padding: 4px 7px;
+    color: #ffffff !important;
+    background: #050912e8;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.75rem !important;
+    letter-spacing: 1.2px;
   }
 
   .flow-node.selected {
@@ -4422,8 +4556,8 @@
   }
 
   .flow-node.label-node {
-    min-height: 64px;
-    background: linear-gradient(90deg, #19406c55, #111827);
+    min-height: 58px;
+    background: #0d1a28;
     border-color: #4a98d9;
 
     strong {
@@ -4691,7 +4825,8 @@
     position: absolute;
     z-index: 20;
     inset: 38px 0 0;
-    padding: 28px;
+    padding: clamp(10px, 3vw, 28px);
+    overflow: auto;
     background: #020617dd;
     backdrop-filter: blur(5px);
 
@@ -4701,8 +4836,10 @@
 
   .node-picker {
     width: min(760px, 100%);
+    min-width: 0;
     max-height: 85%;
     padding: 22px;
+    box-sizing: border-box;
     overflow-y: auto;
     background: #09111e;
     border: 1px solid #02fbfb;
@@ -4751,7 +4888,7 @@
 
   .node-type-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
     gap: 9px;
 
     button {
