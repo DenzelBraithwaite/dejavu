@@ -49,11 +49,6 @@
     <span slot="description">Create and manage the cast</span>
   </Item>
 
-  <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'brown'} iconType={'journal'} label="Journal">
-    <span slot="title">Journal</span>
-    <span slot="description">Transcript and decisions</span>
-  </Item>
-
   {#if chatAvailable}
     <Item
       on:click={() => createEvent('toggle-chat')}

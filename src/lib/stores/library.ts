@@ -10,6 +10,10 @@ export type StoryNode = {
   expression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
   portrait?: string;
   portraitAlt?: string;
+  portraitPosition?: {
+    x: number;
+    y: number;
+  };
   text?: string;
   prompt?: string;
   placeholder?: string;
@@ -33,12 +37,14 @@ export type StoryNode = {
   fallbackChoiceId?: string;
   src?: string;
   alt?: string;
+  logText?: string;
+  imagePositionX?: number;
+  imagePositionY?: number;
   background?: string;
   music?: string | null;
   sound?: string;
   screenEffect?: 'shake' | 'blink';
   attachedTo?: string;
-  clearTerminal?: boolean;
   minigameId?: string;
   resultNext?: Record<string, string>;
   effects?: Array<Record<string, unknown>>;
@@ -47,6 +53,12 @@ export type StoryNode = {
   falseNext?: string;
   [key: string]: unknown;
   map?: 'singleplayer' | 'multiplayer';
+};
+
+export type EditorHandoff = {
+  storyId: string;
+  nodeId: string;
+  map: 'singleplayer' | 'multiplayer';
 };
 
 export type StoryDocument = {
@@ -105,6 +117,8 @@ export const libraryState = writable<LibraryState>({
   activeStoryMode: null,
   activeSoloPlayerId: null
 });
+
+export const editorHandoff = writable<EditorHandoff | null>(null);
 
 export const localStorySelection = derived(
   [libraryState, sessionState],

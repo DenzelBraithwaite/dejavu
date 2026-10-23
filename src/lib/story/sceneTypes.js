@@ -1,7 +1,7 @@
 /**
  * @typedef {'p1' | 'p2'} PlayerId
  * @typedef {'both' | PlayerId} Audience
- * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'screen-effect' | 'condition' | 'label' | 'ending'} SceneType
+ * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'screen-effect' | 'condition' | 'clear-terminal' | 'label' | 'ending'} SceneType
  *
  * @typedef SceneEffect
  * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat' | 'install-mod' | 'remove-mod'} type
@@ -43,12 +43,12 @@
  * @property {string} [fallbackChoiceId]
  * @property {string} [src]
  * @property {string} [alt]
+ * @property {string} [logText]
  * @property {string} [background]
  * @property {string | null} [music]
  * @property {string} [sound]
  * @property {'shake' | 'blink'} [screenEffect]
  * @property {string} [attachedTo]
- * @property {boolean} [clearTerminal]
  * @property {string} [minigameId]
  * @property {Record<string, string>} [resultNext]
  * @property {{type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'last-dice-success', key?: string, value?: string | number | boolean}} [condition]

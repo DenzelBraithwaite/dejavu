@@ -23,6 +23,14 @@ const DEFAULT_IMAGES = {
   happy: ''
 };
 
+const DEFAULT_IMAGE_POSITIONS = {
+  normal: { x: 50, y: 50 },
+  shocked: { x: 50, y: 50 },
+  angry: { x: 50, y: 50 },
+  sad: { x: 50, y: 50 },
+  happy: { x: 50, y: 50 }
+};
+
 const SEEDED_CHARACTERS = [
   {
     id: 'nova',
@@ -143,7 +151,7 @@ export function createCharacterRepository(databasePath) {
         character.name,
         character.wallet,
         JSON.stringify(character.stats),
-        JSON.stringify(character.images),
+        serializeCharacterImages(character),
         character.notes,
         0,
         now,
@@ -182,7 +190,7 @@ export function createCharacterRepository(databasePath) {
         character.name,
         character.wallet,
         JSON.stringify(character.stats),
-        JSON.stringify(character.images),
+        serializeCharacterImages(character),
         character.notes,
         now,
         id
@@ -283,9 +291,17 @@ function normalizeCharacter(input) {
   }
 
   const stats = {};
+  const imagePositions = {};
 
   for (const [key, defaultValue] of Object.entries(DEFAULT_STATS)) {
     stats[key] = normalizeWholeNumber(input?.stats?.[key] ?? defaultValue, 0, 100);
+  }
+
+  for (const [expression, defaultPosition] of Object.entries(DEFAULT_IMAGE_POSITIONS)) {
+    imagePositions[expression] = {
+      x: normalizeWholeNumber(input?.imagePositions?.[expression]?.x ?? defaultPosition.x, 0, 100),
+      y: normalizeWholeNumber(input?.imagePositions?.[expression]?.y ?? defaultPosition.y, 0, 100)
+    };
   }
 
   return {
@@ -297,26 +313,44 @@ function normalizeCharacter(input) {
       ...DEFAULT_IMAGES,
       ...(input.images ?? {})
     },
+    imagePositions,
     notes: String(input.notes ?? '').trim().slice(0, 500),
     builtIn: Boolean(input.builtIn)
   };
 }
 
 function normalizeCharacterRow(row) {
+  const storedImages = JSON.parse(row.imagesJson);
+  const images = {};
+
+  // Crop coordinates share the existing JSON column so older databases need no schema migration.
+  for (const expression of Object.keys(DEFAULT_IMAGES)) {
+    images[expression] = String(storedImages[expression] ?? '');
+  }
+
   return {
     id: row.id,
     name: row.name,
     wallet: Number(row.wallet),
     stats: JSON.parse(row.statsJson),
-    images: {
-      ...DEFAULT_IMAGES,
-      ...JSON.parse(row.imagesJson)
+    images,
+    imagePositions: {
+      ...DEFAULT_IMAGE_POSITIONS,
+      ...(storedImages._positions ?? {})
     },
     notes: row.notes,
     builtIn: Boolean(row.builtIn),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
+}
+
+function serializeCharacterImages(character) {
+  // The reserved key is ignored by image renderers and restored separately when records load.
+  return JSON.stringify({
+    ...character.images,
+    _positions: character.imagePositions
+  });
 }
 
 function normalizeWholeNumber(value, minimum, maximum) {

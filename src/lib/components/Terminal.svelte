@@ -5,14 +5,13 @@
   import { applySceneAudio } from '../audio/audioManager';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
-  import { libraryState } from '../stores/library';
+  import { editorHandoff, libraryState } from '../stores/library';
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
   import { interpolateSceneText } from '../story/sceneTypes.js';
   import DiceTerminal from './DiceTerminal.svelte';
 
-  let typedTextElement: HTMLElement;
   let terminalScreenElement: HTMLElement;
   let inputValue = '';
   let errorMessage = '';
@@ -28,6 +27,7 @@
   let sceneSpeaker = '';
   let scenePortrait = '';
   let scenePortraitAlt = '';
+  let scenePortraitPosition = { x: 50, y: 50 };
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -48,6 +48,9 @@
   $: scenePortraitAlt = sceneCharacter
     ? `${sceneCharacter.name}, ${scene?.expression ?? 'normal'} expression`
     : scene?.portraitAlt ?? '';
+  $: scenePortraitPosition = sceneCharacter?.imagePositions?.[scene?.expression ?? 'normal']
+    ?? scene?.portraitPosition
+    ?? { x: 50, y: 50 };
   $: companionNodes = sceneId
     ? $campaignState?.story?.nodes.filter((candidate) => candidate.attachedTo === sceneId) ?? []
     : [];
@@ -291,10 +294,6 @@
     });
   }
 
-  function skipTyping(): void {
-    typedTextElement?.dispatchEvent(new CustomEvent('typewriterskip'));
-  }
-
   function handleInputKeydown(event: KeyboardEvent, submit: () => void): void {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -318,6 +317,23 @@
     return $libraryState.stories.find((story) => story.id === storyId)?.title
       ?? storyId;
   }
+
+  function editCurrentNode(): void {
+    if (!$libraryState.activeStoryId || !scene) {
+      return;
+    }
+
+    editorHandoff.set({
+      storyId: $libraryState.activeStoryId,
+      nodeId: scene.id,
+      map: $libraryState.activeStoryMode ?? 'multiplayer'
+    });
+    location.set('editor');
+  }
+
+  function openLogs(): void {
+    location.set('journal');
+  }
 </script>
 
 <section
@@ -330,6 +346,8 @@
     <span>DEJAVU://CAMPAIGN</span>
     <div>
       <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
+      <button type="button" disabled={!$libraryState.activeStoryId} on:click={openLogs}>LOGS</button>
+      <button type="button" disabled={!$libraryState.activeStoryId || !scene} on:click={editCurrentNode}>EDIT NODE</button>
       <button type="button" disabled={!$libraryState.activeStoryId} on:click={resetStory}>RESET STORY</button>
     </div>
   </header>
@@ -388,7 +406,12 @@
         {#each terminalEntries as entry}
           <article class="terminal-history-entry" class:terminal-history-entry--portrait={Boolean(entry.portrait)}>
             {#if entry.portrait}
-              <img class="history-portrait" src={entry.portrait} alt={entry.portraitAlt ?? ''}>
+              <img
+                class="history-portrait"
+                src={entry.portrait}
+                alt={entry.portraitAlt ?? ''}
+                style:object-position={`${entry.portraitPosition?.x ?? 50}% ${entry.portraitPosition?.y ?? 50}%`}
+              >
             {/if}
             <div>
               <p class="history-scene-id">{entry.sceneId}</p>
@@ -403,20 +426,34 @@
 
       {#if scene.type === 'image' && scene.src}
         <figure class="scene-image-wrapper">
-          <img class="scene-image" src={scene.src} alt={scene.alt ?? ''}>
+          <img
+            class="scene-image"
+            src={scene.src}
+            alt={scene.logText ?? scene.alt ?? ''}
+            style:object-position={`${scene.imagePositionX ?? 50}% ${scene.imagePositionY ?? 50}%`}
+          >
         </figure>
       {/if}
 
       {#each companionImages as image}
         <figure class="scene-image-wrapper">
-          <img class="scene-image" src={image.src} alt={image.alt ?? ''}>
+          <img
+            class="scene-image"
+            src={image.src}
+            alt={image.logText ?? image.alt ?? ''}
+            style:object-position={`${image.imagePositionX ?? 50}% ${image.imagePositionY ?? 50}%`}
+          >
         </figure>
       {/each}
 
       <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scenePortrait)}>
         {#if scene.type === 'dialogue' && scenePortrait}
           <figure class="dialogue-portrait">
-            <img src={scenePortrait} alt={scenePortraitAlt}>
+            <img
+              src={scenePortrait}
+              alt={scenePortraitAlt}
+              style:object-position={`${scenePortraitPosition.x}% ${scenePortraitPosition.y}%`}
+            >
           </figure>
         {/if}
 
@@ -428,7 +465,6 @@
           <p
             class="scene-text"
             class:scene-text-complete={typingComplete}
-            bind:this={typedTextElement}
             use:typewriter={{
               text: sceneText,
               timing: sceneSpeaker
@@ -573,11 +609,6 @@
         <p class="system-message">END OF AVAILABLE STORY DATA</p>
       {/if}
 
-      {#if !typingComplete}
-        <button class="typing-skip" type="button" on:click={skipTyping}>
-          Skip typing
-        </button>
-      {/if}
     </div>
   {/if}
 
@@ -809,6 +840,7 @@
   }
 
   .scene-image-wrapper {
+    aspect-ratio: 16 / 9;
     max-width: 560px;
     margin-bottom: 28px;
     overflow: hidden;
@@ -820,7 +852,8 @@
   .scene-image {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
     opacity: 0.82;
   }
 
@@ -911,18 +944,6 @@
       outline-offset: 2px;
     }
 
-    button.typing-skip {
-      justify-self: center;
-      width: auto;
-      min-height: auto;
-      padding: 3px 8px;
-      color: #8893a2;
-      background: transparent;
-      border: 0;
-      font-size: 0.72rem;
-      font-weight: 400;
-      text-decoration: underline;
-    }
   }
 
   .input-label {

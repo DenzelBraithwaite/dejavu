@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { socket } from '../socket';
   import {
@@ -8,6 +8,7 @@
     type CharacterRecord
   } from '../stores/characters';
   import {
+    editorHandoff,
     libraryState,
     type StoryDocument,
     type StoryNode
@@ -68,6 +69,7 @@
     { type: 'vote', label: 'Shared vote' },
     { type: 'timed-choice', label: 'Timed choice' },
     { type: 'condition', label: 'Condition' },
+    { type: 'clear-terminal', label: 'Clear terminal' },
     { type: 'image', label: 'Show image' },
     { type: 'minigame', label: 'Minigame' },
     { type: 'label', label: 'Visual label' },
@@ -161,10 +163,16 @@
       description: 'Show visual content, launch coded games, organize the graph, or finish a path.',
       nodes: [
         {
+          name: 'Clear terminal',
+          type: 'clear-terminal',
+          description: 'Clears all terminal text and images before immediately continuing.',
+          usage: 'Place it in the route exactly where the old terminal history should disappear, then connect Next.'
+        },
+        {
           name: 'Show image',
           type: 'image',
           description: 'Displays uploaded artwork as a routed step inside the terminal.',
-          usage: 'Select an image, provide alternative text, and connect Next like any other flow node.'
+          usage: 'Select and position an image, write its Log text for the cartridge log, and connect Next.'
         },
         {
           name: 'Minigame',
@@ -274,6 +282,16 @@
   let lastLocation = '';
   let dragTargetId = '';
   let dragPlacement: 'before' | 'after' = 'before';
+  let nodeSearch = '';
+  let recentNodeTypes: string[] = [];
+  let playtestWarningOpen = false;
+  let saveInFlight = false;
+  let savePulse = false;
+  let lastSavedStoryKey = '';
+  let lastHandledHandoff = '';
+  let autosaveTimer: number | undefined;
+  let savePulseTimer: number | undefined;
+  let inspectorElement: HTMLElement;
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -282,6 +300,16 @@
   function closeTutorial(): void {
     tutorialOpen = false;
   }
+
+  onMount(() => {
+
+    // Autosave only emits when the editable document has diverged from the last server response.
+    autosaveTimer = window.setInterval(() => {
+      if ($location === 'editor' && editingStory && storyContentKey(editingStory) !== lastSavedStoryKey) {
+        saveStory('auto');
+      }
+    }, 120_000);
+  });
 
   $: playerId = $sessionState.playerId;
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
@@ -320,6 +348,16 @@
       mode = 'editor';
     }
   }
+  $: if ($location === 'editor' && $editorHandoff) {
+    const handoff = $editorHandoff;
+    const handoffKey = `${handoff.storyId}:${handoff.nodeId}:${handoff.map}`;
+
+    if (handoffKey !== lastHandledHandoff) {
+      lastHandledHandoff = handoffKey;
+      editorHandoff.set(null);
+      openEditor(handoff.storyId, handoff.nodeId, handoff.map);
+    }
+  }
   $: {
     const toastKey = `${statusMessage}|${errorMessage}`;
 
@@ -335,6 +373,8 @@
 
   onDestroy(() => {
     window.clearTimeout(toastTimer);
+    window.clearTimeout(savePulseTimer);
+    window.clearInterval(autosaveTimer);
   });
 
   function storyTitle(storyId: string | null): string {
@@ -380,6 +420,14 @@
   ): string {
     const normalizedExpression = String(expression ?? 'normal') as CharacterExpression;
     return character.images[normalizedExpression] ?? '';
+  }
+
+  function characterExpressionPosition(
+    character: CharacterRecord,
+    expression: unknown
+  ): { x: number; y: number } {
+    const normalizedExpression = String(expression ?? 'normal') as CharacterExpression;
+    return character.imagePositions[normalizedExpression] ?? { x: 50, y: 50 };
   }
 
   function showLibrary(): void {
@@ -462,13 +510,18 @@
         ? result.story.singleplayerInitialSceneId
         : result.story.initialSceneIds.p1;
       activeLane = 'p1';
+      lastSavedStoryKey = storyContentKey(editingStory);
       resetHistory();
       showEditor();
       statusMessage = 'Story created in the host library.';
     });
   }
 
-  function openEditor(storyId: string): void {
+  function openEditor(
+    storyId: string,
+    preferredNodeId = '',
+    preferredMap?: StoryPlayMode
+  ): void {
     clearMessages();
     socket.emit('library:get-story', storyId, (result: {
       ok: boolean;
@@ -481,28 +534,48 @@
       }
 
       editingStory = prepareStoryForEditor(result.story);
-      activeStoryMap = editingStory.playModes.multiplayer === false
-        ? 'singleplayer'
-        : 'multiplayer';
-      selectedNodeId = activeStoryMap === 'singleplayer'
+      activeStoryMap = preferredMap && editingStory.playModes[preferredMap]
+        ? preferredMap
+        : editingStory.playModes.multiplayer === false
+          ? 'singleplayer'
+          : 'multiplayer';
+      const fallbackNodeId = activeStoryMap === 'singleplayer'
         ? editingStory.singleplayerInitialSceneId
         : editingStory.initialSceneIds.p1;
-      activeLane = 'p1';
+      selectedNodeId = editingStory.nodes.some((node) => node.id === preferredNodeId)
+        ? preferredNodeId
+        : fallbackNodeId;
+      const preferredNode = editingStory.nodes.find((node) => node.id === selectedNodeId);
+      activeLane = (preferredNode?.audience ?? 'p1') as LaneId;
+      lastSavedStoryKey = storyContentKey(editingStory);
       resetHistory();
       showEditor();
     });
   }
 
-  function saveStory(): void {
-    if (!editingStory) {
+  function storyContentKey(story: StoryDocument): string {
+
+    // Server-managed version increments should never make a freshly saved story look dirty.
+    return JSON.stringify({
+      ...story,
+      version: 0
+    });
+  }
+
+  function saveStory(source: 'manual' | 'auto' = 'manual', afterSave?: () => void): void {
+    if (!editingStory || saveInFlight) {
       return;
     }
 
     clearMessages();
     synchronizeStoryCharacterIds();
+    const submittedStory = structuredClone(editingStory);
+    const submittedKey = storyContentKey(submittedStory);
+    const selectedBeforeSave = selectedNodeId;
+    saveInFlight = true;
     socket.emit('library:update-story', {
-      storyId: editingStory.id,
-      story: editingStory
+      storyId: submittedStory.id,
+      story: submittedStory
     }, (result: {
       ok: boolean;
       story?: StoryDocument;
@@ -510,13 +583,86 @@
     }) => {
       if (!result.ok || !result.story) {
         errorMessage = result.error ?? 'Could not save the story.';
+        saveInFlight = false;
         return;
       }
 
-      editingStory = prepareStoryForEditor(result.story);
-      resetHistory();
-      statusMessage = `Saved version ${result.story.version}.`;
+      lastSavedStoryKey = submittedKey;
+
+      if (editingStory && storyContentKey(editingStory) === submittedKey) {
+        editingStory = prepareStoryForEditor(result.story);
+        selectedNodeId = editingStory.nodes.some((node) => node.id === selectedBeforeSave)
+          ? selectedBeforeSave
+          : selectedNodeId;
+
+        if (source === 'manual') {
+          resetHistory();
+        }
+      } else if (editingStory) {
+
+        // Preserve edits made while the save request was in flight; the next interval will save them.
+        editingStory.version = result.story.version;
+      }
+
+      saveInFlight = false;
+      pulseSavedTerminal();
+      statusMessage = source === 'auto'
+        ? `Autosaved version ${result.story.version}.`
+        : `Saved version ${result.story.version}.`;
+      afterSave?.();
     });
+  }
+
+  function pulseSavedTerminal(): void {
+    savePulse = false;
+    window.clearTimeout(savePulseTimer);
+    requestAnimationFrame(() => {
+      savePulse = true;
+      savePulseTimer = window.setTimeout(() => {
+        savePulse = false;
+      }, 900);
+    });
+  }
+
+  function requestPlaytest(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    if ($libraryState.activeStoryId && $libraryState.activeStoryId !== editingStory.id) {
+      playtestWarningOpen = true;
+      return;
+    }
+
+    startPlaytest();
+  }
+
+  function startPlaytest(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const launch = (): void => {
+      socket.emit('library:select-story', {
+        storyId: editingStory?.id,
+        mode: activeStoryMap
+      }, (result: { ok: boolean; error?: string }) => {
+        if (!result.ok) {
+          errorMessage = result.error ?? 'Could not stage the playtest.';
+          return;
+        }
+
+        playtestWarningOpen = false;
+        location.set('terminal');
+      });
+    };
+
+    if (storyContentKey(editingStory) !== lastSavedStoryKey) {
+      saveStory('manual', launch);
+      return;
+    }
+
+    launch();
   }
 
   function synchronizeStoryCharacterIds(): void {
@@ -589,6 +735,20 @@
       delete imageNode.attachedTo;
     }
 
+    for (const node of prepared.nodes) {
+      delete node.clearTerminal;
+
+      if (node.map === 'singleplayer') {
+        node.audience = 'p1';
+      }
+
+      if (node.type === 'image') {
+        node.imagePositionX ??= 50;
+        node.imagePositionY ??= 50;
+        node.logText ??= node.alt ?? '';
+      }
+    }
+
     return prepared;
   }
 
@@ -624,6 +784,77 @@
     activeLane = target.lane;
     insertionTarget = target;
     linkSelection = null;
+    nodeSearch = '';
+  }
+
+  function nodeAvailableForMap(type: string): boolean {
+    return activeStoryMap !== 'singleplayer'
+      || !['checkpoint', 'conversation', 'vote'].includes(type);
+  }
+
+  function nodeMatchesSearch(node: TutorialNode): boolean {
+    const query = nodeSearch.trim().toLowerCase();
+
+    return !query || [node.name, node.type, node.description, node.usage]
+      .some((value) => value.toLowerCase().includes(query));
+  }
+
+  function nodeDefinition(type: string): TutorialNode | undefined {
+    return tutorialNodeSections
+      .flatMap((section) => section.nodes)
+      .find((node) => node.type === type);
+  }
+
+  function recentNodeDefinitions(): TutorialNode[] {
+    return recentNodeTypes
+      .map(nodeDefinition)
+      .filter((node): node is TutorialNode => Boolean(node))
+      .filter((node) => nodeAvailableForMap(node.type));
+  }
+
+  function nodeShapeClass(type: string, isStart = false): string {
+    if (isStart) {
+      return 'node-shape-start';
+    }
+
+    if (type === 'ending') {
+      return 'node-shape-ending';
+    }
+
+    if (['choice', 'timed-choice', 'vote', 'dice-check', 'condition'].includes(type)) {
+      return 'node-shape-branch';
+    }
+
+    if (['checkpoint', 'conversation'].includes(type)) {
+      return 'node-shape-sync';
+    }
+
+    if (['effect', 'ambience', 'screen-effect'].includes(type)) {
+      return 'node-shape-companion';
+    }
+
+    if (['image', 'minigame'].includes(type)) {
+      return 'node-shape-media';
+    }
+
+    if (type === 'label') {
+      return 'node-shape-label';
+    }
+
+    if (type === 'clear-terminal') {
+      return 'node-shape-clear';
+    }
+
+    return 'node-shape-process';
+  }
+
+  function nodeIsStart(node: StoryNode): boolean {
+    if (!editingStory) {
+      return false;
+    }
+
+    return editingStory.singleplayerInitialSceneId === node.id
+      || Object.values(editingStory.initialSceneIds).includes(node.id);
   }
 
   function createSnapshot(): EditorSnapshot | null {
@@ -750,6 +981,7 @@
     insertNode(node, insertionTarget);
     connectInsertionTarget(node.id, insertionTarget);
     selectedNodeId = nodeId;
+    recentNodeTypes = [type, ...recentNodeTypes.filter((item) => item !== type)].slice(0, 5);
     insertionTarget = null;
     refreshStory();
   }
@@ -1565,7 +1797,7 @@
   }
 
   function supportsSimpleNext(node: StoryNode): boolean {
-    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image']
+    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'clear-terminal']
       .includes(node.type);
   }
 
@@ -1871,6 +2103,7 @@
   async function uploadImage(event: Event): Promise<void> {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
+    const previousScrollTop = inspectorElement?.scrollTop ?? 0;
 
     if (!file || !selectedNode || !['image', 'dialogue'].includes(selectedNode.type)) {
       return;
@@ -1910,6 +2143,12 @@
           imageNode.src = result.path;
         }
         refreshStory();
+        await tick();
+
+        if (inspectorElement) {
+          inspectorElement.scrollTop = previousScrollTop;
+        }
+
         statusMessage = 'Image uploaded to the story host.';
       }
     } catch (error) {
@@ -2021,7 +2260,14 @@
           ...baseNode,
           text: 'An image appears in the terminal.',
           src: '',
-          alt: ''
+          logText: '',
+          imagePositionX: 50,
+          imagePositionY: 50
+        };
+      case 'clear-terminal':
+        return {
+          ...baseNode,
+          text: undefined
         };
       case 'ambience':
         return {
@@ -2077,6 +2323,7 @@
 <section
   class="story-library"
   class:story-library--editor={$location === 'editor'}
+  class:story-library--save-pulse={savePulse}
   class:hide={!['library', 'editor'].includes($location)}
   aria-label={$location === 'editor' ? 'Story editor' : 'Library'}
 >
@@ -2293,8 +2540,11 @@
           <button class="tutorial-button" type="button" on:click={openTutorial} aria-label="Open editor tutorial">
             ⓘ Guide
           </button>
-          <button class="primary-button" type="button" on:click={saveStory}>
-            Save story
+          <button type="button" disabled={saveInFlight} on:click={requestPlaytest}>
+            ▶ Play
+          </button>
+          <button class="primary-button" type="button" disabled={saveInFlight} on:click={() => saveStory()}>
+            {saveInFlight ? 'Saving…' : 'Save story'}
           </button>
         </div>
       </div>
@@ -2463,7 +2713,7 @@
                         </button>
                       </div>
                       <button
-                        class="flow-node"
+                        class={`flow-node ${nodeShapeClass(node.type, nodeIsStart(node))}`}
                         class:selected={selectedNodeId === node.id}
                         class:invalid={nodeIsInvalid(node)}
                         class:label-node={node.type === 'label'}
@@ -2537,40 +2787,43 @@
           </div>
         </div>
 
-        <aside class="node-inspector" aria-label="Node inspector">
+        <aside class="node-inspector" aria-label="Node inspector" bind:this={inspectorElement}>
           {#if selectedNode}
             <div class="inspector-heading">
               <div>
                 <p>NODE INSPECTOR</p>
                 <h2>{selectedNode.type}</h2>
+                <code>{selectedNode.id}</code>
               </div>
               <div class="inspector-actions">
                 <button type="button" aria-label="Move node up" on:click={() => moveSelectedNode(-1)}>↑</button>
                 <button type="button" aria-label="Move node down" on:click={() => moveSelectedNode(1)}>↓</button>
                 <button type="button" on:click={copySelectedNode}>Copy</button>
                 <button type="button" on:click={duplicateSelectedNode}>Duplicate</button>
-                <button class="danger-button" type="button" on:click={deleteSelectedNode}>
-                  Delete
-                </button>
               </div>
             </div>
 
-            <label for="node-id">Node ID</label>
-            <input id="node-id" value={selectedNode.id} disabled>
-
             <label for="node-audience">Audience</label>
-            <select
-              id="node-audience"
-              bind:value={selectedNode.audience}
-              on:change={() => {
-                activeLane = selectedNode.audience;
-                refreshStory();
-              }}
-            >
-              <option value="p1">Player 1</option>
-              <option value="both">Both players</option>
-              <option value="p2">Player 2</option>
-            </select>
+            {#if activeStoryMap === 'singleplayer'}
+              <input id="node-audience" value="Player 1" disabled>
+            {:else}
+              <select
+                id="node-audience"
+                bind:value={selectedNode.audience}
+                on:change={() => {
+                  activeLane = selectedNode.audience;
+                  refreshStory();
+                }}
+              >
+                <option value="p1">Player 1</option>
+                <option value="both">Both players</option>
+                <option value="p2">Player 2</option>
+              </select>
+            {/if}
+
+            {#if activeStoryMap === 'singleplayer' && ['checkpoint', 'conversation', 'vote'].includes(selectedNode.type)}
+              <p class="inspector-warning">This is a multiplayer-only node. Replace it before playing this solo map.</p>
+            {/if}
 
             {#if selectedNode.type !== 'label' && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
               <div class="route-label">Previous node</div>
@@ -2616,6 +2869,7 @@
 
             {#if selectedNode.type !== 'condition'
               && selectedNode.type !== 'input'
+              && selectedNode.type !== 'clear-terminal'
               && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
               <label for="node-text">
                 {selectedNode.type === 'label' ? 'Label title' : 'Terminal text'}
@@ -2671,6 +2925,7 @@
                     <img
                       src={characterExpressionImage(dialogueCharacter, selectedNode.expression)}
                       alt={`${dialogueCharacter.name} ${selectedNode.expression ?? 'normal'} expression`}
+                      style:object-position={`${characterExpressionPosition(dialogueCharacter, selectedNode.expression).x}% ${characterExpressionPosition(dialogueCharacter, selectedNode.expression).y}%`}
                     >
                     <span>{dialogueCharacter.name} · {selectedNode.expression ?? 'normal'}</span>
                   </div>
@@ -2903,8 +3158,24 @@
               >
               {#if selectedNode.src}
                 <div class="image-preview">
-                  <img src={selectedNode.src} alt={selectedNode.alt || 'Story image preview'}>
+                  <div class="story-image-frame">
+                    <img
+                      src={selectedNode.src}
+                      alt={selectedNode.logText || 'Story image preview'}
+                      style:object-position={`${selectedNode.imagePositionX ?? 50}% ${selectedNode.imagePositionY ?? 50}%`}
+                    >
+                  </div>
                   <span>{selectedNode.src}</span>
+                  <div class="crop-controls">
+                    <label>
+                      <span>Move left/right</span>
+                      <input type="range" min="0" max="100" bind:value={selectedNode.imagePositionX}>
+                    </label>
+                    <label>
+                      <span>Move up/down</span>
+                      <input type="range" min="0" max="100" bind:value={selectedNode.imagePositionY}>
+                    </label>
+                  </div>
                   <button type="button" on:click={() => {
                     rememberForUndo();
                     selectedNode.src = '';
@@ -2912,8 +3183,13 @@
                   }}>Remove image</button>
                 </div>
               {/if}
-              <label for="image-alt">Alternative text</label>
-              <input id="image-alt" bind:value={selectedNode.alt}>
+              <label for="image-log-text">Log text</label>
+              <textarea
+                id="image-log-text"
+                bind:value={selectedNode.logText}
+                rows="3"
+                placeholder="Describe what should appear in this cartridge's logs."
+              ></textarea>
             {/if}
 
             {#if selectedNode.type === 'ambience'}
@@ -2954,14 +3230,11 @@
               </div>
             {/if}
 
-            {#if selectedNode.type !== 'label'
-              && selectedNode.type !== 'condition'
-              && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
-              <label class="checkbox-row">
-                <input type="checkbox" bind:checked={selectedNode.clearTerminal}>
-                Clear terminal when this node begins
-              </label>
-            {/if}
+            <div class="inspector-delete-zone">
+              <button class="danger-button" type="button" on:click={deleteSelectedNode}>
+                Delete node
+              </button>
+            </div>
           {:else}
             <p class="empty-inspector">Select a node from the flow canvas.</p>
           {/if}
@@ -2994,27 +3267,53 @@
               </button>
             {/if}
 
-            <p class="node-group-label">MAIN STORY FLOW</p>
-            <div class="node-type-grid">
-              {#each flowNodeTypes as nodeType}
-                <button type="button" on:click={() => addNode(nodeType.type)}>
-                  <span>＋</span>
-                  <strong>{nodeType.label}</strong>
-                </button>
-              {/each}
-            </div>
+            <label class="node-search">
+              <span>Search node types</span>
+              <input bind:value={nodeSearch} type="search" placeholder="Try dialogue, choice, image…">
+            </label>
 
-            <p class="node-group-label companion-group-label">COMPANION CHANGES</p>
-            <p class="node-group-description">
-              Presentation and state changes attach to a main-flow node instead of becoming another step.
+            {#if !nodeSearch && recentNodeTypes.length > 0}
+              <p class="node-group-label">RECENTLY USED</p>
+              <div class="node-type-grid">
+                {#each recentNodeDefinitions() as node}
+                  <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
+                    <strong>{node.name}</strong>
+                    <small>{node.description}</small>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            {#each tutorialNodeSections as section}
+              {@const visibleNodes = section.nodes.filter((node) => nodeAvailableForMap(node.type) && nodeMatchesSearch(node))}
+              {#if visibleNodes.length > 0}
+                <p class="node-group-label">{section.title}</p>
+                <p class="node-group-description">{section.description}</p>
+                <div class="node-type-grid">
+                  {#each visibleNodes as node}
+                    <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
+                      <strong>{node.name}</strong>
+                      <small>{node.description}</small>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            {/each}
+          </section>
+        </div>
+      {/if}
+
+      {#if playtestWarningOpen}
+        <div class="node-picker-backdrop" role="presentation">
+          <section class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="playtest-warning-title">
+            <p>REPLACE ACTIVE CARTRIDGE</p>
+            <h2 id="playtest-warning-title">Start this playtest?</h2>
+            <p>
+              “{storyTitle($libraryState.activeStoryId)}” is currently loaded. Playing from the editor will replace it with “{editingStory.title}”.
             </p>
-            <div class="node-type-grid companion-type-grid">
-              {#each companionNodeTypes as nodeType}
-                <button type="button" on:click={() => addNode(nodeType.type)}>
-                  <span>＋</span>
-                  <strong>{nodeType.label}</strong>
-                </button>
-              {/each}
+            <div>
+              <button type="button" on:click={() => playtestWarningOpen = false}>Cancel</button>
+              <button class="primary-button" type="button" disabled={saveInFlight} on:click={startPlaytest}>Save and play</button>
             </div>
           </section>
         </div>
@@ -3057,7 +3356,7 @@
 
                   <div class="tutorial-node-grid">
                     {#each section.nodes as node}
-                      <article>
+                      <article class={nodeShapeClass(node.type)}>
                         <div class="tutorial-node-heading">
                           <h4>{node.name}</h4>
                           <code>{node.type}</code>
@@ -3199,6 +3498,10 @@
     border: 1px solid var(--library-terminal-accent);
     border-radius: 8px;
     box-shadow: 0 0 34px color-mix(in srgb, var(--library-terminal-accent) 32%, transparent);
+
+    &.story-library--save-pulse {
+      animation: saved-pulse 900ms ease-out;
+    }
 
     &.story-library--editor {
       --library-terminal-accent: #ff8a32;
@@ -3674,6 +3977,12 @@
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.9rem;
     }
+
+    code {
+      color: #8893a2;
+      font-size: 0.65rem;
+      overflow-wrap: anywhere;
+    }
   }
 
   .flow-canvas {
@@ -4061,6 +4370,42 @@
     }
   }
 
+  .node-shape-start {
+    border-left: 7px solid #55f09a !important;
+    border-radius: 4px 24px 24px 4px !important;
+  }
+
+  .node-shape-ending {
+    border: 3px double #ff75fd !important;
+    border-radius: 28px !important;
+  }
+
+  .node-shape-branch {
+    border-radius: 4px 24px !important;
+  }
+
+  .node-shape-sync {
+    border-radius: 18px !important;
+  }
+
+  .node-shape-companion {
+    border-style: dashed !important;
+    border-radius: 14px 3px !important;
+  }
+
+  .node-shape-media {
+    border-radius: 2px 20px 2px 20px !important;
+  }
+
+  .node-shape-label {
+    border-style: dotted !important;
+  }
+
+  .node-shape-clear {
+    border: 3px double #e58271 !important;
+    border-radius: 3px !important;
+  }
+
   .flow-node.selected {
     background: #10263c;
     border-color: #02fbfb;
@@ -4139,6 +4484,26 @@
     }
   }
 
+  .inspector-warning {
+    margin-top: 10px;
+    padding: 10px;
+    color: #ffd3cc;
+    background: #34120d;
+    border-left: 3px solid #e58271;
+    font-size: 0.72rem;
+    line-height: 1.5;
+  }
+
+  .inspector-delete-zone {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid #52251f;
+
+    button {
+      width: 100%;
+    }
+  }
+
   .inspector-heading,
   .choice-heading {
     display: flex;
@@ -4172,9 +4537,6 @@
       line-height: 1;
     }
 
-    .danger-button {
-      grid-column: 1 / -1;
-    }
   }
 
   .inspector-heading p {
@@ -4393,16 +4755,64 @@
     gap: 9px;
 
     button {
-      min-height: 72px;
+      min-height: 104px;
+      padding: 12px;
       text-align: left;
 
       display: grid;
       align-content: center;
       gap: 4px;
 
-      span {
-        color: #02fbfb;
+      small {
+        color: #94a3b8;
+        font-size: 0.66rem;
+        line-height: 1.35;
       }
+    }
+  }
+
+  .node-search {
+    margin-bottom: 20px;
+
+    display: grid;
+    gap: 6px;
+
+    span {
+      color: #6dc2fb;
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+    }
+  }
+
+  .confirmation-dialog {
+    width: min(500px, 100%);
+    padding: 24px;
+    background: #120c08;
+    border: 1px solid #ff8a32;
+    box-shadow: 0 0 38px #ff8a3244;
+
+    h2 {
+      margin: 6px 0 14px;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+    }
+
+    p {
+      color: #c7b8ad;
+      line-height: 1.55;
+    }
+
+    > div {
+      margin-top: 20px;
+
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
   }
 
@@ -4413,24 +4823,11 @@
     letter-spacing: 1.4px;
   }
 
-  .companion-group-label {
-    margin-top: 22px;
-    color: #f8e69a;
-  }
-
   .node-group-description {
     margin: -4px 0 10px;
     color: #94a3b8;
     font-size: 0.7rem;
     line-height: 1.5;
-  }
-
-  .companion-type-grid button {
-    border-color: #ad781c;
-
-    span {
-      color: #f8e69a;
-    }
   }
 
   .upload-button {
@@ -4611,6 +5008,39 @@
       font-size: 0.62rem;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+  }
+
+  .story-image-frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #020617;
+
+    img {
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      object-fit: cover;
+    }
+  }
+
+  .crop-controls {
+    display: grid;
+    gap: 7px;
+
+    label {
+      display: grid;
+      gap: 4px;
+    }
+
+    span {
+      font-size: 0.62rem;
+      white-space: normal;
+    }
+
+    input[type='range'] {
+      width: 100%;
     }
   }
 
@@ -4820,18 +5250,6 @@
     }
   }
 
-  .checkbox-row {
-    margin-top: 20px;
-
-    display: flex !important;
-    align-items: center;
-    gap: 8px;
-
-    input {
-      min-height: auto;
-    }
-  }
-
   .empty-inspector {
     color: #8893a2;
     line-height: 1.5;
@@ -4862,6 +5280,24 @@
       color: inherit;
       background: transparent;
       border-color: currentColor;
+    }
+  }
+
+  @keyframes saved-pulse {
+    0%, 100% {
+      box-shadow: 0 0 34px color-mix(in srgb, var(--library-terminal-accent) 32%, transparent);
+    }
+
+    45% {
+      box-shadow:
+        0 0 28px color-mix(in srgb, var(--library-terminal-accent) 80%, transparent),
+        inset 0 0 18px color-mix(in srgb, var(--library-terminal-accent) 18%, transparent);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .story-library--save-pulse {
+      animation: none !important;
     }
   }
 

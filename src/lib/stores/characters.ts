@@ -9,6 +9,10 @@ export type CharacterRecord = {
   wallet: number;
   stats: Record<string, number>;
   images: Record<CharacterExpression, string>;
+  imagePositions: Record<CharacterExpression, {
+    x: number;
+    y: number;
+  }>;
   notes: string;
   builtIn: boolean;
   createdAt: string;

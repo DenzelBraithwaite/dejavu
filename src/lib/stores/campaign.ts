@@ -32,6 +32,10 @@ export type TerminalOutputEntry = {
   text: string;
   portrait?: string;
   portraitAlt?: string;
+  portraitPosition?: {
+    x: number;
+    y: number;
+  };
   createdAt: string;
 };
 

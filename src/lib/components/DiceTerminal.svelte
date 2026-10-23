@@ -22,8 +22,6 @@
     close: void;
   }>();
 
-  let briefingTextElement: HTMLElement;
-  let resultTextElement: HTMLElement;
   let briefingComplete = false;
   let resultTypingComplete = false;
   let rolling = false;
@@ -50,14 +48,6 @@
     rollTimer = window.setTimeout(() => {
       dispatch('roll');
     }, 750);
-  }
-
-  function skipTyping(): void {
-    const activeTextElement = result
-      ? resultTextElement
-      : briefingTextElement;
-
-    activeTextElement?.dispatchEvent(new CustomEvent('typewriterskip'));
   }
 
   function createBriefingSegments(): TypewriterSegment[] {
@@ -129,7 +119,6 @@
       <div class="terminal-text">
         {#if result}
           <p
-            bind:this={resultTextElement}
             use:richTypewriter={{
               segments: resultSegments,
               timing: typewriterProfiles.system,
@@ -139,7 +128,6 @@
           ></p>
         {:else}
           <p
-            bind:this={briefingTextElement}
             use:richTypewriter={{
               segments: briefingSegments,
               timing: typewriterProfiles.system,
@@ -171,11 +159,6 @@
         </button>
       {/if}
 
-      {#if (!result && !briefingComplete) || (result && !resultTypingComplete)}
-        <button class="skip-button" type="button" on:click={skipTyping}>
-          Skip typing
-        </button>
-      {/if}
     </footer>
   </section>
 </div>
@@ -343,18 +326,6 @@
       }
     }
 
-    button.skip-button {
-      justify-self: center;
-      width: auto;
-      min-height: auto;
-      padding: 3px 8px;
-      color: #94a3b8;
-      background: transparent;
-      border: 0;
-      font-size: 0.72rem;
-      font-weight: 400;
-      text-decoration: underline;
-    }
   }
 
   @keyframes dice-shake {

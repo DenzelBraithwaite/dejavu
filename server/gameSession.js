@@ -236,6 +236,7 @@ export function handleCampaignAction(state, playerId, action) {
       break;
     case 'ending':
     case 'condition':
+    case 'clear-terminal':
       result = actionError('This scene does not accept that action.');
       break;
     default:
@@ -306,7 +307,14 @@ function handleAdvance(state, playerId, scene, action) {
     return actionError('This scene requires an advance action.');
   }
 
-  recordTranscript(state, playerId, scene.text ?? '', scene.speaker ?? 'Narrator');
+  const transcriptText = scene.type === 'image'
+    ? scene.logText ?? scene.alt ?? scene.text ?? ''
+    : scene.text ?? '';
+  const transcriptSpeaker = scene.type === 'image'
+    ? 'Image log'
+    : scene.speaker ?? 'Narrator';
+
+  recordTranscript(state, playerId, transcriptText, transcriptSpeaker, scene.id);
   applyEffects(state, playerId, scene.effects ?? []);
   archiveSceneForPlayer(state, playerId, scene);
   setPlayerScene(state, playerId, scene.next);
@@ -408,7 +416,7 @@ function handleConversation(state, playerId, scene, action) {
   });
   conversation.messageCounts[playerId] += 1;
 
-  recordTranscript(state, playerId, message, state.players[playerId].name);
+  recordTranscript(state, playerId, message, state.players[playerId].name, scene.id);
   state.conversations[scene.id] = conversation;
 
   if (hasConversationFinished(conversation)) {
@@ -602,14 +610,10 @@ export function initializeDeadlines(state) {
 }
 
 function setPlayerScene(state, playerId, nextSceneId) {
-  const nextScene = resolveConditionNodes(state, playerId, nextSceneId);
+  const nextScene = resolveAutomaticNodes(state, playerId, nextSceneId);
 
   if (!nextScene) {
     throw new Error(`Cannot advance to unknown scene: ${nextSceneId}`);
-  }
-
-  if (nextScene.clearTerminal) {
-    state.terminalOutput[playerId] = [];
   }
 
   state.currentScene[playerId] = nextScene.id;
@@ -644,15 +648,22 @@ function applyAttachedCompanions(state, playerId, scene) {
   state.appliedCompanions[playerId] = [...applied];
 }
 
-function resolveConditionNodes(state, playerId, startingSceneId) {
+function resolveAutomaticNodes(state, playerId, startingSceneId) {
   let scene = getScene(state, startingSceneId);
   let traversedNodes = 0;
 
-  while (scene?.type === 'condition') {
+  // Automatic nodes alter state or routing without ever becoming an interactive terminal scene.
+  while (scene?.type === 'condition' || scene?.type === 'clear-terminal') {
     traversedNodes += 1;
 
     if (traversedNodes > 50) {
-      throw new Error('Condition chain exceeded 50 nodes. Check the story for a loop.');
+      throw new Error('Automatic node chain exceeded 50 nodes. Check the story for a loop.');
+    }
+
+    if (scene.type === 'clear-terminal') {
+      state.terminalOutput[playerId] = [];
+      scene = getScene(state, scene.next);
+      continue;
     }
 
     const destination = evaluateCondition(state, playerId, scene.condition)
@@ -703,6 +714,9 @@ function archiveSceneForPlayer(state, playerId, scene, response = '') {
       speaker: character?.name ?? scene.speaker ?? 'SYSTEM',
       text,
       portrait: character?.images?.[expression] ?? scene.portrait ?? '',
+      portraitPosition: character?.imagePositions?.[expression]
+        ?? scene.portraitPosition
+        ?? { x: 50, y: 50 },
       portraitAlt: character
         ? `${character.name}, ${expression} expression`
         : scene.portraitAlt ?? ''
@@ -893,13 +907,14 @@ function getScene(state, sceneId) {
   return state.story?.nodes.find((scene) => scene.id === sceneId);
 }
 
-function recordTranscript(state, playerId, text, speaker) {
+function recordTranscript(state, playerId, text, speaker, sceneId = '') {
   if (!text) {
     return;
   }
 
   state.transcript.push({
     playerId,
+    sceneId,
     speaker,
     text,
     createdAt: new Date().toISOString()

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { blur } from 'svelte/transition';
   import { socket } from '../socket';
   import {
@@ -23,6 +24,7 @@
   let statusMessage = '';
   let uploadingExpression: CharacterExpression | null = null;
   let deleteArmed = false;
+  let screenElement: HTMLElement;
 
   // New records begin with the same complete stat shape used by the runtime.
   function createDraft(): CharacterRecord {
@@ -49,6 +51,13 @@
         angry: '',
         sad: '',
         happy: ''
+      },
+      imagePositions: {
+        normal: { x: 50, y: 50 },
+        shocked: { x: 50, y: 50 },
+        angry: { x: 50, y: 50 },
+        sad: { x: 50, y: 50 },
+        happy: { x: 50, y: 50 }
       },
       notes: '',
       builtIn: false,
@@ -168,6 +177,9 @@
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
 
+    // Image decoding can reflow the grid, so restore the editor's exact scroll position afterward.
+    const previousScrollTop = screenElement?.scrollTop ?? 0;
+
     if (!file || !editingCharacter) {
       return;
     }
@@ -197,6 +209,12 @@
 
       editingCharacter.images[expression] = result.path;
       editingCharacter = editingCharacter;
+      await tick();
+
+      if (screenElement) {
+        screenElement.scrollTop = previousScrollTop;
+      }
+
       statusMessage = `${expressions.find((item) => item.id === expression)?.label} expression uploaded.`;
     } catch (error) {
       errorMessage = error instanceof Error
@@ -220,7 +238,7 @@
     <span>{$sessionState.playerId?.toUpperCase()}</span>
   </header>
 
-  <div class="screen">
+  <div class="screen" bind:this={screenElement}>
     <div class="title-row">
       <div>
         <p class="eyebrow">CENTRAL CAST DATABASE</p>
@@ -291,11 +309,29 @@
             {#each expressions as expression}
               <article>
                 {#if editingCharacter.images[expression.id]}
-                  <img src={editingCharacter.images[expression.id]} alt={`${editingCharacter.name} ${expression.label.toLowerCase()} expression`}>
+                  <div class="expression-frame">
+                    <img
+                      src={editingCharacter.images[expression.id]}
+                      alt={`${editingCharacter.name} ${expression.label.toLowerCase()} expression`}
+                      style:object-position={`${editingCharacter.imagePositions[expression.id].x}% ${editingCharacter.imagePositions[expression.id].y}%`}
+                    >
+                  </div>
                 {:else}
                   <div class="image-placeholder">NO IMAGE</div>
                 {/if}
                 <strong>{expression.label}</strong>
+                {#if editingCharacter.images[expression.id]}
+                  <div class="crop-controls">
+                    <label>
+                      <span>Move left/right</span>
+                      <input type="range" min="0" max="100" bind:value={editingCharacter.imagePositions[expression.id].x}>
+                    </label>
+                    <label>
+                      <span>Move up/down</span>
+                      <input type="range" min="0" max="100" bind:value={editingCharacter.imagePositions[expression.id].y}>
+                    </label>
+                  </div>
+                {/if}
                 <label class="upload-button">
                   {uploadingExpression === expression.id ? 'Uploading…' : 'Upload image'}
                   <input
@@ -343,7 +379,11 @@
         {#each $characterLibraryState.characters as character}
           <article class:active={character.id === $activeCharacter?.id}>
             {#if character.images.normal}
-              <img src={character.images.normal} alt="">
+              <img
+                src={character.images.normal}
+                alt=""
+                style:object-position={`${character.imagePositions.normal.x}% ${character.imagePositions.normal.y}%`}
+              >
             {:else}
               <div class="portrait-placeholder">{character.name.slice(0, 1).toUpperCase()}</div>
             {/if}
@@ -634,13 +674,20 @@
       gap: 9px;
     }
 
-    img,
+    .expression-frame,
     .image-placeholder {
       width: 100%;
       aspect-ratio: 1;
-      object-fit: cover;
+      overflow: hidden;
       background: #17121a;
       border: 1px solid #4b3047;
+    }
+
+    .expression-frame img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     .image-placeholder {
@@ -654,6 +701,28 @@
 
     strong {
       color: #ffffff;
+    }
+  }
+
+  .crop-controls {
+    display: grid;
+    gap: 8px;
+
+    label {
+      display: grid;
+      gap: 4px;
+    }
+
+    span {
+      color: #9ca8bb;
+      font-size: 0.62rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    input[type='range'] {
+      min-width: 0;
+      padding: 0;
     }
   }
 

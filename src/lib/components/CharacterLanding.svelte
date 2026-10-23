@@ -79,7 +79,11 @@
             selectCharacter(character);
           }}>
             {#if character.images.normal}
-              <img src={character.images.normal} alt="">
+              <img
+                src={character.images.normal}
+                alt=""
+                style:object-position={`${character.imagePositions.normal.x}% ${character.imagePositions.normal.y}%`}
+              >
             {:else}
               <span class="portrait-placeholder" aria-hidden="true">
                 {character.name.slice(0, 1).toUpperCase()}
