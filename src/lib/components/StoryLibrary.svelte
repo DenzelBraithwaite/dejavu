@@ -3715,6 +3715,9 @@
                 <option value="lo-hi">Lo-Hi</option>
                 <option value="mastermind">Cipher</option>
                 <option value="chopsticks">Overclock</option>
+                <option value="ghost-packet">Ghost Packet</option>
+                <option value="firewall-auction">Firewall Auction</option>
+                <option value="drone-relay">Drone Relay</option>
               </select>
               <p class="inspector-help">
                 <strong>Finished</strong> means the round reached a normal result,

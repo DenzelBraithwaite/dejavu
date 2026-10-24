@@ -1,7 +1,13 @@
 import { writable } from 'svelte/store';
 import type { PlayerId } from './session';
 
-export type ArcadeGameId = 'lo-hi' | 'mastermind' | 'chopsticks';
+export type ArcadeGameId =
+  | 'lo-hi'
+  | 'mastermind'
+  | 'chopsticks'
+  | 'ghost-packet'
+  | 'firewall-auction'
+  | 'drone-relay';
 
 export type ArcadeState = {
   game: ArcadeGameId;

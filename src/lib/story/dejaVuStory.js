@@ -41,6 +41,9 @@ export const dejaVuStoryDocument = {
     'packet-war',
     'lo-hi',
     'mastermind',
-    'chopsticks'
+    'chopsticks',
+    'ghost-packet',
+    'firewall-auction',
+    'drone-relay'
   ]
 };

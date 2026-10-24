@@ -3,6 +3,9 @@
     Billywig,
     Chopsticks,
     CharacterMenu,
+    DroneRelay,
+    FirewallAuction,
+    GhostPacket,
     Journal,
     LoHi,
     Mastermind,
@@ -27,6 +30,9 @@
   <LoHi />
   <Mastermind />
   <Chopsticks />
+  <GhostPacket />
+  <FirewallAuction />
+  <DroneRelay />
   <Pigz />
   <TraceRace />
   <PacketWar />

@@ -94,6 +94,36 @@
       status: 'READY',
       artwork: 'chopsticks',
       modes: ['singleplayer', 'multiplayer']
+    },
+    {
+      id: 'ghost-packet',
+      title: 'Ghost Packet',
+      description: 'Scan hidden threats and route a covert packet through a compromised network.',
+      playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
+      status: 'V1 READY',
+      artwork: 'ghost-packet',
+      modes: ['singleplayer', 'multiplayer']
+    },
+    {
+      id: 'firewall-auction',
+      title: 'Firewall Auction',
+      description: 'Secretly bid processing power on attack or defense, then bank what you do not spend.',
+      playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
+      status: 'V1 READY',
+      artwork: 'firewall-auction',
+      modes: ['singleplayer', 'multiplayer']
+    },
+    {
+      id: 'drone-relay',
+      title: 'Drone Relay',
+      description: 'Program simultaneous command queues to recover data and extract two fragile drones.',
+      playerCount: 2,
+      playerLabel: '1–2 PLAYERS',
+      status: 'V1 READY',
+      artwork: 'drone-relay',
+      modes: ['singleplayer', 'multiplayer']
     }
   ];
 </script>
@@ -547,7 +577,10 @@
 
   .module-art--lo-hi,
   .module-art--mastermind,
-  .module-art--chopsticks {
+  .module-art--chopsticks,
+  .module-art--ghost-packet,
+  .module-art--firewall-auction,
+  .module-art--drone-relay {
     background:
       linear-gradient(90deg, #ffffff0b 1px, transparent 1px),
       linear-gradient(#ffffff0b 1px, transparent 1px),
@@ -564,6 +597,18 @@
 
   .module-art--chopsticks {
     background-image: radial-gradient(circle at center, #165435, #030905 70%);
+  }
+
+  .module-art--ghost-packet {
+    background-image: radial-gradient(circle at center, #164d62, #02070b 70%);
+  }
+
+  .module-art--firewall-auction {
+    background-image: radial-gradient(circle at center, #552060, #09030d 70%);
+  }
+
+  .module-art--drone-relay {
+    background-image: radial-gradient(circle at center, #18503a, #020806 70%);
   }
 
   .arcade-glyph {

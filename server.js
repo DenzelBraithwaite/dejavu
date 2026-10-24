@@ -133,14 +133,20 @@ const storyMinigameFinishedPlayers = {
   'packet-war': new Set(),
   'lo-hi': new Set(),
   mastermind: new Set(),
-  chopsticks: new Set()
+  chopsticks: new Set(),
+  'ghost-packet': new Set(),
+  'firewall-auction': new Set(),
+  'drone-relay': new Set()
 };
 const storyMinigameCompletionScenes = {
   'trace-race': null,
   'packet-war': null,
   'lo-hi': null,
   mastermind: null,
-  chopsticks: null
+  chopsticks: null,
+  'ghost-packet': null,
+  'firewall-auction': null,
+  'drone-relay': null
 };
 const chatMessages = [];
 
@@ -1437,19 +1443,24 @@ function broadcastPacketWarState() {
 }
 
 function emitAllArcadeStates(socket) {
+  const playerId = socket.data.playerId;
+
   for (const gameId of Object.keys(arcadeSessions)) {
     socket.emit('arcade:state', {
       game: gameId,
-      state: getArcadeSnapshot(arcadeSessions, gameId)
+      state: getArcadeSnapshot(arcadeSessions, gameId, playerId)
     });
   }
 }
 
 function broadcastArcadeState(gameId) {
-  const state = getArcadeSnapshot(arcadeSessions, gameId);
+  for (const playerId of ['p1', 'p2']) {
+    const socketId = playerSlots[playerId].socketId;
+    const state = getArcadeSnapshot(arcadeSessions, gameId, playerId);
 
-  if (state) {
-    io.emit('arcade:state', { game: gameId, state });
+    if (socketId && state) {
+      io.to(socketId).emit('arcade:state', { game: gameId, state });
+    }
   }
 }
 

@@ -7,11 +7,34 @@ const SUIT_NAMES = {
   blue: 'Blue Eagle'
 };
 
+const GHOST_PACKET_LINKS = {
+  A: ['B', 'C'],
+  B: ['A', 'D', 'E'],
+  C: ['A', 'E', 'F'],
+  D: ['B', 'G'],
+  E: ['B', 'C', 'G', 'H'],
+  F: ['C', 'H'],
+  G: ['D', 'E', 'I'],
+  H: ['E', 'F', 'I'],
+  I: ['G', 'H', 'J'],
+  J: ['I']
+};
+
+const DRONE_WALLS = ['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4'];
+const DRONE_CORES = ['1-3', '5-3'];
+const DRONE_EXITS = ['2-0', '4-0'];
+const DRONE_DIRECTIONS = ['N', 'E', 'S', 'W'];
+
+
+// Arcade sessions share transport and lifecycle behavior, while each module owns its rules.
 export function createArcadeSessions() {
   return {
     'lo-hi': createLoHiState(),
     mastermind: createMastermindState(),
-    chopsticks: createChopsticksState()
+    chopsticks: createChopsticksState(),
+    'ghost-packet': createGhostPacketState(),
+    'firewall-auction': createFirewallAuctionState(),
+    'drone-relay': createDroneRelayState()
   };
 }
 
@@ -22,20 +45,24 @@ export function joinArcadeGame(sessions, gameId, playerId, playerName, requested
     return errorResult('Unknown arcade module.');
   }
 
-  const nextMode = gameId === 'mastermind' && requestedMode === 'coop'
-    ? 'coop'
-    : 'versus';
+  const nextMode = resolveMode(gameId, requestedMode);
 
   if (state.mode && state.mode !== nextMode && participantCount(state) > 0) {
     return errorResult(`The active table is configured for ${state.mode.toUpperCase()}.`);
   }
 
   state.mode = nextMode;
+  state.soloPlayerId = nextMode === 'solo' ? playerId : null;
   state.participants[playerId] = true;
   state.players[playerId].name = playerName;
   state.departureNotice = null;
 
-  if (participantCount(state) === 2) {
+  if (nextMode === 'solo') {
+    const cpuId = playerId === 'p1' ? 'p2' : 'p1';
+    state.players[cpuId].name = 'ICE CPU';
+  }
+
+  if (participantCount(state) === requiredParticipantCount(state)) {
     resetGame(state);
     state.status = 'playing';
   } else {
@@ -52,8 +79,12 @@ export function leaveArcadeGame(sessions, gameId, playerId) {
     return;
   }
 
+  if (!state.participants[playerId]) {
+    return;
+  }
+
   const departingName = state.players[playerId].name;
-  const sharedGameWasActive = participantCount(state) === 2;
+  const sharedGameWasActive = participantCount(state) === requiredParticipantCount(state);
   state.participants[playerId] = false;
   resetGame(state);
   state.status = participantCount(state) ? 'waiting' : 'menu';
@@ -81,7 +112,19 @@ export function performArcadeAction(sessions, gameId, playerId, action) {
     return playMastermind(state, playerId, action);
   }
 
-  return playChopsticks(state, playerId, action);
+  if (gameId === 'chopsticks') {
+    return playChopsticks(state, playerId, action);
+  }
+
+  if (gameId === 'ghost-packet') {
+    return playGhostPacket(state, playerId, action);
+  }
+
+  if (gameId === 'firewall-auction') {
+    return playFirewallAuction(state, playerId, action);
+  }
+
+  return playDroneRelay(state, playerId, action);
 }
 
 export function restartArcadeGame(sessions, gameId) {
@@ -92,7 +135,7 @@ export function restartArcadeGame(sessions, gameId) {
   }
 
   resetGame(state);
-  state.status = participantCount(state) === 2 ? 'playing' : 'waiting';
+  state.status = participantCount(state) === requiredParticipantCount(state) ? 'playing' : 'waiting';
 }
 
 export function voteArcadeRematch(sessions, gameId, playerId, wantsRematch) {
@@ -104,7 +147,11 @@ export function voteArcadeRematch(sessions, gameId, playerId, wantsRematch) {
 
   state.rematchVotes[playerId] = Boolean(wantsRematch);
 
-  if (state.rematchVotes.p1 && state.rematchVotes.p2) {
+  const allPlayersWantRematch = state.mode === 'solo'
+    ? state.rematchVotes[playerId]
+    : state.rematchVotes.p1 && state.rematchVotes.p2;
+
+  if (allPlayersWantRematch) {
     resetGame(state);
     state.status = 'playing';
   }
@@ -112,7 +159,7 @@ export function voteArcadeRematch(sessions, gameId, playerId, wantsRematch) {
   return successResult();
 }
 
-export function getArcadeSnapshot(sessions, gameId) {
+export function getArcadeSnapshot(sessions, gameId, playerId = null) {
   const state = sessions[gameId];
 
   if (!state) {
@@ -124,6 +171,30 @@ export function getArcadeSnapshot(sessions, gameId) {
 
   if (gameId === 'mastermind') {
     delete snapshot.secret;
+  }
+
+  if (gameId === 'ghost-packet') {
+    delete snapshot.compromisedNodes;
+
+    if (state.mode !== 'solo' && playerId === 'p1') {
+      snapshot.scanResults = {};
+    }
+  }
+
+  if (gameId === 'firewall-auction') {
+    snapshot.submitted = {
+      p1: Boolean(state.pendingAllocations.p1),
+      p2: Boolean(state.pendingAllocations.p2)
+    };
+    delete snapshot.pendingAllocations;
+  }
+
+  if (gameId === 'drone-relay') {
+    snapshot.submitted = {
+      p1: Boolean(state.pendingQueues.p1),
+      p2: Boolean(state.pendingQueues.p2)
+    };
+    delete snapshot.pendingQueues;
   }
 
   return snapshot;
@@ -192,6 +263,49 @@ function createChopsticksState() {
   };
 }
 
+function createGhostPacketState() {
+  return {
+    ...createBaseState('ghost-packet'),
+    packetNode: 'A',
+    destination: 'J',
+    phase: 'scan',
+    round: 1,
+    maximumRounds: 7,
+    trace: 0,
+    maximumTrace: 4,
+    scansRemaining: 4,
+    scanResults: {},
+    compromisedNodes: createCompromisedNodes()
+  };
+}
+
+function createFirewallAuctionState() {
+  return {
+    ...createBaseState('firewall-auction'),
+    round: 1,
+    maximumRounds: 8,
+    integrity: { p1: 8, p2: 8 },
+    power: { p1: 5, p2: 5 },
+    pendingAllocations: { p1: null, p2: null },
+    lastReveal: null
+  };
+}
+
+function createDroneRelayState() {
+  return {
+    ...createBaseState('drone-relay'),
+    cycle: 1,
+    maximumCycles: 6,
+    drones: {
+      p1: { row: 6, column: 1, direction: 'N', damage: 0 },
+      p2: { row: 6, column: 5, direction: 'N', damage: 0 }
+    },
+    collectedCores: [],
+    pendingQueues: { p1: null, p2: null },
+    lastExecution: []
+  };
+}
+
 function resetGame(state) {
   state.winner = null;
   state.log = [];
@@ -229,6 +343,36 @@ function resetGame(state) {
     state.redistributionsRemaining = { p1: 3, p2: 3 };
     state.activePlayer = 'p1';
     state.turn = 1;
+  }
+
+  if (state.game === 'ghost-packet') {
+    state.packetNode = 'A';
+    state.destination = 'J';
+    state.phase = 'scan';
+    state.round = 1;
+    state.trace = 0;
+    state.scansRemaining = 4;
+    state.scanResults = {};
+    state.compromisedNodes = createCompromisedNodes();
+  }
+
+  if (state.game === 'firewall-auction') {
+    state.round = 1;
+    state.integrity = { p1: 8, p2: 8 };
+    state.power = { p1: 5, p2: 5 };
+    state.pendingAllocations = { p1: null, p2: null };
+    state.lastReveal = null;
+  }
+
+  if (state.game === 'drone-relay') {
+    state.cycle = 1;
+    state.drones = {
+      p1: { row: 6, column: 1, direction: 'N', damage: 0 },
+      p2: { row: 6, column: 5, direction: 'N', damage: 0 }
+    };
+    state.collectedCores = [];
+    state.pendingQueues = { p1: null, p2: null };
+    state.lastExecution = [];
   }
 }
 
@@ -508,6 +652,349 @@ function playChopsticks(state, playerId, action) {
   }
 
   return successResult();
+}
+
+
+// Ghost Packet alternates between information gathering and movement.
+function playGhostPacket(state, playerId, action) {
+  const canScan = state.mode === 'solo' || playerId === 'p2';
+  const canRoute = state.mode === 'solo' || playerId === 'p1';
+
+  if (action.type === 'scan') {
+    const node = String(action.node ?? '');
+
+    if (!canScan || state.phase !== 'scan') {
+      return errorResult('The scanner acts before the router each round.');
+    }
+
+    if (!GHOST_PACKET_LINKS[node] || node === state.packetNode || node === state.destination) {
+      return errorResult('Choose an unreached relay to scan.');
+    }
+
+    if (state.scansRemaining <= 0) {
+      return errorResult('The scanner has no probes remaining.');
+    }
+
+    state.scanResults[node] = state.compromisedNodes.includes(node) ? 'compromised' : 'safe';
+    state.scansRemaining -= 1;
+    state.phase = 'route';
+    addLog(state, `Scanner classified relay ${node}. Router may now move the packet.`);
+    return successResult();
+  }
+
+  if (action.type === 'skip-scan') {
+    if (!canScan || state.phase !== 'scan') {
+      return errorResult('The scanner cannot pass right now.');
+    }
+
+    state.phase = 'route';
+    addLog(state, 'Scanner conserved a probe. Router may move the packet.');
+    return successResult();
+  }
+
+  if (action.type !== 'route' || !canRoute || state.phase !== 'route') {
+    return errorResult('Wait for the route phase before moving the packet.');
+  }
+
+  const destination = String(action.node ?? '');
+
+  if (!GHOST_PACKET_LINKS[state.packetNode].includes(destination)) {
+    return errorResult('The packet can only move across a connected link.');
+  }
+
+  state.packetNode = destination;
+
+
+  // Compromised relays are intentionally absent from router snapshots.
+  if (state.compromisedNodes.includes(destination)) {
+    state.trace += 2;
+    addLog(state, `Relay ${destination} was compromised. TRACE increased by 2.`);
+  } else {
+    addLog(state, `Packet crossed relay ${destination} without exposing its signature.`);
+  }
+
+  if (destination === state.destination) {
+    state.winner = 'players';
+    state.status = 'finished';
+    addLog(state, 'The ghost packet reached the dead drop. Route complete.');
+    return successResult();
+  }
+
+  if (state.trace >= state.maximumTrace || state.round >= state.maximumRounds) {
+    state.winner = 'network';
+    state.status = 'finished';
+    addLog(state, 'BLACK ICE isolated the packet before it reached the dead drop.');
+    return successResult();
+  }
+
+  state.round += 1;
+  state.phase = 'scan';
+  return successResult();
+}
+
+
+// Firewall bids remain hidden until both players have committed their allocation.
+function playFirewallAuction(state, playerId, action) {
+  if (action.type !== 'allocate' || state.pendingAllocations[playerId]) {
+    return errorResult('Submit one allocation for this round.');
+  }
+
+  const attack = Math.max(0, Math.floor(Number(action.attack)));
+  const defense = Math.max(0, Math.floor(Number(action.defense)));
+
+  if (!Number.isFinite(attack) || !Number.isFinite(defense) || attack + defense > state.power[playerId]) {
+    return errorResult('Attack and defense cannot exceed your available processing power.');
+  }
+
+  state.pendingAllocations[playerId] = { attack, defense };
+
+  if (state.mode === 'solo') {
+    const cpuId = playerId === 'p1' ? 'p2' : 'p1';
+    state.pendingAllocations[cpuId] = createCpuFirewallAllocation(state, cpuId);
+  }
+
+  if (!state.pendingAllocations.p1 || !state.pendingAllocations.p2) {
+    return successResult();
+  }
+
+  resolveFirewallRound(state);
+  return successResult();
+}
+
+function resolveFirewallRound(state) {
+  const first = state.pendingAllocations.p1;
+  const second = state.pendingAllocations.p2;
+  const damageToFirst = Math.max(0, second.attack - first.defense);
+  const damageToSecond = Math.max(0, first.attack - second.defense);
+
+  state.integrity.p1 = Math.max(0, state.integrity.p1 - damageToFirst);
+  state.integrity.p2 = Math.max(0, state.integrity.p2 - damageToSecond);
+  state.lastReveal = {
+    round: state.round,
+    p1: first,
+    p2: second,
+    damage: { p1: damageToFirst, p2: damageToSecond }
+  };
+
+  addLog(
+    state,
+    `Round ${state.round}: ${state.players.p1.name} dealt ${damageToSecond}; ${state.players.p2.name} dealt ${damageToFirst}.`
+  );
+
+  for (const id of ['p1', 'p2']) {
+    const allocation = state.pendingAllocations[id];
+    const unspent = state.power[id] - allocation.attack - allocation.defense;
+
+    // Saving power is the central bluff: reserves carry over before the fixed recharge.
+    state.power[id] = Math.min(10, unspent + 2);
+  }
+
+  const firstOffline = state.integrity.p1 <= 0;
+  const secondOffline = state.integrity.p2 <= 0;
+
+  if (firstOffline || secondOffline) {
+    state.winner = firstOffline && secondOffline ? 'tie' : firstOffline ? 'p2' : 'p1';
+    state.status = 'finished';
+    return;
+  }
+
+  if (state.round >= state.maximumRounds) {
+    if (state.integrity.p1 === state.integrity.p2) {
+      state.winner = state.power.p1 === state.power.p2
+        ? 'tie'
+        : state.power.p1 > state.power.p2 ? 'p1' : 'p2';
+    } else {
+      state.winner = state.integrity.p1 > state.integrity.p2 ? 'p1' : 'p2';
+    }
+
+    state.status = 'finished';
+    return;
+  }
+
+  state.round += 1;
+  state.pendingAllocations = { p1: null, p2: null };
+}
+
+function createCpuFirewallAllocation(state, cpuId) {
+  const power = state.power[cpuId];
+  const pressure = state.integrity[cpuId] <= 3 ? 0.45 : Math.random();
+  const defense = Math.min(power, Math.floor(power * pressure));
+  const maximumAttack = power - defense;
+  const attack = Math.floor(Math.random() * (maximumAttack + 1));
+
+  return { attack, defense };
+}
+
+
+// Drone queues are collected independently so neither pilot can react to the other queue.
+function playDroneRelay(state, playerId, action) {
+  if (action.type !== 'program') {
+    return errorResult('Build and submit a command queue.');
+  }
+
+  const droneId = state.mode === 'solo' ? action.droneId : playerId;
+  const queue = Array.isArray(action.queue) ? action.queue.slice(0, 5) : [];
+  const validCommands = ['forward', 'left', 'right', 'wait'];
+
+  if (!['p1', 'p2'].includes(droneId) || (state.mode !== 'solo' && droneId !== playerId)) {
+    return errorResult('You cannot program that drone.');
+  }
+
+  if (state.pendingQueues[droneId]) {
+    return errorResult('That drone already has a queue for this cycle.');
+  }
+
+  if (queue.length === 0 || queue.some((command) => !validCommands.includes(command))) {
+    return errorResult('Queue one to five valid drone commands.');
+  }
+
+  state.pendingQueues[droneId] = queue;
+
+  if (!state.pendingQueues.p1 || !state.pendingQueues.p2) {
+    return successResult();
+  }
+
+  resolveDroneCycle(state);
+  return successResult();
+}
+
+function resolveDroneCycle(state) {
+  const frames = [];
+
+
+  // Every command slot resolves simultaneously, including movement collisions and swaps.
+  for (let step = 0; step < 5; step += 1) {
+    const intents = {};
+
+    for (const id of ['p1', 'p2']) {
+      const command = state.pendingQueues[id][step] ?? 'wait';
+      const drone = state.drones[id];
+
+      if (command === 'left' || command === 'right') {
+        drone.direction = rotateDrone(drone.direction, command);
+      }
+
+      intents[id] = command === 'forward'
+        ? nextDronePosition(drone)
+        : { row: drone.row, column: drone.column };
+    }
+
+    const collision = sameCell(intents.p1, intents.p2)
+      || (sameCell(intents.p1, state.drones.p2) && sameCell(intents.p2, state.drones.p1));
+
+    for (const id of ['p1', 'p2']) {
+      const command = state.pendingQueues[id][step] ?? 'wait';
+      const target = intents[id];
+      const blocked = command === 'forward' && isDroneCellBlocked(target);
+
+      if (collision && command === 'forward') {
+        state.drones[id].damage += 1;
+      } else if (blocked) {
+        state.drones[id].damage += 1;
+      } else {
+        state.drones[id].row = target.row;
+        state.drones[id].column = target.column;
+      }
+
+      const cell = `${state.drones[id].row}-${state.drones[id].column}`;
+
+      if (DRONE_CORES.includes(cell) && !state.collectedCores.includes(cell)) {
+        state.collectedCores.push(cell);
+      }
+    }
+
+    frames.push({
+      step: step + 1,
+      drones: structuredClone(state.drones),
+      collision
+    });
+  }
+
+  state.lastExecution = frames;
+  addLog(
+    state,
+    `Cycle ${state.cycle} executed. ${state.collectedCores.length}/2 data cores recovered.`
+  );
+
+  const destroyed = Object.values(state.drones).some((drone) => drone.damage >= 3);
+  const bothAtExit = Object.values(state.drones)
+    .every((drone) => DRONE_EXITS.includes(`${drone.row}-${drone.column}`));
+
+  if (state.collectedCores.length === DRONE_CORES.length && bothAtExit) {
+    state.winner = 'players';
+    state.status = 'finished';
+    addLog(state, 'Both drones reached extraction with the recovered data.');
+    return;
+  }
+
+  if (destroyed || state.cycle >= state.maximumCycles) {
+    state.winner = 'facility';
+    state.status = 'finished';
+    addLog(state, destroyed ? 'A drone was disabled by accumulated damage.' : 'The facility sealed before extraction.');
+    return;
+  }
+
+  state.cycle += 1;
+  state.pendingQueues = { p1: null, p2: null };
+}
+
+function rotateDrone(direction, command) {
+  const currentIndex = DRONE_DIRECTIONS.indexOf(direction);
+  const delta = command === 'left' ? -1 : 1;
+
+  return DRONE_DIRECTIONS[(currentIndex + delta + DRONE_DIRECTIONS.length) % DRONE_DIRECTIONS.length];
+}
+
+function nextDronePosition(drone) {
+  const offsets = {
+    N: { row: -1, column: 0 },
+    E: { row: 0, column: 1 },
+    S: { row: 1, column: 0 },
+    W: { row: 0, column: -1 }
+  };
+  const offset = offsets[drone.direction];
+
+  return {
+    row: drone.row + offset.row,
+    column: drone.column + offset.column
+  };
+}
+
+function isDroneCellBlocked(cell) {
+  return cell.row < 0
+    || cell.row > 6
+    || cell.column < 0
+    || cell.column > 6
+    || DRONE_WALLS.includes(`${cell.row}-${cell.column}`);
+}
+
+function sameCell(first, second) {
+  return first.row === second.row && first.column === second.column;
+}
+
+function createCompromisedNodes() {
+  const networkBands = [
+    ['B', 'C'],
+    ['D', 'E', 'F'],
+    ['G', 'H']
+  ];
+
+  // One threat per band keeps every generated map dangerous but still solvable.
+  return networkBands.map((band) => band[Math.floor(Math.random() * band.length)]);
+}
+
+function resolveMode(gameId, requestedMode) {
+  if (['ghost-packet', 'firewall-auction', 'drone-relay'].includes(gameId)) {
+    return requestedMode === 'solo'
+      ? 'solo'
+      : gameId === 'firewall-auction' ? 'versus' : 'coop';
+  }
+
+  return gameId === 'mastermind' && requestedMode === 'coop' ? 'coop' : 'versus';
+}
+
+function requiredParticipantCount(state) {
+  return state.mode === 'solo' ? 1 : 2;
 }
 
 function randomCard() {

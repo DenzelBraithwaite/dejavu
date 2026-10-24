@@ -8,7 +8,10 @@ export type MinigameId =
   | 'packet-war'
   | 'lo-hi'
   | 'mastermind'
-  | 'chopsticks';
+  | 'chopsticks'
+  | 'ghost-packet'
+  | 'firewall-auction'
+  | 'drone-relay';
 
 export type MinigameSession = {
   active: boolean;
@@ -22,7 +25,10 @@ const gameIds: MinigameId[] = [
   'packet-war',
   'lo-hi',
   'mastermind',
-  'chopsticks'
+  'chopsticks',
+  'ghost-packet',
+  'firewall-auction',
+  'drone-relay'
 ];
 
 const initialSessions = Object.fromEntries(
