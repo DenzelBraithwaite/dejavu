@@ -39,11 +39,11 @@
   let error = '';
   let waitingForStoryPartner = false;
   let animatedExecutionId = 0;
-  let animationToken = 0;
   let isAnimating = false;
   let activeFrame: Record<string, any> | null = null;
+  let playbackFrames: Array<Record<string, any>> = [];
+  let playbackFrameIndex = -1;
   let animationTimer: number | null = null;
-  let animationResolve: (() => void) | null = null;
 
   $: state = $arcadeStates['drone-relay'] ?? null;
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
@@ -51,9 +51,6 @@
   $: submitted = Boolean(state?.submitted?.[playerId]);
   $: displayDrones = activeFrame?.drones ?? state?.drones ?? null;
   $: displayHealthPack = activeFrame?.healthPack ?? state?.healthPack ?? null;
-  $: displayRound = isAnimating
-    ? activeFrame?.round ?? state?.lastExecution?.[0]?.round ?? state?.round ?? 1
-    : state?.round ?? 1;
   $: currentAbilities = state?.abilities?.[playerId] ?? {};
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
   $: setMinigameSessionActive('drone-relay', screen === 'game' && Boolean(state?.participants[playerId]));
@@ -181,54 +178,53 @@
     return null;
   }
 
-  async function playExecution(executionId: number, frames: Array<Record<string, any>>): Promise<void> {
-    const token = animationToken + 1;
-
+  function playExecution(executionId: number, frames: Array<Record<string, any>>): void {
     cancelAnimation();
-    animationToken = token;
     animatedExecutionId = executionId;
-    isAnimating = true;
+    playbackFrames = structuredClone(frames ?? []);
+    playbackFrameIndex = 0;
+    activeFrame = playbackFrames[0] ?? null;
+    isAnimating = Boolean(activeFrame);
 
-    for (const frame of frames) {
-      if (token !== animationToken) {
+    if (!activeFrame) {
+      return;
+    }
+
+    // Each resolved action remains on screen for a full second before advancing.
+    animationTimer = window.setInterval(() => {
+      playbackFrameIndex += 1;
+
+      if (playbackFrameIndex >= playbackFrames.length) {
+        finishAnimation();
         return;
       }
 
-      activeFrame = frame;
-      await waitForNextFrame(1000);
-    }
-
-    if (token === animationToken) {
-      activeFrame = null;
-      isAnimating = false;
-    }
-  }
-
-  function waitForNextFrame(milliseconds: number): Promise<void> {
-    return new Promise((resolve) => {
-      animationTimer = window.setTimeout(() => {
-        animationTimer = null;
-        animationResolve = null;
-        resolve();
-      }, milliseconds);
-      animationResolve = resolve;
-    });
+      activeFrame = playbackFrames[playbackFrameIndex];
+    }, 1000);
   }
 
   function cancelAnimation(): void {
-    animationToken += 1;
-    activeFrame = null;
-    isAnimating = false;
-
     if (animationTimer !== null) {
-      window.clearTimeout(animationTimer);
+      window.clearInterval(animationTimer);
       animationTimer = null;
     }
 
-    if (animationResolve) {
-      animationResolve();
-      animationResolve = null;
-    }
+    activeFrame = null;
+    playbackFrames = [];
+    playbackFrameIndex = -1;
+    isAnimating = false;
+  }
+
+  function finishAnimation(): void {
+    cancelAnimation();
+  }
+
+  function cellHasEffect(row: number, column: number, type: string): boolean {
+    return Boolean(activeFrame?.cellEffects?.some((effect: Record<string, any>) => (
+      effect.row === row
+      && effect.column === column
+      && effect.type === type
+    )));
   }
 
   function commandLabel(command: string): string {
@@ -285,7 +281,7 @@
   {:else if state && displayDrones}
     <div class="game">
       <section class="mission-status">
-        <span>ROUND {displayRound}/{state.maximumRounds}</span>
+        <span>ROUND {activeFrame?.round ?? state.round}/{state.maximumRounds}</span>
         <span class="health health--self">YOU {'♥'.repeat(displayDrones[playerId].health)}{'♡'.repeat(3 - displayDrones[playerId].health)}</span>
         <span class="health health--rival">RIVAL {'♥'.repeat(displayDrones[opponentId].health)}{'♡'.repeat(3 - displayDrones[opponentId].health)}</span>
         <span>{isAnimating ? `EXECUTING TICK ${activeFrame?.step ?? 1}` : submitted ? 'QUEUE LOCKED' : 'PROGRAM READY'}</span>
@@ -302,6 +298,10 @@
               class:wall={walls.has(key)}
               class:exit-cell={key === exitCell}
               class:health-pack={displayHealthPack?.row === row && displayHealthPack?.column === column}
+              class:damage-flash={cellHasEffect(row, column, 'damage')}
+              class:heal-flash={cellHasEffect(row, column, 'heal')}
+              class:shield-flash={cellHasEffect(row, column, 'shield')}
+              class:extraction-flash={cellHasEffect(row, column, 'extraction')}
             >
               {#if droneId}
                 <strong class="drone drone--{droneId}" class:shielded={displayDrones[droneId].shieldTicks > 0}>
@@ -517,10 +517,13 @@
 
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(7, minmax(0, 1fr));
     gap: 4px;
 
     > div {
       min-width: 0;
+      min-height: 0;
+      overflow: hidden;
       background: #0a2017;
       border: 1px solid #164a34;
 
@@ -544,6 +547,37 @@
     > div.health-pack {
       border-color: #ffe26b;
       box-shadow: inset 0 0 18px #ffe26b2d;
+    }
+
+    > div.damage-flash {
+      z-index: 2;
+      background: #501018;
+      border-color: #ff4e63;
+      box-shadow: inset 0 0 22px #ff344f99, 0 0 12px #ff344f88;
+      animation: damage-cell-pulse 700ms ease-out;
+    }
+
+    > div.heal-flash {
+      z-index: 2;
+      background: #0b492b;
+      border-color: #63f5a8;
+      box-shadow: inset 0 0 22px #42ef9299, 0 0 12px #42ef9288;
+      animation: heal-cell-pulse 700ms ease-out;
+    }
+
+    > div.shield-flash {
+      z-index: 2;
+      border-color: #ffe26b;
+      box-shadow: inset 0 0 22px #ffe26b88, 0 0 12px #ffe26b77;
+      animation: shield-cell-pulse 700ms ease-out;
+    }
+
+    > div.extraction-flash {
+      z-index: 2;
+      background: #0a5338;
+      border-color: #8affbd;
+      box-shadow: inset 0 0 26px #63efa8aa, 0 0 14px #63efa899;
+      animation: heal-cell-pulse 700ms ease-out;
     }
   }
 
@@ -681,6 +715,36 @@
 
   .error {
     color: #ff8299;
+  }
+
+  @keyframes damage-cell-pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+
+    35% {
+      transform: scale(0.92);
+    }
+  }
+
+  @keyframes heal-cell-pulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+
+    35% {
+      transform: scale(0.92);
+    }
+  }
+
+  @keyframes shield-cell-pulse {
+    0%, 100% {
+      filter: brightness(1);
+    }
+
+    35% {
+      filter: brightness(1.75);
+    }
   }
 
   @media (max-width: 760px) {

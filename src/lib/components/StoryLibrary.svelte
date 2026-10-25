@@ -286,7 +286,6 @@
   let insertionTarget: InsertionTarget | null = null;
   let linkSelection: LinkSelection | null = null;
   let copiedNode: StoryNode | null = null;
-  let draggedNodeId = '';
   let storyRevision = 0;
   let undoStack: EditorSnapshot[] = [];
   let redoStack: EditorSnapshot[] = [];
@@ -305,8 +304,6 @@
   let toastTimer: number | undefined;
   let lastToastKey = '';
   let lastLocation = '';
-  let dragTargetId = '';
-  let dragPlacement: 'before' | 'after' = 'before';
   let nodeSearch = '';
   let recentNodeTypes: string[] = [];
   let playtestWarningOpen = false;
@@ -2009,96 +2006,6 @@
     }
   }
 
-  function startDragging(nodeId: string): void {
-    draggedNodeId = nodeId;
-    dragTargetId = '';
-  }
-
-  function finishDragging(): void {
-    draggedNodeId = '';
-    dragTargetId = '';
-  }
-
-  function updateDragTarget(event: DragEvent, targetNode: StoryNode): void {
-    if (!draggedNodeId || draggedNodeId === targetNode.id) {
-      return;
-    }
-
-    const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    dragTargetId = targetNode.id;
-    dragPlacement = event.clientY < bounds.top + bounds.height / 2
-      ? 'before'
-      : 'after';
-  }
-
-  function dropOnNode(targetNode: StoryNode): void {
-    if (!editingStory || !draggedNodeId || draggedNodeId === targetNode.id) {
-      draggedNodeId = '';
-      return;
-    }
-
-    const draggedNode = editingStory.nodes.find((node) => node.id === draggedNodeId);
-
-    if (!draggedNode || draggedNode.audience !== targetNode.audience) {
-      errorMessage = 'Nodes can only be reordered inside their current lane.';
-      draggedNodeId = '';
-      return;
-    }
-
-    if (graphDepthForNode(draggedNode) !== graphDepthForNode(targetNode)) {
-      errorMessage = 'Routes control vertical position. Drag only reorders nodes that share the same row.';
-      draggedNodeId = '';
-      return;
-    }
-
-    if (dragPlacement === 'before') {
-      moveNodeBefore(draggedNode.id, targetNode.id);
-    } else {
-      moveNodeAfter(draggedNode.id, targetNode.id);
-    }
-
-    draggedNodeId = '';
-    dragTargetId = '';
-  }
-
-  function dropOnLane(lane: LaneId): void {
-    if (!editingStory || !draggedNodeId) {
-      return;
-    }
-
-    const draggedNode = editingStory.nodes.find((node) => node.id === draggedNodeId);
-
-    if (!draggedNode) {
-      return;
-    }
-
-    const isConnected = Boolean(draggedNode.attachedTo)
-      || incomingConnections(draggedNode).length > 0
-      || routeFields(draggedNode).some((field) => Boolean(getRouteValue(draggedNode, field)));
-
-    if (isConnected) {
-      errorMessage = 'Disconnect this node before moving it to another lane. This prevents routes from changing unexpectedly.';
-      draggedNodeId = '';
-      dragTargetId = '';
-      return;
-    }
-
-    rememberForUndo();
-    draggedNode.audience = lane;
-    const remainingNodes = editingStory.nodes.filter((node) => node.id !== draggedNode.id);
-    const lastLaneIndex = remainingNodes.reduce(
-      (lastIndex, node, index) => (node.audience ?? 'both') === lane ? index : lastIndex,
-      -1
-    );
-
-    remainingNodes.splice(lastLaneIndex + 1, 0, draggedNode);
-    editingStory.nodes = remainingNodes;
-    activeLane = lane;
-    draggedNodeId = '';
-    dragTargetId = '';
-    refreshStory();
-  }
-
   function moveNodeBefore(nodeId: string, targetId: string): void {
     if (!editingStory) {
       return;
@@ -2114,25 +2021,6 @@
 
     rememberForUndo();
     remainingNodes.splice(targetIndex, 0, node);
-    editingStory.nodes = remainingNodes;
-    refreshStory();
-  }
-
-  function moveNodeAfter(nodeId: string, targetId: string): void {
-    if (!editingStory) {
-      return;
-    }
-
-    const node = editingStory.nodes.find((candidate) => candidate.id === nodeId);
-    const remainingNodes = editingStory.nodes.filter((candidate) => candidate.id !== nodeId);
-    const targetIndex = remainingNodes.findIndex((candidate) => candidate.id === targetId);
-
-    if (!node || targetIndex < 0) {
-      return;
-    }
-
-    rememberForUndo();
-    remainingNodes.splice(targetIndex + 1, 0, node);
     editingStory.nodes = remainingNodes;
     refreshStory();
   }
@@ -2340,13 +2228,6 @@
     } else {
       moveNodeBefore(targetNode.id, selectedNode.id);
     }
-  }
-
-  function graphDepthForNode(node: StoryNode): number {
-    const graph = getLaneGraph((node.audience ?? 'both') as LaneId);
-    return graph.levels.find((level) => (
-      level.nodes.some((candidate) => candidate.id === node.id)
-    ))?.depth ?? -1;
   }
 
   function handleSimpleResult(successMessage: string) {
@@ -2913,7 +2794,7 @@
       </div>
 
       <p class="graph-position-help">
-        Routes control rows. Use a node’s ↕ handle to reorder only within its current row; disconnect it before moving lanes.
+        Routes control rows. Select a node to move it up or down, change its audience, or edit its previous and next connections in the inspector.
       </p>
 
       <div class="editor-workspace">
@@ -2941,8 +2822,6 @@
                 style={`--lane-columns: ${laneGraph.maxColumns}`}
                 role="group"
                 aria-label={`${lane.label} lane`}
-                on:dragover|preventDefault
-                on:drop|preventDefault={() => dropOnLane(lane.id)}
               >
                 <button
                   class="lane-heading"
@@ -2978,42 +2857,27 @@
                           class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
                           class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
                           class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
-                          class:drag-before={dragTargetId === node.id && dragPlacement === 'before'}
-                          class:drag-after={dragTargetId === node.id && dragPlacement === 'after'}
-                          draggable="false"
-                          on:dragover|preventDefault={(event) => updateDragTarget(event, node)}
-                          on:drop|stopPropagation|preventDefault={() => dropOnNode(node)}
                         >
                           {#if branchPathLabel(node)}
                             <span class="branch-path-label">{branchPathLabel(node)}</span>
                           {:else if nodeMergesRoutes(node)}
                             <span class="branch-path-label merge-label">MERGED PATHS</span>
                           {/if}
-                      <div class="node-quick-actions" draggable="false" aria-label={`Quick actions for ${displayNodeName(node)}`}>
-                        <button
-                          class="node-drag-handle"
-                          draggable="true"
-                          type="button"
-                          aria-label={`Reorder ${displayNodeName(node)}`}
-                          title="Reorder within this row"
-                          on:dragstart={() => startDragging(node.id)}
-                          on:dragend={finishDragging}
-                          on:click|stopPropagation
-                        >↕</button>
-                        <button draggable="false" type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
+                      <div class="node-quick-actions" aria-label={`Quick actions for ${displayNodeName(node)}`}>
+                        <button type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="8" y="8" width="11" height="11" rx="2"></rect>
                             <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
                           </svg>
                         </button>
-                        <button draggable="false" type="button" aria-label={`Duplicate ${displayNodeName(node)}`} title="Duplicate" on:click|stopPropagation={() => duplicateNode(node)}>
+                        <button type="button" aria-label={`Duplicate ${displayNodeName(node)}`} title="Duplicate" on:click|stopPropagation={() => duplicateNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="5" y="5" width="10" height="10" rx="2"></rect>
                             <path d="M9 15v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2"></path>
                             <path d="M10 8v4M8 10h4"></path>
                           </svg>
                         </button>
-                        <button draggable="false" class="quick-delete" type="button" aria-label={`Delete ${displayNodeName(node)}`} title="Delete" on:click|stopPropagation={() => deleteNode(node)}>
+                        <button class="quick-delete" type="button" aria-label={`Delete ${displayNodeName(node)}`} title="Delete" on:click|stopPropagation={() => deleteNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M4 7h16M9 7V4h6v3M8 10v8M12 10v8M16 10v8M6 7l1 14h10l1-14"></path>
                           </svg>
@@ -3027,7 +2891,6 @@
                         class:valid-link-target={Boolean(linkSelection) && isValidLinkTarget(node)}
                         class:invalid-link-target={Boolean(linkSelection) && !isValidLinkTarget(node)}
                         type="button"
-                        draggable="false"
                         on:click|stopPropagation={() => selectNode(node)}
                       >
                         {#if isCompactSpecialNode(node)}
@@ -4836,27 +4699,6 @@
       border: 1px solid currentColor;
     }
 
-    &.drag-before::before,
-    &.drag-after::after {
-      content: '';
-      position: absolute;
-      z-index: 8;
-      left: -4px;
-      right: -4px;
-      height: 4px;
-      background: #ffffff;
-      border-radius: 999px;
-      box-shadow: 0 0 14px #02fbfb;
-      pointer-events: none;
-    }
-
-    &.drag-before::before {
-      top: -12px;
-    }
-
-    &.drag-after::after {
-      bottom: -12px;
-    }
   }
 
   .branch-path-label {
@@ -4913,14 +4755,6 @@
       stroke: #e58271;
     }
 
-    .node-drag-handle {
-      color: #f8e69a;
-      cursor: grab;
-
-      &:active {
-        cursor: grabbing;
-      }
-    }
   }
 
   .flow-node {

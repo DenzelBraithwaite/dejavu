@@ -753,6 +753,7 @@ function resolveDroneRound(state) {
       p2: state.pendingQueues.p2[step] ?? 'wait'
     };
     const events = [];
+    const cellEffects = [];
     const intents = {};
     const movingPlayers = new Set();
 
@@ -782,22 +783,23 @@ function resolveDroneRound(state) {
       }
     }
 
-    resolveDroneMovement(state, intents, movingPlayers, events);
-    resolveDroneHealthPack(state, events);
-    resolveDroneAttacks(state, commands, events);
+    resolveDroneMovement(state, intents, movingPlayers, events, cellEffects);
+    resolveDroneHealthPack(state, events, cellEffects);
+    resolveDroneAttacks(state, commands, events, cellEffects);
 
     for (const id of ['p1', 'p2']) {
       state.drones[id].shieldTicks = Math.max(0, state.drones[id].shieldTicks - 1);
     }
 
-    settleDroneWinner(state, events);
+    settleDroneWinner(state, events, cellEffects);
     frames.push({
       round: state.round,
       step: step + 1,
       commands,
       drones: structuredClone(state.drones),
       healthPack: structuredClone(state.healthPack),
-      events
+      events,
+      cellEffects
     });
   }
 
@@ -820,7 +822,7 @@ function resolveDroneRound(state) {
   state.pendingQueues = { p1: null, p2: null };
 }
 
-function resolveDroneMovement(state, intents, movingPlayers, events) {
+function resolveDroneMovement(state, intents, movingPlayers, events, cellEffects) {
   const collision = sameCell(intents.p1, intents.p2)
     || (sameCell(intents.p1, state.drones.p2) && sameCell(intents.p2, state.drones.p1));
 
@@ -830,12 +832,12 @@ function resolveDroneMovement(state, intents, movingPlayers, events) {
     }
 
     if (collision) {
-      applyDroneDamage(state, id, events, 'collision');
+      applyDroneDamage(state, id, events, cellEffects, 'collision');
       continue;
     }
 
     if (isDroneCellBlocked(intents[id])) {
-      applyDroneDamage(state, id, events, 'wall impact');
+      applyDroneDamage(state, id, events, cellEffects, 'wall impact');
       continue;
     }
 
@@ -844,7 +846,7 @@ function resolveDroneMovement(state, intents, movingPlayers, events) {
   }
 }
 
-function resolveDroneAttacks(state, commands, events) {
+function resolveDroneAttacks(state, commands, events, cellEffects) {
   const hits = [];
 
   for (const id of ['p1', 'p2']) {
@@ -873,11 +875,11 @@ function resolveDroneAttacks(state, commands, events) {
   }
 
   for (const hit of hits) {
-    applyDroneDamage(state, hit.targetId, events, hit.source);
+    applyDroneDamage(state, hit.targetId, events, cellEffects, hit.source);
   }
 }
 
-function resolveDroneHealthPack(state, events) {
+function resolveDroneHealthPack(state, events, cellEffects) {
   for (const id of ['p1', 'p2']) {
     const drone = state.drones[id];
 
@@ -887,12 +889,13 @@ function resolveDroneHealthPack(state, events) {
 
     drone.health = Math.min(3, drone.health + 1);
     events.push(`${state.players[id].name} collected the health pack.`);
+    cellEffects.push({ row: drone.row, column: drone.column, type: 'heal' });
     state.healthPack = createDroneHealthPack(state.drones);
     return;
   }
 }
 
-function settleDroneWinner(state, events) {
+function settleDroneWinner(state, events, cellEffects) {
   const defeated = ['p1', 'p2'].filter((id) => state.drones[id].health <= 0);
 
   if (defeated.length > 0) {
@@ -908,20 +911,27 @@ function settleDroneWinner(state, events) {
     state.winner = extracted;
     state.status = 'finished';
     events.push(`${state.players[extracted].name} reached the extraction point.`);
+    cellEffects.push({
+      row: state.drones[extracted].row,
+      column: state.drones[extracted].column,
+      type: 'extraction'
+    });
   }
 }
 
-function applyDroneDamage(state, playerId, events, source) {
+function applyDroneDamage(state, playerId, events, cellEffects, source) {
   const drone = state.drones[playerId];
 
   if (drone.shieldTicks > 0) {
     drone.shieldTicks = 0;
     events.push(`${state.players[playerId].name}'s shield absorbed ${source}.`);
+    cellEffects.push({ row: drone.row, column: drone.column, type: 'shield' });
     return;
   }
 
   drone.health = Math.max(0, drone.health - 1);
   events.push(`${state.players[playerId].name} lost one health to ${source}.`);
+  cellEffects.push({ row: drone.row, column: drone.column, type: 'damage' });
 }
 
 function droneHasLineOfFire(state, attackerId, targetId, range) {
