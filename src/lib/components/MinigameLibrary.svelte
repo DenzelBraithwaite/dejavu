@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { campaignState } from '../stores/campaign';
   import location from '../stores/location';
   import { minigameSessions, type MinigameId } from '../stores/minigameSessions';
 
@@ -116,6 +117,10 @@
       modes: ['singleplayer', 'multiplayer']
     }
   ];
+
+  function storyIsUsingMinigame(minigameId: MinigameId): boolean {
+    return $campaignState?.activeMinigame?.id === minigameId;
+  }
 </script>
 
 <section
@@ -244,8 +249,16 @@
             </div>
             <h2>{minigame.title}</h2>
             <p>{minigame.description}</p>
-            <button type="button" on:click={() => location.set(minigame.id)}>
-              {$minigameSessions[minigame.id]?.active ? 'Resume' : 'Launch'}
+            <button
+              type="button"
+              disabled={storyIsUsingMinigame(minigame.id)}
+              on:click={() => location.set(minigame.id)}
+            >
+              {storyIsUsingMinigame(minigame.id)
+                ? 'In use'
+                : $minigameSessions[minigame.id]?.active
+                  ? 'Resume'
+                  : 'Launch'}
             </button>
           </div>
         </article>

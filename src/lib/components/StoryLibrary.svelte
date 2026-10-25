@@ -80,7 +80,8 @@
 
   const companionNodeTypes = [
     { type: 'effect', label: 'Item / effect' },
-    { type: 'background', label: 'Background' },
+    { type: 'background', label: 'Terminal Color' },
+    { type: 'note', label: 'Note' },
     { type: 'music', label: 'Play music' },
     { type: 'sound-effect', label: 'Sound effect' },
     { type: 'stop-music', label: 'Stop music' },
@@ -156,7 +157,7 @@
       description: 'Change the atmosphere, show visual content, or launch a coded game.',
       nodes: [
         {
-          name: 'Background',
+          name: 'Terminal Color',
           type: 'background',
           description: 'Changes the terminal color theme without affecting music or sound effects.',
           usage: 'Choose a premade color theme and attach it to the scene where the terminal should change.'
@@ -232,6 +233,12 @@
           type: 'label',
           description: 'Adds a heading or note to organize the editor canvas without affecting play.',
           usage: 'Write a useful chapter or section title. Labels never receive story routes.'
+        },
+        {
+          name: 'Note',
+          type: 'note',
+          description: 'Stores longer author notes beside a story node without appearing during play.',
+          usage: 'Attach it to a host node and record context, reminders, or implementation details for other authors.'
         },
         {
           name: 'Ending',
@@ -323,7 +330,6 @@
   let saveInFlight = false;
   let savePulse = false;
   let lastSavedStoryKey = '';
-  let lastHandledHandoff = '';
   let autosaveTimer: number | undefined;
   let savePulseTimer: number | undefined;
   let inspectorElement: HTMLElement;
@@ -432,6 +438,9 @@
   $: localSelection = playerId
     ? $libraryState.selections[playerId]
     : null;
+  $: localSelectionMode = playerId
+    ? $libraryState.selectionModes[playerId]
+    : null;
   $: partnerSelection = partnerId
     ? $libraryState.selections[partnerId]
     : null;
@@ -465,13 +474,8 @@
   }
   $: if ($location === 'editor' && $editorHandoff) {
     const handoff = $editorHandoff;
-    const handoffKey = `${handoff.storyId}:${handoff.nodeId}:${handoff.map}`;
-
-    if (handoffKey !== lastHandledHandoff) {
-      lastHandledHandoff = handoffKey;
-      editorHandoff.set(null);
-      openEditor(handoff.storyId, handoff.nodeId, handoff.map);
-    }
+    editorHandoff.set(null);
+    openEditor(handoff.storyId, handoff.nodeId, handoff.map);
   }
   $: {
     const toastKey = `${statusMessage}|${errorMessage}`;
@@ -587,10 +591,11 @@
     showEditorHome();
   }
 
-  function selectStory(storyId: string): void {
+  function selectStory(storyId: string, mode: StoryPlayMode): void {
     clearMessages();
     socket.emit('library:select-story', {
-      storyId
+      storyId,
+      mode
     }, handleSimpleResult('Cartridge inserted. Story Mode is ready.'));
   }
 
@@ -599,7 +604,13 @@
       return;
     }
 
-    selectStory(partnerSelection);
+    const partnerMode = partnerId
+      ? $libraryState.selectionModes[partnerId]
+      : null;
+
+    if (partnerMode) {
+      selectStory(partnerSelection, partnerMode);
+    }
   }
 
   function createStory(): void {
@@ -891,7 +902,7 @@
       }
 
       if (node.type === 'image') {
-        node.text = undefined;
+        node.text ??= '';
         node.imagePositionX ??= 50;
         node.imagePositionY ??= 50;
         node.logText ??= node.alt ?? '';
@@ -939,6 +950,14 @@
         node.backgroundTheme ??= terminalThemes.includes(String(node.background))
           ? node.background as StoryNode['backgroundTheme']
           : 'blue';
+      }
+
+      if (node.type === 'label') {
+        node.text = String(node.text ?? '').slice(0, 60);
+      }
+
+      if (node.type === 'note') {
+        node.text = String(node.text ?? '').slice(0, 5000);
       }
 
       if (node.type === 'minigame') {
@@ -1090,7 +1109,7 @@
       shapeClass = 'node-shape-checkpoint';
     } else if (['clear-terminal', 'stop-music'].includes(type)) {
       shapeClass = 'node-shape-clear';
-    } else if (type === 'label') {
+    } else if (['label', 'note'].includes(type)) {
       shapeClass = 'node-shape-label';
     } else if (['ambience', 'music', 'sound-effect'].includes(type)) {
       shapeClass = 'node-shape-audio';
@@ -1117,7 +1136,7 @@
   }
 
   function isCompactSpecialNode(node: StoryNode): boolean {
-    return ['checkpoint', 'clear-terminal', 'stop-music', 'label', 'ending'].includes(node.type);
+    return ['checkpoint', 'clear-terminal', 'stop-music', 'label', 'note', 'ending'].includes(node.type);
   }
 
   function compactNodeTitle(node: StoryNode): string {
@@ -1130,6 +1149,10 @@
 
     if (node.type === 'label') {
       return String(node.text || 'UNTITLED LABEL').slice(0, 28).toUpperCase();
+    }
+
+    if (node.type === 'note') {
+      return 'NOTE';
     }
 
     return titles[node.type] ?? nodeTypeName(node.type).toUpperCase();
@@ -1487,7 +1510,7 @@
     const replacementId = supportsSimpleNext(node) ? node.next ?? '' : '';
 
     for (const candidate of editingStory.nodes) {
-      for (const field of routeFields(candidate)) {
+      for (const field of allRouteFields(candidate)) {
         if (getRouteValue(candidate, field) === node.id) {
           // Branch slots belong to their specific option. Clearing the slot
           // restores its add button; reconnecting it silently changes meaning.
@@ -1509,9 +1532,7 @@
     selectedNodeId = selectedNodeId === node.id
       ? replacementId || editingStory.nodes[0]?.id || ''
       : selectedNodeId;
-    editingStory = {
-      ...editingStory
-    };
+    refreshStory();
     statusMessage = `${displayNodeName(node)} deleted. Branch routes were cleared and linear routes were ${replacementId ? 'reconnected' : 'cleared'}.`;
   }
 
@@ -1851,7 +1872,7 @@
   }
 
   function displayNodeName(node: StoryNode): string {
-    if (node.type === 'label') {
+    if (['label', 'note'].includes(node.type)) {
       return String(node.text || 'Untitled label');
     }
 
@@ -2229,6 +2250,38 @@
     return [];
   }
 
+  // Deletion must inspect hidden, disabled, and mode-switching routes too.
+  // The visible route list intentionally omits some of those editor details.
+  function allRouteFields(node: StoryNode): string[] {
+    if (isCompanionNode(node)) {
+      return node.attachedTo === undefined && node.next !== undefined
+        ? ['next']
+        : [];
+    }
+
+    if (supportsSimpleNext(node)) {
+      return ['next'];
+    }
+
+    if (node.type === 'dice-check') {
+      return ['success', 'failure'];
+    }
+
+    if (node.type === 'condition') {
+      return ['trueNext', 'falseNext'];
+    }
+
+    if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+      return (node.choices ?? []).map((_choice, index) => `choices.${index}.next`);
+    }
+
+    if (node.type === 'minigame') {
+      return Object.keys(node.resultNext ?? {}).map((outcome) => `resultNext.${outcome}`);
+    }
+
+    return [];
+  }
+
   function supportsSimpleNext(node: StoryNode): boolean {
     return ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'clear-terminal']
       .includes(node.type);
@@ -2418,6 +2471,17 @@
 
     audioLibraryOpen = false;
     refreshStory();
+  }
+
+  function stopOtherAudioPreviews(event: Event): void {
+    const selectedPreview = event.currentTarget as HTMLAudioElement;
+
+    for (const preview of document.querySelectorAll<HTMLAudioElement>('.audio-library-list audio')) {
+      if (preview !== selectedPreview) {
+        preview.pause();
+        preview.currentTime = 0;
+      }
+    }
   }
 
   function setStopMusicIds(event: Event): void {
@@ -2681,7 +2745,7 @@
       case 'image':
         return {
           ...baseNode,
-          text: undefined,
+          text: '',
           src: '',
           logText: '',
           imagePositionX: 50,
@@ -2711,6 +2775,14 @@
           audience: 'both',
           attachedTo: '',
           backgroundTheme: 'blue'
+        };
+      case 'note':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          text: 'Add an author note here.'
         };
       case 'music':
         return {
@@ -2819,7 +2891,7 @@
           <p class="eyebrow">STORY CARTRIDGES</p>
           <h1 id="library-title">Library</h1>
           <p class="introduction">
-            Insert a cartridge to begin. Stories that support both modes start with one player; authors can use an opening choice to switch the campaign to two players.
+            Choose the singleplayer or multiplayer map when you insert a cartridge. Two players may run the same singleplayer map independently.
           </p>
         </div>
         <button class="primary-button" type="button" on:click={openCreateStory}>
@@ -2870,9 +2942,20 @@
               </div>
             </dl>
             <div class="card-actions">
-              <button type="button" on:click={() => selectStory(story.id)}>
-                {localSelection === story.id ? 'Cartridge inserted' : 'Insert cartridge'}
-              </button>
+              {#if story.playModes.singleplayer}
+                <button type="button" on:click={() => selectStory(story.id, 'singleplayer')}>
+                  {localSelection === story.id && localSelectionMode === 'singleplayer'
+                    ? 'Singleplayer inserted'
+                    : 'Insert singleplayer'}
+                </button>
+              {/if}
+              {#if story.playModes.multiplayer}
+                <button type="button" on:click={() => selectStory(story.id, 'multiplayer')}>
+                  {localSelection === story.id && localSelectionMode === 'multiplayer'
+                    ? 'Multiplayer inserted'
+                    : 'Insert multiplayer'}
+                </button>
+              {/if}
             </div>
           </article>
         {/each}
@@ -3415,6 +3498,18 @@
               </div>
             {/if}
 
+            {#if selectedNode.type === 'note'}
+              <label for="note-text">Author note</label>
+              <textarea
+                id="note-text"
+                bind:value={selectedNode.text}
+                rows="10"
+                maxlength="5000"
+                placeholder="Record context or reminders for other authors."
+              ></textarea>
+              <p class="inspector-help">Notes only appear in the editor and never enter the terminal.</p>
+            {/if}
+
             {#if selectedNode.type !== 'condition'
               && selectedNode.type !== 'input'
               && selectedNode.type !== 'clear-terminal'
@@ -3422,7 +3517,12 @@
               <label for="node-text">
                 {selectedNode.type === 'label' ? 'Label title' : 'Terminal text'}
               </label>
-              <textarea id="node-text" bind:value={selectedNode.text} rows="5"></textarea>
+              <textarea
+                id="node-text"
+                bind:value={selectedNode.text}
+                rows="5"
+                maxlength={selectedNode.type === 'label' ? 60 : undefined}
+              ></textarea>
             {/if}
 
             {#if selectedNode.type === 'input'}
@@ -3766,6 +3866,7 @@
                     min="1"
                     max="20"
                     step="1"
+                    disabled={Boolean(selectedNode.effectLoop)}
                     bind:value={selectedNode.effectIterations}
                   >
                 </div>
@@ -4333,7 +4434,12 @@
                   <strong>{asset.name}</strong>
                   <small>{asset.path}</small>
                 </div>
-                <audio controls preload="metadata" src={asset.path}></audio>
+                <audio
+                  controls
+                  preload="metadata"
+                  src={asset.path}
+                  on:play={stopOtherAudioPreviews}
+                ></audio>
                 <button class="primary-button" type="button" on:click={() => selectStoryAudio(asset)}>
                   Select
                 </button>

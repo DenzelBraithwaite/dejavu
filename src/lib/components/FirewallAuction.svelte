@@ -4,7 +4,7 @@
   import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
-  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { socket } from '../socket';
 
   type Screen = 'menu' | 'instructions' | 'game';
@@ -18,8 +18,7 @@
   let error = '';
   let waitingForStoryPartner = false;
 
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'firewall-auction'
-    && $storyMinigameView;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'firewall-auction';
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
   $: state = launchedFromStory
     ? $storyArcadeStates['firewall-auction'] ?? null

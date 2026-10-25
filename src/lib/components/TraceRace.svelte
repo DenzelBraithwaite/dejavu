@@ -6,7 +6,7 @@
   import location from '../stores/location';
   import { sessionState, type PlayerId } from '../stores/session';
   import { traceRaceServerState } from '../stores/traceRaceSession';
-  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -66,8 +66,7 @@
   let cpuTimer: number | undefined;
 
   $: playerId = $sessionState.playerId;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'trace-race'
-    && $storyMinigameView;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'trace-race';
   $: serverPlayer = playerId && $traceRaceServerState
     ? $traceRaceServerState.players[playerId]
     : null;

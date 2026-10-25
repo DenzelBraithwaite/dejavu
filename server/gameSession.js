@@ -88,12 +88,16 @@ export function createCampaignState(story = null, options = {}) {
   };
 
   if (story) {
-    if (sessionMode === 'singleplayer' && soloPlayerId) {
-      setPlayerScene(
-        state,
-        soloPlayerId,
-        story.singleplayerInitialSceneId ?? story.initialSceneIds.p1
-      );
+    if (sessionMode === 'singleplayer') {
+      const singleplayerIds = soloPlayerId ? [soloPlayerId] : PLAYER_IDS;
+
+      for (const playerId of singleplayerIds) {
+        setPlayerScene(
+          state,
+          playerId,
+          story.singleplayerInitialSceneId ?? story.initialSceneIds.p1
+        );
+      }
     } else {
       for (const playerId of PLAYER_IDS) {
         setPlayerScene(state, playerId, story.initialSceneIds[playerId]);
@@ -125,10 +129,10 @@ function resolvePlayerCharacters(story, sessionMode, soloPlayerId, characters) {
   const multiplayer = mainCharacterIds.multiplayer ?? {};
   const soloCharacter = byId.get(mainCharacterIds.singleplayer);
 
-  if (sessionMode === 'singleplayer' && soloPlayerId) {
+  if (sessionMode === 'singleplayer') {
     return {
-      p1: soloPlayerId === 'p1' ? soloCharacter : null,
-      p2: soloPlayerId === 'p2' ? soloCharacter : null
+      p1: !soloPlayerId || soloPlayerId === 'p1' ? soloCharacter : null,
+      p2: !soloPlayerId || soloPlayerId === 'p2' ? soloCharacter : null
     };
   }
 
@@ -213,7 +217,9 @@ export function handleCampaignAction(state, playerId, action) {
     return actionError('Only assigned players can interact with the campaign.');
   }
 
-  if (state.sessionMode === 'singleplayer' && state.soloPlayerId !== playerId) {
+  if (state.sessionMode === 'singleplayer'
+    && state.soloPlayerId
+    && state.soloPlayerId !== playerId) {
     return actionError('The other player owns this single-player campaign.');
   }
 
@@ -300,11 +306,15 @@ function handleMinigameLaunch(state, playerId, scene, action) {
   launchState.readyPlayers = [...readyPlayers];
   state.minigames[scene.id] = launchState;
 
-  if (readyPlayers.size === activePlayerIds(state).length) {
+  const requiredPlayerCount = state.sessionMode === 'singleplayer'
+    ? 1
+    : activePlayerIds(state).length;
+
+  if (readyPlayers.size === requiredPlayerCount) {
     state.activeMinigame = {
       id: scene.minigameId,
       sceneId: scene.id,
-      perspectivePlayerId: scene.audience === 'p2' ? 'p2' : 'p1',
+      perspectivePlayerId: playerId,
       startedAt: new Date().toISOString()
     };
   }
@@ -318,6 +328,7 @@ export function completeActiveMinigame(state, resultId) {
   }
 
   const scene = getScene(state, state.activeMinigame.sceneId);
+  const perspectivePlayerId = state.activeMinigame.perspectivePlayerId;
   const nextSceneId = scene?.resultNext?.[resultId]
     ?? (resultId !== 'cancelled' ? scene?.resultNext?.completed : undefined);
 
@@ -330,7 +341,13 @@ export function completeActiveMinigame(state, resultId) {
   });
   delete state.minigames[scene.id];
   state.activeMinigame = null;
-  setSharedScene(state, nextSceneId);
+  if (state.sessionMode === 'singleplayer'
+    && !state.soloPlayerId
+    && perspectivePlayerId) {
+    setPlayerScene(state, perspectivePlayerId, nextSceneId);
+  } else {
+    setSharedScene(state, nextSceneId);
+  }
   state.updatedAt = new Date().toISOString();
 
   return actionSuccess();
@@ -716,8 +733,8 @@ function appendSceneImages(state, playerId, scene) {
     appendTerminalEntry(state, playerId, {
       kind: 'image',
       sceneId: image.id,
-      speaker: '',
-      text: '',
+      speaker: image.speaker ?? '',
+      text: image.text ?? '',
       src: image.src,
       alt: image.alt ?? '',
       logText: image.logText ?? image.alt ?? '',

@@ -4,7 +4,7 @@
   import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
-  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import WagerPanel from './WagerPanel.svelte';
 
   type Phase = 'menu' | 'tutorial' | 'betting' | 'playing' | 'result';
@@ -67,8 +67,7 @@
   let completionError = '';
 
   $: balance = $netRunnersGameState.p1.money;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'billywig'
-    && $storyMinigameView;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'billywig';
   $: playerName = $localPlayer?.name ?? 'PLAYER';
   $: setMinigameSessionActive('billywig', phase !== 'menu');
 

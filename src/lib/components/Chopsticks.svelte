@@ -5,7 +5,7 @@
   import { sessionState, type PlayerId } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
-  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -27,8 +27,7 @@
   let wagerSettled = false;
   let wagerArmed = false;
 
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks'
-    && $storyMinigameView;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks';
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
   $: serverState = launchedFromStory
     ? $storyArcadeStates.chopsticks ?? null

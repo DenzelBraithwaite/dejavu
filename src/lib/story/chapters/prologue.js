@@ -31,29 +31,19 @@ export const prologueScenes = [
   }),
   defineScene({
     id: 'prologue.p1.nod',
-    type: 'choice',
+    type: 'dialogue',
     audience: 'p1',
     text: 'Your body feels heavy. Even opening your eyes takes effort.',
-    choices: [
-      {
-        id: 'nod',
-        label: 'Nod slowly',
-        next: 'prologue.p1.bandages'
-      }
-    ]
+    continueLabel: 'Nod slowly',
+    next: 'prologue.p1.bandages'
   }),
   defineScene({
     id: 'prologue.p2.nod',
-    type: 'choice',
+    type: 'dialogue',
     audience: 'p2',
     text: 'Your body feels heavy. Even opening your eyes takes effort.',
-    choices: [
-      {
-        id: 'nod',
-        label: 'Nod slowly',
-        next: 'prologue.p2.bandages'
-      }
-    ]
+    continueLabel: 'Nod slowly',
+    next: 'prologue.p2.bandages'
   }),
   defineScene({
     id: 'prologue.p1.bandages',
@@ -308,4 +298,9 @@ export const prologueScenes = [
     audience: 'both',
     text: 'Chapter 1 — Eyes Sparkling. The Spoofs chapter is ready for its detailed scene draft.'
   })
-];
+].map((scene) => {
+  return defineScene({
+    ...scene,
+    map: 'multiplayer'
+  });
+});

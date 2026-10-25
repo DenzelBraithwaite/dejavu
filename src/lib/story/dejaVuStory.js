@@ -8,6 +8,7 @@ export const dejaVuStoryDocument = {
   author: 'Denzel Braithwaite',
   status: 'playable',
   version: 2,
+  builtInRevision: 2,
   builtIn: true,
   playModes: {
     singleplayer: false,

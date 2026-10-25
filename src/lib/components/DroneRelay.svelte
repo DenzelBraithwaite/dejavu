@@ -4,7 +4,7 @@
   import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
-  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { socket } from '../socket';
 
   type Screen = 'menu' | 'instructions' | 'game';
@@ -45,8 +45,7 @@
   let playbackFrameIndex = -1;
   let animationTimer: number | null = null;
 
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay'
-    && $storyMinigameView;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
   $: state = launchedFromStory
     ? $storyArcadeStates['drone-relay'] ?? null

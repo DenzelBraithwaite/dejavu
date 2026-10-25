@@ -2,7 +2,7 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
-  import { applySceneAudio } from '../audio/audioManager';
+  import { applySceneAudio, stopMusic, stopSounds } from '../audio/audioManager';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import { editorHandoff, libraryState } from '../stores/library';
@@ -21,7 +21,8 @@
   let clock: number;
   let textValues: Record<string, string | number> = {};
   let lastScrollKey = '';
-  let lastAudioSceneId = '';
+  let lastAudioSceneKey = '';
+  let lastAudioCampaignId = '';
   let diceTerminalOpen = false;
   let scenePresentation: Pick<StoryNode, 'background' | 'backgroundTheme'> = {};
   let sceneAudioCues: StoryNode[] = [];
@@ -165,16 +166,28 @@
   $: partnerStoryTitle = getStoryTitle(partnerStoryId);
   $: soloSpectator = $libraryState.activeStoryMode === 'singleplayer'
     && Boolean(playerId)
+    && Boolean($libraryState.activeSoloPlayerId)
     && $libraryState.activeSoloPlayerId !== playerId;
   $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
+  $: audioCampaignId = $campaignState?.campaignId ?? '';
 
   $: if (terminalScreenElement && scrollKey !== lastScrollKey) {
     lastScrollKey = scrollKey;
     void scrollTerminalToBottom();
   }
 
-  $: if (scene && sceneId !== lastAudioSceneId) {
-    lastAudioSceneId = sceneId;
+  $: if (audioCampaignId && audioCampaignId !== lastAudioCampaignId) {
+    lastAudioCampaignId = audioCampaignId;
+    stopMusic();
+    stopSounds();
+  }
+
+  $: audioSceneKey = scene
+    ? `${audioCampaignId}:${sceneId}:${sceneAudioCues.map(audioCueSignature).join('|')}`
+    : '';
+
+  $: if (scene && audioSceneKey !== lastAudioSceneKey) {
+    lastAudioSceneKey = audioSceneKey;
     applySceneAudio(sceneAudioCues);
   }
 
@@ -221,6 +234,25 @@
         errorMessage = result.error ?? 'The action could not be completed.';
       }
     });
+  }
+
+  function audioCueSignature(cue: StoryNode): string {
+    return [
+      cue.id,
+      cue.type,
+      cue.music ?? '',
+      cue.sound ?? '',
+      cue.audioId ?? '',
+      cue.audioLayer ?? '',
+      cue.audioVolume ?? '',
+      cue.audioLoop ?? '',
+      cue.fadeInSeconds ?? '',
+      cue.fadeOutSeconds ?? '',
+      cue.stopMusic ?? '',
+      (cue.stopMusicIds ?? []).join(','),
+      (cue.stopMusicLayers ?? []).join(','),
+      cue.stopSounds ?? ''
+    ].join(':');
   }
 
   function createTerminalAnimations(
@@ -534,17 +566,28 @@
       <div class="terminal-history" aria-label="Previous terminal output">
         {#each terminalEntries as entry}
           {#if entry.kind === 'image' && entry.src}
-            <figure
-              class="scene-image-wrapper terminal-image-entry"
-              style:border-color={entry.imageBorderColor ?? '#1472bf'}
-            >
-              <img
-                class="scene-image"
-                src={entry.src}
-                alt={entry.logText ?? entry.alt ?? ''}
-                style:object-position={`${entry.imagePositionX ?? 50}% ${entry.imagePositionY ?? 50}%`}
+            <article class="terminal-history-entry terminal-history-entry--image">
+              <figure
+                class="scene-image-wrapper terminal-image-entry"
+                style:border-color={entry.imageBorderColor ?? '#1472bf'}
               >
-            </figure>
+                <img
+                  class="scene-image"
+                  src={entry.src}
+                  alt={entry.logText ?? entry.alt ?? ''}
+                  style:object-position={`${entry.imagePositionX ?? 50}% ${entry.imagePositionY ?? 50}%`}
+                >
+              </figure>
+              {#if entry.text}
+                <div>
+                  <p class="history-scene-id">{entry.sceneId}</p>
+                  {#if entry.speaker}
+                    <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
+                  {/if}
+                  <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+                </div>
+              {/if}
+            </article>
           {:else}
             <article class="terminal-history-entry" class:terminal-history-entry--portrait={Boolean(entry.portrait)}>
               {#if entry.portrait}
@@ -565,7 +608,7 @@
         {/each}
       </div>
 
-      {#if scene.type !== 'image' || sceneText}
+      {#if scene.type !== 'image'}
         <p class="scene-id">{scene.id}</p>
 
         <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scenePortrait)}>
@@ -896,6 +939,14 @@
     grid-template-columns: 56px minmax(0, 1fr);
     gap: 13px;
     align-items: start;
+  }
+
+  .terminal-history-entry--image {
+    width: min(100%, 560px);
+
+    .scene-image-wrapper {
+      margin-bottom: 18px;
+    }
   }
 
   .history-portrait {

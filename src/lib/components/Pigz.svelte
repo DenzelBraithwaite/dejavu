@@ -6,7 +6,7 @@
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { pigzServerState } from '../stores/pigzSession';
   import { sessionState } from '../stores/session';
-  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
+  import { setMinigameSessionActive } from '../stores/minigameSessions';
   import WagerPanel from './WagerPanel.svelte';
 
   type Mode = 'singleplayer' | 'multiplayer';
@@ -45,8 +45,7 @@
   $: serverPlayer = playerId && $pigzServerState
     ? $pigzServerState.players[playerId]
     : null;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'pigz'
-    && $storyMinigameView;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'pigz';
   $: activeBalance = mode === 'singleplayer'
     ? $netRunnersGameState.p1.money
     : serverPlayer?.money ?? 0;

@@ -192,22 +192,35 @@ function seedBuiltInStory(database, document) {
 
     const requiresStatusMigration = storedDocument.status !== 'playable';
     const requiresCharacterMigration = !storedDocument.mainCharacterIds;
+    const requiresDocumentMigration = Number(storedDocument.builtInRevision ?? 0)
+      < Number(document.builtInRevision ?? 1);
 
     if (supportedMinigames.length === storedDocument.supportedMinigames?.length
       && !requiresStatusMigration
-      && !requiresCharacterMigration) {
+      && !requiresCharacterMigration
+      && !requiresDocumentMigration) {
       return;
     }
 
     const nextVersion = Number(existing.version) + 1;
-    const migratedDocument = {
-      ...storedDocument,
-      version: nextVersion,
-      status: 'playable',
-      supportedMinigames,
-      mainCharacterIds: storedDocument.mainCharacterIds ?? document.mainCharacterIds,
-      characterIds: storedDocument.characterIds ?? document.characterIds
-    };
+    const migratedDocument = requiresDocumentMigration
+      ? {
+        ...document,
+        title: storedDocument.title ?? document.title,
+        description: storedDocument.description ?? document.description,
+        author: storedDocument.author ?? document.author,
+        version: nextVersion,
+        status: 'playable',
+        supportedMinigames
+      }
+      : {
+        ...storedDocument,
+        version: nextVersion,
+        status: 'playable',
+        supportedMinigames,
+        mainCharacterIds: storedDocument.mainCharacterIds ?? document.mainCharacterIds,
+        characterIds: storedDocument.characterIds ?? document.characterIds
+      };
 
     database.prepare(`
       UPDATE stories

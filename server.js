@@ -658,7 +658,7 @@ io.on('connection', (socket) => {
 
     storySelections[playerId] = normalizedStoryId;
     storySelectionModes[playerId] = normalizedStoryId ? normalizedMode : null;
-    synchronizeActiveStory(playerId);
+    synchronizeActiveStory(playerId, true);
     acknowledge({
       ok: true
     });
@@ -854,9 +854,16 @@ io.on('connection', (socket) => {
       activeStoryMode = campaignState.sessionMode ?? 'multiplayer';
       activeSoloPlayerId = campaignState.soloPlayerId ?? null;
 
-      if (activeStoryMode === 'singleplayer' && activeSoloPlayerId) {
-        storySelections[activeSoloPlayerId] = activeStoryId;
-        storySelectionModes[activeSoloPlayerId] = 'singleplayer';
+      if (activeStoryMode === 'singleplayer') {
+        if (activeSoloPlayerId) {
+          storySelections[activeSoloPlayerId] = activeStoryId;
+          storySelectionModes[activeSoloPlayerId] = 'singleplayer';
+        } else {
+          storySelections.p1 = activeStoryId;
+          storySelections.p2 = activeStoryId;
+          storySelectionModes.p1 = 'singleplayer';
+          storySelectionModes.p2 = 'singleplayer';
+        }
       } else {
         storySelections.p1 = activeStoryId;
         storySelections.p2 = activeStoryId;
@@ -1625,15 +1632,23 @@ function releaseEditorLocks(socketId) {
   }
 }
 
-function synchronizeActiveStory(preferredPlayerId = null) {
-  const soloPlayerId = preferredPlayerId
+function synchronizeActiveStory(preferredPlayerId = null, forceReload = false) {
+  const matchingSoloStoryId = storySelections.p1
+    && storySelections.p1 === storySelections.p2
+    && storySelectionModes.p1 === 'singleplayer'
+    && storySelectionModes.p2 === 'singleplayer'
+    ? storySelections.p1
+    : null;
+  const soloPlayerId = !matchingSoloStoryId && preferredPlayerId
     && storySelections[preferredPlayerId]
     && storySelectionModes[preferredPlayerId] === 'singleplayer'
     ? preferredPlayerId
-    : ['p1', 'p2'].find(
+    : !matchingSoloStoryId
+      ? ['p1', 'p2'].find(
         (playerId) => storySelections[playerId]
           && storySelectionModes[playerId] === 'singleplayer'
-      );
+      )
+      : null;
   const soloStoryId = soloPlayerId ? storySelections[soloPlayerId] : null;
   const matchingStoryId = storySelections.p1
     && storySelections.p1 === storySelections.p2
@@ -1641,15 +1656,20 @@ function synchronizeActiveStory(preferredPlayerId = null) {
     && storySelectionModes.p2 === 'multiplayer'
     ? storySelections.p1
     : null;
-  const nextStoryId = soloStoryId ?? matchingStoryId;
-  const nextMode = soloStoryId ? 'singleplayer' : matchingStoryId ? 'multiplayer' : null;
+  const nextStoryId = matchingSoloStoryId ?? soloStoryId ?? matchingStoryId;
+  const nextMode = matchingSoloStoryId || soloStoryId
+    ? 'singleplayer'
+    : matchingStoryId
+      ? 'multiplayer'
+      : null;
 
   activeStoryId = nextStoryId;
   activeStoryMode = nextMode;
   activeSoloPlayerId = nextMode === 'singleplayer' ? soloPlayerId : null;
 
   if (!nextStoryId
-    || (campaignState.story?.id === nextStoryId
+    || (!forceReload
+      && campaignState.story?.id === nextStoryId
       && campaignState.sessionMode === nextMode
       && campaignState.soloPlayerId === activeSoloPlayerId)) {
     return;
