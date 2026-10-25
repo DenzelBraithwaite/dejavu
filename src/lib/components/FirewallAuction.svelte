@@ -236,14 +236,19 @@
         <section class="reveal">
           <h3>ROUND {state.lastReveal.round} REVEAL</h3>
           <div>
-            <p>YOU <strong>A{state.lastReveal[playerId].attack} / D{state.lastReveal[playerId].defense}{state.lastReveal[playerId].heal ? ' / H+3' : ''}</strong></p>
-            <p>RIVAL <strong>A{state.lastReveal[opponentId].attack} / D{state.lastReveal[opponentId].defense}{state.lastReveal[opponentId].heal ? ' / H+3' : ''}</strong></p>
+            <p>YOU <strong>ATTACK {state.lastReveal[playerId].attack} · SHIELD {state.lastReveal[playerId].defense} · HEAL {state.lastReveal[playerId].heal ? 3 : 0}</strong></p>
+            <p>RIVAL <strong>ATTACK {state.lastReveal[opponentId].attack} · SHIELD {state.lastReveal[opponentId].defense} · HEAL {state.lastReveal[opponentId].heal ? 3 : 0}</strong></p>
           </div>
         </section>
       {/if}
 
-      <section class="log">
-        {#each state.log.slice(0, 4) as entry}<p>{entry.message}</p>{/each}
+      <section class="log" aria-label="Breach battle log">
+        <h3>BATTLE LOG</h3>
+        {#if state.log.length === 0}
+          <p>No rounds resolved yet.</p>
+        {:else}
+          {#each state.log.slice(0, 8) as entry}<p>{entry.message}</p>{/each}
+        {/if}
       </section>
 
       {#if state.status === 'finished'}
@@ -461,7 +466,7 @@
   }
 
   .reveal {
-    max-width: 620px;
+    max-width: 760px;
     margin: 14px auto;
     padding: 12px 18px;
     border: 1px solid #3d2750;
@@ -471,17 +476,45 @@
     }
 
     > div {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
+    }
+
+    p {
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    strong {
+      display: block;
+      color: #f1c7ff;
     }
   }
 
   .log {
-    max-width: 620px;
-    margin: 14px auto;
-    color: #ac8db8;
-    font-size: 0.8rem;
+    max-width: 760px;
+    max-height: 240px;
+    margin: 18px auto;
+    padding: 16px;
+    overflow-y: auto;
+    color: #d9c0e2;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    background: #100716;
+    border: 1px solid #583069;
+
+    h3 {
+      margin: 0 0 10px;
+      color: #ec8cff;
+      letter-spacing: 2px;
+    }
+
+    p {
+      margin: 0;
+      padding: 10px 0;
+      border-top: 1px solid #33203d;
+    }
   }
 
   .result {
@@ -523,7 +556,7 @@
     }
 
     .reveal > div {
-      display: block;
+      grid-template-columns: 1fr;
     }
   }
 </style>

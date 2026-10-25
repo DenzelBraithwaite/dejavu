@@ -17,8 +17,8 @@
   const abilityCommands: Command[] = ['long-shot', 'pulse', 'jump', 'shield'];
   const commandLabels: Record<Command, string> = {
     forward: '↑ FORWARD',
-    left: '↺ LEFT',
-    right: '↻ RIGHT',
+    left: '↺ TURN LEFT',
+    right: '↻ TURN RIGHT',
     wait: '· WAIT',
     shoot: '⌁ SHOOT',
     'long-shot': '⇈ LONG SHOT',
@@ -49,8 +49,9 @@
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: submitted = Boolean(state?.submitted?.[playerId]);
-  $: displayDrones = activeFrame?.drones ?? state?.drones ?? null;
-  $: displayHealthPack = activeFrame?.healthPack ?? state?.healthPack ?? null;
+  $: pendingExecutionStart = state?.executionId !== animatedExecutionId ? state?.executionStart : null;
+  $: displayDrones = activeFrame?.drones ?? pendingExecutionStart?.drones ?? state?.drones ?? null;
+  $: displayHealthPack = activeFrame?.healthPack ?? pendingExecutionStart?.healthPack ?? state?.healthPack ?? null;
   $: currentAbilities = state?.abilities?.[playerId] ?? {};
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
   $: setMinigameSessionActive('drone-relay', screen === 'game' && Boolean(state?.participants[playerId]));
@@ -59,7 +60,7 @@
     screen = 'instructions';
   }
   $: if (state?.executionId && state.executionId !== animatedExecutionId) {
-    playExecution(state.executionId, state.lastExecution);
+    playExecution(state.executionId, state.executionStart, state.lastExecution);
   }
 
 
@@ -129,7 +130,6 @@
   function restart(): void {
     cancelAnimation();
     queue = [];
-    animatedExecutionId = 0;
     waitingForStoryPartner = false;
     socket.emit('arcade:restart', 'drone-relay');
   }
@@ -178,10 +178,14 @@
     return null;
   }
 
-  function playExecution(executionId: number, frames: Array<Record<string, any>>): void {
+  function playExecution(
+    executionId: number,
+    executionStart: Record<string, any> | null,
+    frames: Array<Record<string, any>>
+  ): void {
     cancelAnimation();
     animatedExecutionId = executionId;
-    playbackFrames = structuredClone(frames ?? []);
+    playbackFrames = structuredClone(executionStart ? [executionStart, ...(frames ?? [])] : frames ?? []);
     playbackFrameIndex = 0;
     activeFrame = playbackFrames[0] ?? null;
     isAnimating = Boolean(activeFrame);
@@ -322,8 +326,12 @@
           <h2>PROGRAM YOUR DRONE</h2>
           {#if isAnimating && activeFrame}
             <section class="execution-panel">
-              <p>YOU: <strong>{commandLabel(activeFrame.commands[playerId])}</strong></p>
-              <p>RIVAL: <strong>{commandLabel(activeFrame.commands[opponentId])}</strong></p>
+              {#if activeFrame.commands}
+                <p>YOU: <strong>{commandLabel(activeFrame.commands[playerId])}</strong></p>
+                <p>RIVAL: <strong>{commandLabel(activeFrame.commands[opponentId])}</strong></p>
+              {:else}
+                <p><strong>PROGRAMS ARMED</strong></p>
+              {/if}
               {#each activeFrame.events as event}<span>{event}</span>{/each}
             </section>
           {:else if submitted}

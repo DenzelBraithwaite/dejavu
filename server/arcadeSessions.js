@@ -262,6 +262,7 @@ function createDroneRelayState() {
     abilities: createDroneAbilities(),
     healthPack: createDroneHealthPack(),
     pendingQueues: { p1: null, p2: null },
+    executionStart: null,
     lastExecution: [],
     executionId: 0
   };
@@ -323,6 +324,7 @@ function resetGame(state) {
     state.abilities = createDroneAbilities();
     state.healthPack = createDroneHealthPack();
     state.pendingQueues = { p1: null, p2: null };
+    state.executionStart = null;
     state.lastExecution = [];
     state.executionId = 0;
   }
@@ -654,7 +656,7 @@ function resolveFirewallRound(state) {
 
   addLog(
     state,
-    `Round ${state.round}: ${state.players.p1.name} dealt ${damageToSecond}${first.heal ? ' and healed 3' : ''}; ${state.players.p2.name} dealt ${damageToFirst}${second.heal ? ' and healed 3' : ''}.`
+    `Round ${state.round} — P1 ${state.players.p1.name}: attack ${first.attack}, shield ${first.defense}, heal ${first.heal ? 3 : 0}; P2 ${state.players.p2.name}: attack ${second.attack}, shield ${second.defense}, heal ${second.heal ? 3 : 0}.`
   );
 
   for (const id of ['p1', 'p2']) {
@@ -745,6 +747,18 @@ function playDroneRelay(state, playerId, action) {
 
 function resolveDroneRound(state) {
   const frames = [];
+
+  // Preserve the board before any queued action resolves. Clients use this snapshot while
+  // preparing playback so the already-resolved server state never flashes on screen first.
+  state.executionStart = {
+    round: state.round,
+    step: 0,
+    commands: null,
+    drones: structuredClone(state.drones),
+    healthPack: structuredClone(state.healthPack),
+    events: ['Programs locked. Executing queued actions…'],
+    cellEffects: []
+  };
 
   // Each slot resolves as a simultaneous action tick and is sent to clients for playback.
   for (let step = 0; step < 5 && state.status === 'playing'; step += 1) {
@@ -959,21 +973,47 @@ function dronesAreAdjacent(first, second) {
 }
 
 function createCpuDroneQueue(state, cpuId) {
-  const available = ['forward', 'left', 'right', 'wait', 'shoot'];
+  const simulatedDrone = structuredClone(state.drones[cpuId]);
+  const remainingAbilities = { ...state.abilities[cpuId] };
   const queue = [];
 
-  for (const ability of DRONE_LIMITED_ABILITIES) {
-    if (state.abilities[cpuId][ability] > 0) {
-      available.push(ability);
-    }
-  }
-
   while (queue.length < 5) {
+    const available = ['left', 'right', 'wait', 'shoot'];
+    const forwardCell = nextDronePosition(simulatedDrone);
+    const jumpCell = nextDronePosition(simulatedDrone, 2);
+
+    // Movement commands are only offered when their destination is safe. The CPU may still
+    // collide with the player, but it will not repeatedly drive into a known wall or boundary.
+    if (!isDroneCellBlocked(forwardCell)) {
+      available.push('forward');
+    }
+
+    if (remainingAbilities.jump > 0 && !isDroneCellBlocked(jumpCell)) {
+      available.push('jump');
+    }
+
+    for (const ability of ['long-shot', 'pulse', 'shield']) {
+      if (remainingAbilities[ability] > 0) {
+        available.push(ability);
+      }
+    }
+
     const command = available[Math.floor(Math.random() * available.length)];
     queue.push(command);
 
+    if (command === 'left' || command === 'right') {
+      simulatedDrone.direction = rotateDrone(simulatedDrone.direction, command);
+    }
+
+    if (command === 'forward' || command === 'jump') {
+      const distance = command === 'jump' ? 2 : 1;
+      const destination = nextDronePosition(simulatedDrone, distance);
+      simulatedDrone.row = destination.row;
+      simulatedDrone.column = destination.column;
+    }
+
     if (DRONE_LIMITED_ABILITIES.includes(command)) {
-      available.splice(available.indexOf(command), 1);
+      remainingAbilities[command] -= 1;
     }
   }
 

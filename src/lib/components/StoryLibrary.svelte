@@ -259,6 +259,11 @@
     { id: 'both', label: 'SHARED' },
     { id: 'p2', label: 'PLAYER 2' }
   ];
+  const minimumMapZoom = 0.5;
+  const maximumMapZoom = 1.5;
+  const mapZoomStep = 0.1;
+  const minimumInspectorWidth = 280;
+  const maximumInspectorWidth = 720;
 
   let mode: EditorMode = 'library';
   let newTitle = '';
@@ -315,6 +320,12 @@
   let savePulseTimer: number | undefined;
   let inspectorElement: HTMLElement;
   let editorLockStoryId = '';
+  let inspectorExpanded = false;
+  let inspectorWidth = 340;
+  let inspectorResizeStartX = 0;
+  let inspectorResizeStartWidth = 340;
+  let isResizingInspector = false;
+  let mapZoom = 1;
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -322,6 +333,78 @@
 
   function closeTutorial(): void {
     tutorialOpen = false;
+  }
+
+  function openExpandedInspector(node: StoryNode): void {
+    linkSelection = null;
+    selectedNodeId = node.id;
+    activeLane = (node.audience ?? 'both') as LaneId;
+    errorMessage = '';
+    inspectorExpanded = true;
+
+    tick().then(() => {
+      inspectorElement?.scrollTo({ top: 0 });
+    });
+  }
+
+  function closeExpandedInspector(): void {
+    inspectorExpanded = false;
+  }
+
+  function adjustMapZoom(delta: number): void {
+    const nextZoom = Math.min(maximumMapZoom, Math.max(minimumMapZoom, mapZoom + delta));
+    mapZoom = Number(nextZoom.toFixed(1));
+  }
+
+  function resetMapZoom(): void {
+    mapZoom = 1;
+  }
+
+  function beginInspectorResize(event: PointerEvent): void {
+    if (inspectorExpanded || window.innerWidth <= 800) {
+      return;
+    }
+
+    event.preventDefault();
+    inspectorResizeStartX = event.clientX;
+    inspectorResizeStartWidth = inspectorWidth;
+    isResizingInspector = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', resizeInspector);
+    window.addEventListener('pointerup', finishInspectorResize);
+  }
+
+  function resizeInspector(event: PointerEvent): void {
+    if (!isResizingInspector) {
+      return;
+    }
+
+    const requestedWidth = inspectorResizeStartWidth + inspectorResizeStartX - event.clientX;
+    const viewportMaximum = Math.max(minimumInspectorWidth, window.innerWidth * 0.65);
+    inspectorWidth = Math.round(Math.min(
+      maximumInspectorWidth,
+      viewportMaximum,
+      Math.max(minimumInspectorWidth, requestedWidth)
+    ));
+  }
+
+  function finishInspectorResize(): void {
+    isResizingInspector = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    window.removeEventListener('pointermove', resizeInspector);
+    window.removeEventListener('pointerup', finishInspectorResize);
+  }
+
+  function handleInspectorResizeKey(event: KeyboardEvent): void {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    const delta = event.key === 'ArrowLeft' ? 20 : -20;
+    inspectorWidth = Math.min(maximumInspectorWidth, Math.max(minimumInspectorWidth, inspectorWidth + delta));
   }
 
   onMount(() => {
@@ -397,6 +480,7 @@
     window.clearTimeout(toastTimer);
     window.clearTimeout(savePulseTimer);
     window.clearInterval(autosaveTimer);
+    finishInspectorResize();
     socket.emit('library:release-story');
     editorLockStoryId = '';
   });
@@ -458,6 +542,7 @@
     editorLockStoryId = '';
     editingStory = null;
     selectedNodeId = '';
+    inspectorExpanded = false;
     mode = 'editor';
     location.set('editor');
   }
@@ -524,6 +609,7 @@
         }
       };
       editingStory = prepareStoryForEditor(result.story);
+      inspectorExpanded = false;
       editorLockStoryId = result.story.id;
       activeStoryMap = editingStory.playModes.singleplayer
         ? 'singleplayer'
@@ -556,6 +642,7 @@
       }
 
       editingStory = prepareStoryForEditor(result.story);
+      inspectorExpanded = false;
       editorLockStoryId = result.story.id;
       activeStoryMap = preferredMap && editingStory.playModes[preferredMap]
         ? preferredMap
@@ -1044,6 +1131,12 @@
   }
 
   function handleEditorShortcut(event: KeyboardEvent): void {
+    if ($location === 'editor' && event.key === 'Escape' && inspectorExpanded) {
+      event.preventDefault();
+      closeExpandedInspector();
+      return;
+    }
+
     if (
       $location !== 'editor'
       || !(event.metaKey || event.ctrlKey)
@@ -2797,12 +2890,30 @@
         Routes control rows. Select a node to move it up or down, change its audience, or edit its previous and next connections in the inspector.
       </p>
 
-      <div class="editor-workspace">
+      <div class="editor-workspace" style={`--inspector-width: ${inspectorWidth}px`}>
         <div
           class="flow-canvas"
           class:selecting-route={Boolean(linkSelection)}
           aria-label="Story flow"
         >
+          <div class="map-zoom-controls" aria-label="Story map zoom controls">
+            <button
+              type="button"
+              aria-label="Zoom out story map"
+              disabled={mapZoom <= minimumMapZoom}
+              on:click={() => adjustMapZoom(-mapZoomStep)}
+            >−</button>
+            <button type="button" aria-label="Reset story map zoom" on:click={resetMapZoom}>
+              {Math.round(mapZoom * 100)}%
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in story map"
+              disabled={mapZoom >= maximumMapZoom}
+              on:click={() => adjustMapZoom(mapZoomStep)}
+            >+</button>
+          </div>
+
           {#if linkSelection}
             <div class="link-mode-banner" role="status">
               <span>Select a destination for {linkSelection.label.toLowerCase()}.</span>
@@ -2810,7 +2921,11 @@
             </div>
           {/if}
 
-          <div class="flow-lanes" class:singleplayer-map={activeStoryMap === 'singleplayer'}>
+          <div
+            class="flow-lanes"
+            class:singleplayer-map={activeStoryMap === 'singleplayer'}
+            style={`zoom: ${mapZoom}`}
+          >
             {#each lanes as lane (`${lane.id}:${storyRevision}`)}
               {@const laneGraph = getLaneGraph(lane.id)}
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -2864,6 +2979,17 @@
                             <span class="branch-path-label merge-label">MERGED PATHS</span>
                           {/if}
                       <div class="node-quick-actions" aria-label={`Quick actions for ${displayNodeName(node)}`}>
+                        <button
+                          class="node-expand-button"
+                          type="button"
+                          aria-label={`Expand properties for ${displayNodeName(node)}`}
+                          title="Expand properties"
+                          on:click|stopPropagation={() => openExpandedInspector(node)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"></path>
+                          </svg>
+                        </button>
                         <button type="button" aria-label={`Copy ${displayNodeName(node)}`} title="Copy" on:click|stopPropagation={() => copyNode(node)}>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="8" y="8" width="11" height="11" rx="2"></rect>
@@ -2966,8 +3092,40 @@
           </div>
         </div>
 
-        <aside class="node-inspector" aria-label="Node inspector" bind:this={inspectorElement}>
+        {#if inspectorExpanded}
+          <button
+            class="inspector-modal-backdrop"
+            type="button"
+            aria-label="Close expanded node properties"
+            on:click={closeExpandedInspector}
+          ></button>
+        {/if}
+
+        <button
+          class="inspector-resizer"
+          class:active={isResizingInspector}
+          type="button"
+          aria-label="Resize node properties sidebar"
+          title="Drag to resize node properties"
+          on:pointerdown={beginInspectorResize}
+          on:keydown={handleInspectorResizeKey}
+        ></button>
+
+        <aside
+          class="node-inspector"
+          class:expanded={inspectorExpanded}
+          role={inspectorExpanded ? 'dialog' : undefined}
+          aria-modal={inspectorExpanded ? 'true' : undefined}
+          aria-label={inspectorExpanded ? 'Expanded node properties' : 'Node inspector'}
+          bind:this={inspectorElement}
+        >
           {#if selectedNode}
+            {#if inspectorExpanded}
+              <button class="inspector-modal-close" type="button" on:click={closeExpandedInspector}>
+                × Close expanded view
+              </button>
+            {/if}
+
             <div class="inspector-heading">
               <div>
                 <p>NODE INSPECTOR</p>
@@ -4441,7 +4599,7 @@
     min-height: 0;
 
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr) 8px var(--inspector-width, 340px);
   }
 
   .node-inspector {
@@ -4460,6 +4618,84 @@
       font-size: 0.65rem;
       overflow-wrap: anywhere;
     }
+
+    &.expanded {
+      position: fixed;
+      z-index: 51;
+      inset: clamp(20px, 5vh, 52px) clamp(20px, 7vw, 110px);
+      width: auto;
+      padding: clamp(20px, 3vw, 38px);
+      border: 1px solid #ff8a32;
+      box-shadow: 0 24px 80px #000000bb, 0 0 34px #ff8a3244;
+
+      textarea {
+        min-height: 150px;
+      }
+
+      .choice-editor textarea {
+        min-height: 110px;
+      }
+    }
+  }
+
+  .inspector-resizer {
+    position: relative;
+    z-index: 5;
+    width: 8px;
+    height: 100%;
+    min-width: 8px;
+    min-height: 0;
+    padding: 0;
+    background: #0a111d;
+    border-right: 1px solid #2c3b54;
+    border-left: 1px solid #2c3b54;
+    cursor: col-resize;
+    touch-action: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 2px;
+      width: 2px;
+      height: 48px;
+      background: #64748b;
+      transform: translateY(-50%);
+    }
+
+    &:hover,
+    &:focus-visible,
+    &.active {
+      background: #213149;
+      outline: none;
+
+      &::after {
+        background: #02fbfb;
+        box-shadow: 0 0 10px #02fbfb;
+      }
+    }
+  }
+
+  .inspector-modal-backdrop {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    background: #02050bd9;
+    border: 0;
+  }
+
+  .inspector-modal-close {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    width: 100%;
+    margin-bottom: 16px;
+    color: #ffd5b5;
+    background: #35170a;
+    border-color: #ff8a32;
   }
 
   .flow-canvas {
@@ -4472,6 +4708,33 @@
       linear-gradient(90deg, #1472bf18 1px, transparent 1px);
     background-size: 24px 24px;
 
+  }
+
+  .map-zoom-controls {
+    position: sticky;
+    z-index: 7;
+    top: 0;
+    width: max-content;
+    margin: 0 0 10px auto;
+    padding: 4px;
+    background: #07111dee;
+    border: 1px solid #334155;
+    box-shadow: 0 5px 18px #00000066;
+
+    display: flex;
+    gap: 4px;
+
+    button {
+      min-width: 34px;
+      min-height: 30px;
+      padding: 4px 8px;
+    }
+
+    button:nth-child(2) {
+      min-width: 58px;
+      color: #f8e69a;
+      font-size: 0.66rem;
+    }
   }
 
   .flow-lanes {
@@ -4753,6 +5016,11 @@
     .quick-delete:hover svg,
     .quick-delete:focus-visible svg {
       stroke: #e58271;
+    }
+
+    .node-expand-button:hover svg,
+    .node-expand-button:focus-visible svg {
+      stroke: #02fbfb;
     }
 
   }
@@ -5997,7 +6265,7 @@
 
   @media (max-width: 1050px) {
     .editor-workspace {
-      grid-template-columns: minmax(0, 1fr) 290px;
+      grid-template-columns: minmax(0, 1fr) 8px var(--inspector-width, 290px);
     }
   }
 
@@ -6037,6 +6305,15 @@
     .editor-workspace {
       overflow-x: auto;
       grid-template-columns: 760px 280px;
+    }
+
+    .inspector-resizer {
+      display: none;
+    }
+
+    .node-inspector.expanded {
+      inset: 10px;
+      padding: 18px;
     }
 
     // Start the solo lane at the edge on phones so it is immediately reachable by touch.
