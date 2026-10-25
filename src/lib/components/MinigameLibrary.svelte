@@ -97,8 +97,8 @@
     },
     {
       id: 'firewall-auction',
-      title: 'Firewall Auction',
-      description: 'Secretly bid processing power on attack or defense, then bank what you do not spend.',
+      title: 'Breach',
+      description: 'Secretly divide processing power between attacks, defense, repairs, and your reserve.',
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
       status: 'V1 READY',
@@ -108,10 +108,10 @@
     {
       id: 'drone-relay',
       title: 'Drone Relay',
-      description: 'Program simultaneous command queues to recover data and extract two fragile drones.',
+      description: 'Program simultaneous combat queues to destroy a rival drone or beat it to extraction.',
       playerCount: 2,
       playerLabel: '1–2 PLAYERS',
-      status: 'V1 READY',
+      status: 'V2 READY',
       artwork: 'drone-relay',
       modes: ['singleplayer', 'multiplayer']
     }
@@ -199,7 +199,7 @@
               </div>
             {:else if minigame.artwork === 'firewall-auction'}
               <div class="firewall-preview">
-                <div class="firewall-shield"><span>8</span></div>
+                <div class="firewall-shield"><span>10</span></div>
                 <div class="firewall-bid firewall-bid--attack"><small>ATK</small><strong>3</strong></div>
                 <div class="firewall-bid firewall-bid--defense"><small>DEF</small><strong>2</strong></div>
                 <div class="firewall-reserve">RESERVE 4</div>
@@ -213,7 +213,7 @@
                 </div>
                 <span class="preview-drone preview-drone--one">▲</span>
                 <span class="preview-drone preview-drone--two">◀</span>
-                <span class="preview-core">◆</span>
+                <span class="preview-core">✚</span>
                 <div class="preview-queue"><b>↑</b><b>↻</b><b>↑</b></div>
               </div>
             {:else}

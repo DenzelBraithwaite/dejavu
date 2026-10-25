@@ -14,6 +14,7 @@
   let pendingMode: PlayMode = 'solo';
   let attack = 0;
   let defense = 0;
+  let heal = false;
   let error = '';
   let waitingForStoryPartner = false;
 
@@ -21,7 +22,8 @@
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: availablePower = state?.power?.[playerId] ?? 0;
-  $: reservedPower = Math.max(0, availablePower - attack - defense);
+  $: actionCost = attack + defense + (heal ? 5 : 0);
+  $: reservedPower = Math.max(0, availablePower - actionCost);
   $: submitted = Boolean(state?.submitted?.[playerId]);
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'firewall-auction';
   $: setMinigameSessionActive('firewall-auction', screen === 'game' && Boolean(state?.participants[playerId]));
@@ -31,8 +33,9 @@
   }
   $: if (state?.round) {
     state.round;
+    heal = heal && availablePower >= 5;
     attack = Math.min(attack, availablePower);
-    defense = Math.min(defense, Math.max(0, availablePower - attack));
+    defense = Math.min(defense, Math.max(0, availablePower - attack - (heal ? 5 : 0)));
   }
 
 
@@ -51,17 +54,38 @@
   function begin(): void {
     attack = 0;
     defense = 0;
+    heal = false;
     error = '';
     screen = 'game';
     socket.emit('arcade:join', 'firewall-auction', pendingMode, handleResult);
   }
 
   function setAttack(value: number): void {
-    attack = Math.max(0, Math.min(value, availablePower - defense));
+    attack = Math.max(0, Math.min(value, availablePower - defense - (heal ? 5 : 0)));
   }
 
   function setDefense(value: number): void {
-    defense = Math.max(0, Math.min(value, availablePower - attack));
+    defense = Math.max(0, Math.min(value, availablePower - attack - (heal ? 5 : 0)));
+  }
+
+  function toggleHeal(): void {
+    if (heal) {
+      heal = false;
+      return;
+    }
+
+    if (availablePower < 5) {
+      return;
+    }
+
+    heal = true;
+
+    // Healing reserves five power, so trim defense before attack if the new action exceeds the budget.
+    const overspend = Math.max(0, attack + defense + 5 - availablePower);
+    const defenseReduction = Math.min(defense, overspend);
+
+    defense -= defenseReduction;
+    attack -= Math.max(0, overspend - defenseReduction);
   }
 
   function submitAllocation(): void {
@@ -69,7 +93,7 @@
       'arcade:action',
       {
         game: 'firewall-auction',
-        action: { type: 'allocate', attack, defense }
+        action: { type: 'allocate', attack, defense, heal }
       },
       (result: { ok: boolean; error?: string }) => {
         handleResult(result);
@@ -77,6 +101,7 @@
         if (result.ok) {
           attack = 0;
           defense = 0;
+          heal = false;
         }
       }
     );
@@ -85,6 +110,7 @@
   function restart(): void {
     attack = 0;
     defense = 0;
+    heal = false;
     waitingForStoryPartner = false;
     socket.emit('arcade:restart', 'firewall-auction');
   }
@@ -99,6 +125,7 @@
     socket.emit('arcade:leave', 'firewall-auction');
     attack = 0;
     defense = 0;
+    heal = false;
     waitingForStoryPartner = false;
     screen = 'menu';
   }
@@ -115,21 +142,21 @@
   }
 
   function handleResult(result: { ok: boolean; error?: string }): void {
-    error = result.ok ? '' : result.error ?? 'The firewall rejected that allocation.';
+    error = result.ok ? '' : result.error ?? 'Breach rejected that allocation.';
   }
 </script>
 
 <section class="firewall-auction" class:hide={$location !== 'firewall-auction'}>
   <header>
-    <span>DEJAVU://FIREWALL_AUCTION</span>
+    <span>DEJAVU://BREACH</span>
     <button class="exit" on:click={exitGame}>EXIT</button>
   </header>
 
   {#if screen === 'menu'}
     <div class="menu">
       <p>SIMULTANEOUS PROCESSING DUEL</p>
-      <h1>FIREWALL AUCTION</h1>
-      <span>Secretly divide power between attack and defense. Save power to dominate later rounds.</span>
+      <h1>BREACH</h1>
+      <span>Secretly divide power between attack, defense, healing, and your reserve.</span>
       <div>
         <button on:click={() => openInstructions('solo')}>1P VS CPU</button>
         <button on:click={() => openInstructions('multi')}>1P VS 2P</button>
@@ -137,14 +164,15 @@
     </div>
   {:else if screen === 'instructions'}
     <div class="instructions">
-      <p>AUCTION RULES</p>
-      <h2>Spend now, defend, or bank the advantage.</h2>
+      <p>BREACH PROTOCOL</p>
+      <h2>Attack, repair, defend, or bank the advantage.</h2>
       <ul>
-        <li>Both players secretly allocate available power to ATTACK and DEFENSE.</li>
-        <li>Attack above the opponent's defense damages their eight-point firewall.</li>
-        <li>Unspent power carries forward, then every player gains two power up to ten.</li>
+        <li>Both players secretly allocate available power to ATTACK, DEFENSE, and HEAL.</li>
+        <li>Attack above the opponent's defense damages their ten-point system.</li>
+        <li>Healing costs five power and restores three integrity, even above ten.</li>
+        <li>Unspent power carries forward, then every player gains three power up to ten.</li>
         <li>After eight rounds, remaining integrity breaks ties; saved power is the final tiebreaker.</li>
-        <li>There is no trace action: every decision is attack, defense, or reserve.</li>
+        <li>There is no trace action: every decision is attack, defense, healing, or reserve.</li>
       </ul>
       <div>
         <button on:click={() => screen = 'menu'}>BACK</button>
@@ -162,16 +190,16 @@
 
       <section class="combatants">
         <article>
-          <span>YOUR FIREWALL</span>
+          <span>YOUR SYSTEM</span>
           <strong>{state.integrity[playerId]}</strong>
-          <div class="integrity"><i style={`width:${state.integrity[playerId] / 8 * 100}%`}></i></div>
+          <div class="integrity"><i style={`width:${Math.min(100, state.integrity[playerId] / 10 * 100)}%`}></i></div>
           <small>{availablePower} POWER AVAILABLE</small>
         </article>
         <b>VS</b>
         <article class="hostile">
           <span>{state.players[opponentId].name}</span>
           <strong>{state.integrity[opponentId]}</strong>
-          <div class="integrity"><i style={`width:${state.integrity[opponentId] / 8 * 100}%`}></i></div>
+          <div class="integrity"><i style={`width:${Math.min(100, state.integrity[opponentId] / 10 * 100)}%`}></i></div>
           <small>{state.power[opponentId]} POWER AVAILABLE</small>
         </article>
       </section>
@@ -184,12 +212,20 @@
           {:else}
             <label>
               <span>ATTACK <strong>{attack}</strong></span>
-              <input type="range" min="0" max={availablePower - defense} value={attack} on:input={(event) => setAttack(Number(event.currentTarget.value))}>
+              <input type="range" min="0" max={availablePower - defense - (heal ? 5 : 0)} value={attack} on:input={(event) => setAttack(Number(event.currentTarget.value))}>
             </label>
             <label>
               <span>DEFENSE <strong>{defense}</strong></span>
-              <input type="range" min="0" max={availablePower - attack} value={defense} on:input={(event) => setDefense(Number(event.currentTarget.value))}>
+              <input type="range" min="0" max={availablePower - attack - (heal ? 5 : 0)} value={defense} on:input={(event) => setDefense(Number(event.currentTarget.value))}>
             </label>
+            <button
+              class:active={heal}
+              class="heal-action"
+              disabled={!heal && availablePower < 5}
+              on:click={toggleHeal}
+            >
+              HEAL +3 <small>5 POWER</small>
+            </button>
             <div class="reserve"><span>RESERVED</span><strong>{reservedPower}</strong></div>
             <button class="primary" on:click={submitAllocation}>LOCK ALLOCATION</button>
           {/if}
@@ -200,8 +236,8 @@
         <section class="reveal">
           <h3>ROUND {state.lastReveal.round} REVEAL</h3>
           <div>
-            <p>YOU <strong>A{state.lastReveal[playerId].attack} / D{state.lastReveal[playerId].defense}</strong></p>
-            <p>RIVAL <strong>A{state.lastReveal[opponentId].attack} / D{state.lastReveal[opponentId].defense}</strong></p>
+            <p>YOU <strong>A{state.lastReveal[playerId].attack} / D{state.lastReveal[playerId].defense}{state.lastReveal[playerId].heal ? ' / H+3' : ''}</strong></p>
+            <p>RIVAL <strong>A{state.lastReveal[opponentId].attack} / D{state.lastReveal[opponentId].defense}{state.lastReveal[opponentId].heal ? ' / H+3' : ''}</strong></p>
           </div>
         </section>
       {/if}
@@ -212,7 +248,7 @@
 
       {#if state.status === 'finished'}
         <section class:lost={state.winner !== playerId && state.winner !== 'tie'} class="result">
-          <h2>{state.winner === 'tie' ? 'STALEMATE' : state.winner === playerId ? 'FIREWALL BREACHED' : 'SYSTEM OFFLINE'}</h2>
+          <h2>{state.winner === 'tie' ? 'STALEMATE' : state.winner === playerId ? 'BREACH COMPLETE' : 'SYSTEM OFFLINE'}</h2>
           {#if waitingForStoryPartner}
             <p>Waiting for your opponent to return…</p>
           {:else if launchedFromStory}
@@ -397,6 +433,31 @@
     color: #ffdc73;
     background: #251e08;
     border: 1px solid #8a6b18;
+  }
+
+  .heal-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    small {
+      color: #bb91ca;
+    }
+
+    &.active {
+      color: #07150d;
+      background: #62e59b;
+      border-color: #9affc4;
+
+      small {
+        color: #123c25;
+      }
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
   }
 
   .reveal {

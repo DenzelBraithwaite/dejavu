@@ -8,9 +8,10 @@ const SUIT_NAMES = {
 };
 
 const DRONE_WALLS = ['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4'];
-const DRONE_CORES = ['1-3', '5-3'];
-const DRONE_EXITS = ['2-0', '4-0'];
+const DRONE_EXIT = '0-3';
 const DRONE_DIRECTIONS = ['N', 'E', 'S', 'W'];
+const DRONE_COMMANDS = ['forward', 'left', 'right', 'wait', 'shoot', 'long-shot', 'pulse', 'jump', 'shield'];
+const DRONE_LIMITED_ABILITIES = ['long-shot', 'pulse', 'jump', 'shield'];
 
 
 // Arcade sessions share transport and lifecycle behavior, while each module owns its rules.
@@ -242,7 +243,7 @@ function createFirewallAuctionState() {
     ...createBaseState('firewall-auction'),
     round: 1,
     maximumRounds: 8,
-    integrity: { p1: 8, p2: 8 },
+    integrity: { p1: 10, p2: 10 },
     power: { p1: 5, p2: 5 },
     pendingAllocations: { p1: null, p2: null },
     lastReveal: null
@@ -252,15 +253,17 @@ function createFirewallAuctionState() {
 function createDroneRelayState() {
   return {
     ...createBaseState('drone-relay'),
-    cycle: 1,
-    maximumCycles: 6,
+    round: 1,
+    maximumRounds: 10,
     drones: {
-      p1: { row: 6, column: 1, direction: 'N', damage: 0 },
-      p2: { row: 6, column: 5, direction: 'N', damage: 0 }
+      p1: { row: 6, column: 1, direction: 'N', health: 3, shieldTicks: 0 },
+      p2: { row: 6, column: 5, direction: 'N', health: 3, shieldTicks: 0 }
     },
-    collectedCores: [],
+    abilities: createDroneAbilities(),
+    healthPack: createDroneHealthPack(),
     pendingQueues: { p1: null, p2: null },
-    lastExecution: []
+    lastExecution: [],
+    executionId: 0
   };
 }
 
@@ -305,21 +308,23 @@ function resetGame(state) {
 
   if (state.game === 'firewall-auction') {
     state.round = 1;
-    state.integrity = { p1: 8, p2: 8 };
+    state.integrity = { p1: 10, p2: 10 };
     state.power = { p1: 5, p2: 5 };
     state.pendingAllocations = { p1: null, p2: null };
     state.lastReveal = null;
   }
 
   if (state.game === 'drone-relay') {
-    state.cycle = 1;
+    state.round = 1;
     state.drones = {
-      p1: { row: 6, column: 1, direction: 'N', damage: 0 },
-      p2: { row: 6, column: 5, direction: 'N', damage: 0 }
+      p1: { row: 6, column: 1, direction: 'N', health: 3, shieldTicks: 0 },
+      p2: { row: 6, column: 5, direction: 'N', health: 3, shieldTicks: 0 }
     };
-    state.collectedCores = [];
+    state.abilities = createDroneAbilities();
+    state.healthPack = createDroneHealthPack();
     state.pendingQueues = { p1: null, p2: null };
     state.lastExecution = [];
+    state.executionId = 0;
   }
 }
 
@@ -610,12 +615,14 @@ function playFirewallAuction(state, playerId, action) {
 
   const attack = Math.max(0, Math.floor(Number(action.attack)));
   const defense = Math.max(0, Math.floor(Number(action.defense)));
+  const heal = action.heal === true;
+  const totalCost = attack + defense + (heal ? 5 : 0);
 
-  if (!Number.isFinite(attack) || !Number.isFinite(defense) || attack + defense > state.power[playerId]) {
-    return errorResult('Attack and defense cannot exceed your available processing power.');
+  if (!Number.isFinite(attack) || !Number.isFinite(defense) || totalCost > state.power[playerId]) {
+    return errorResult('Your actions cannot exceed your available processing power.');
   }
 
-  state.pendingAllocations[playerId] = { attack, defense };
+  state.pendingAllocations[playerId] = { attack, defense, heal };
 
   if (state.mode === 'solo') {
     const cpuId = playerId === 'p1' ? 'p2' : 'p1';
@@ -636,8 +643,8 @@ function resolveFirewallRound(state) {
   const damageToFirst = Math.max(0, second.attack - first.defense);
   const damageToSecond = Math.max(0, first.attack - second.defense);
 
-  state.integrity.p1 = Math.max(0, state.integrity.p1 - damageToFirst);
-  state.integrity.p2 = Math.max(0, state.integrity.p2 - damageToSecond);
+  state.integrity.p1 = Math.max(0, state.integrity.p1 + (first.heal ? 3 : 0) - damageToFirst);
+  state.integrity.p2 = Math.max(0, state.integrity.p2 + (second.heal ? 3 : 0) - damageToSecond);
   state.lastReveal = {
     round: state.round,
     p1: first,
@@ -647,15 +654,15 @@ function resolveFirewallRound(state) {
 
   addLog(
     state,
-    `Round ${state.round}: ${state.players.p1.name} dealt ${damageToSecond}; ${state.players.p2.name} dealt ${damageToFirst}.`
+    `Round ${state.round}: ${state.players.p1.name} dealt ${damageToSecond}${first.heal ? ' and healed 3' : ''}; ${state.players.p2.name} dealt ${damageToFirst}${second.heal ? ' and healed 3' : ''}.`
   );
 
   for (const id of ['p1', 'p2']) {
     const allocation = state.pendingAllocations[id];
-    const unspent = state.power[id] - allocation.attack - allocation.defense;
+    const unspent = state.power[id] - allocation.attack - allocation.defense - (allocation.heal ? 5 : 0);
 
     // Saving power is the central bluff: reserves carry over before the fixed recharge.
-    state.power[id] = Math.min(10, unspent + 2);
+    state.power[id] = Math.min(10, unspent + 3);
   }
 
   const firstOffline = state.integrity.p1 <= 0;
@@ -686,125 +693,307 @@ function resolveFirewallRound(state) {
 
 function createCpuFirewallAllocation(state, cpuId) {
   const power = state.power[cpuId];
+  const heal = power >= 5 && (state.integrity[cpuId] <= 5 || Math.random() < 0.12);
+  const usablePower = power - (heal ? 5 : 0);
   const pressure = state.integrity[cpuId] <= 3 ? 0.45 : Math.random();
-  const defense = Math.min(power, Math.floor(power * pressure));
-  const maximumAttack = power - defense;
+  const defense = Math.min(usablePower, Math.floor(usablePower * pressure));
+  const maximumAttack = usablePower - defense;
   const attack = Math.floor(Math.random() * (maximumAttack + 1));
 
-  return { attack, defense };
+  return { attack, defense, heal };
 }
 
 
-// Drone queues are collected independently so neither pilot can react to the other queue.
+// Drone queues stay hidden until both pilots lock their plans for the round.
 function playDroneRelay(state, playerId, action) {
   if (action.type !== 'program') {
     return errorResult('Build and submit a command queue.');
   }
 
-  const droneId = state.mode === 'solo' ? action.droneId : playerId;
   const queue = Array.isArray(action.queue) ? action.queue.slice(0, 5) : [];
-  const validCommands = ['forward', 'left', 'right', 'wait'];
 
-  if (!['p1', 'p2'].includes(droneId) || (state.mode !== 'solo' && droneId !== playerId)) {
-    return errorResult('You cannot program that drone.');
+  if (state.pendingQueues[playerId]) {
+    return errorResult('Your drone already has a queue for this round.');
   }
 
-  if (state.pendingQueues[droneId]) {
-    return errorResult('That drone already has a queue for this cycle.');
-  }
-
-  if (queue.length === 0 || queue.some((command) => !validCommands.includes(command))) {
+  if (queue.length === 0 || queue.some((command) => !DRONE_COMMANDS.includes(command))) {
     return errorResult('Queue one to five valid drone commands.');
   }
 
-  state.pendingQueues[droneId] = queue;
+  for (const ability of DRONE_LIMITED_ABILITIES) {
+    const requestedUses = queue.filter((command) => command === ability).length;
+
+    if (requestedUses > state.abilities[playerId][ability]) {
+      return errorResult(`${formatDroneCommand(ability)} is available once per match.`);
+    }
+  }
+
+  state.pendingQueues[playerId] = queue;
+
+  if (state.mode === 'solo') {
+    const cpuId = playerId === 'p1' ? 'p2' : 'p1';
+    state.pendingQueues[cpuId] = createCpuDroneQueue(state, cpuId);
+  }
 
   if (!state.pendingQueues.p1 || !state.pendingQueues.p2) {
     return successResult();
   }
 
-  resolveDroneCycle(state);
+  resolveDroneRound(state);
   return successResult();
 }
 
-function resolveDroneCycle(state) {
+function resolveDroneRound(state) {
   const frames = [];
 
-
-  // Every command slot resolves simultaneously, including movement collisions and swaps.
-  for (let step = 0; step < 5; step += 1) {
+  // Each slot resolves as a simultaneous action tick and is sent to clients for playback.
+  for (let step = 0; step < 5 && state.status === 'playing'; step += 1) {
+    const commands = {
+      p1: state.pendingQueues.p1[step] ?? 'wait',
+      p2: state.pendingQueues.p2[step] ?? 'wait'
+    };
+    const events = [];
     const intents = {};
+    const movingPlayers = new Set();
 
     for (const id of ['p1', 'p2']) {
-      const command = state.pendingQueues[id][step] ?? 'wait';
+      const command = commands[id];
       const drone = state.drones[id];
 
       if (command === 'left' || command === 'right') {
         drone.direction = rotateDrone(drone.direction, command);
       }
 
-      intents[id] = command === 'forward'
-        ? nextDronePosition(drone)
-        : { row: drone.row, column: drone.column };
+      if (command === 'shield') {
+        state.abilities[id].shield -= 1;
+        drone.shieldTicks = 3;
+        events.push(`${state.players[id].name} activated a three-tick shield.`);
+      }
+
+      if (command === 'forward' || command === 'jump') {
+        movingPlayers.add(id);
+        intents[id] = nextDronePosition(drone, command === 'jump' ? 2 : 1);
+
+        if (command === 'jump') {
+          state.abilities[id].jump -= 1;
+        }
+      } else {
+        intents[id] = { row: drone.row, column: drone.column };
+      }
     }
 
-    const collision = sameCell(intents.p1, intents.p2)
-      || (sameCell(intents.p1, state.drones.p2) && sameCell(intents.p2, state.drones.p1));
+    resolveDroneMovement(state, intents, movingPlayers, events);
+    resolveDroneHealthPack(state, events);
+    resolveDroneAttacks(state, commands, events);
 
     for (const id of ['p1', 'p2']) {
-      const command = state.pendingQueues[id][step] ?? 'wait';
-      const target = intents[id];
-      const blocked = command === 'forward' && isDroneCellBlocked(target);
-
-      if (collision && command === 'forward') {
-        state.drones[id].damage += 1;
-      } else if (blocked) {
-        state.drones[id].damage += 1;
-      } else {
-        state.drones[id].row = target.row;
-        state.drones[id].column = target.column;
-      }
-
-      const cell = `${state.drones[id].row}-${state.drones[id].column}`;
-
-      if (DRONE_CORES.includes(cell) && !state.collectedCores.includes(cell)) {
-        state.collectedCores.push(cell);
-      }
+      state.drones[id].shieldTicks = Math.max(0, state.drones[id].shieldTicks - 1);
     }
 
+    settleDroneWinner(state, events);
     frames.push({
+      round: state.round,
       step: step + 1,
+      commands,
       drones: structuredClone(state.drones),
-      collision
+      healthPack: structuredClone(state.healthPack),
+      events
     });
   }
 
   state.lastExecution = frames;
-  addLog(
-    state,
-    `Cycle ${state.cycle} executed. ${state.collectedCores.length}/2 data cores recovered.`
-  );
+  state.executionId += 1;
+  addLog(state, `Round ${state.round} executed across ${frames.length} action ticks.`);
 
-  const destroyed = Object.values(state.drones).some((drone) => drone.damage >= 3);
-  const bothAtExit = Object.values(state.drones)
-    .every((drone) => DRONE_EXITS.includes(`${drone.row}-${drone.column}`));
-
-  if (state.collectedCores.length === DRONE_CORES.length && bothAtExit) {
-    state.winner = 'players';
-    state.status = 'finished';
-    addLog(state, 'Both drones reached extraction with the recovered data.');
+  if (state.status === 'finished') {
     return;
   }
 
-  if (destroyed || state.cycle >= state.maximumCycles) {
-    state.winner = 'facility';
+  if (state.round >= state.maximumRounds) {
+    state.winner = 'tie';
     state.status = 'finished';
-    addLog(state, destroyed ? 'A drone was disabled by accumulated damage.' : 'The facility sealed before extraction.');
+    addLog(state, 'Round ten ended without a knockout or extraction. The battle is a draw.');
     return;
   }
 
-  state.cycle += 1;
+  state.round += 1;
   state.pendingQueues = { p1: null, p2: null };
+}
+
+function resolveDroneMovement(state, intents, movingPlayers, events) {
+  const collision = sameCell(intents.p1, intents.p2)
+    || (sameCell(intents.p1, state.drones.p2) && sameCell(intents.p2, state.drones.p1));
+
+  for (const id of ['p1', 'p2']) {
+    if (!movingPlayers.has(id)) {
+      continue;
+    }
+
+    if (collision) {
+      applyDroneDamage(state, id, events, 'collision');
+      continue;
+    }
+
+    if (isDroneCellBlocked(intents[id])) {
+      applyDroneDamage(state, id, events, 'wall impact');
+      continue;
+    }
+
+    state.drones[id].row = intents[id].row;
+    state.drones[id].column = intents[id].column;
+  }
+}
+
+function resolveDroneAttacks(state, commands, events) {
+  const hits = [];
+
+  for (const id of ['p1', 'p2']) {
+    const command = commands[id];
+    const opponentId = id === 'p1' ? 'p2' : 'p1';
+
+    if (command === 'shoot' && droneHasLineOfFire(state, id, opponentId, 1)) {
+      hits.push({ targetId: opponentId, source: `${state.players[id].name}'s shot` });
+    }
+
+    if (command === 'long-shot') {
+      state.abilities[id]['long-shot'] -= 1;
+
+      if (droneHasLineOfFire(state, id, opponentId, 3)) {
+        hits.push({ targetId: opponentId, source: `${state.players[id].name}'s long shot` });
+      }
+    }
+
+    if (command === 'pulse') {
+      state.abilities[id].pulse -= 1;
+
+      if (dronesAreAdjacent(state.drones[id], state.drones[opponentId])) {
+        hits.push({ targetId: opponentId, source: `${state.players[id].name}'s pulse` });
+      }
+    }
+  }
+
+  for (const hit of hits) {
+    applyDroneDamage(state, hit.targetId, events, hit.source);
+  }
+}
+
+function resolveDroneHealthPack(state, events) {
+  for (const id of ['p1', 'p2']) {
+    const drone = state.drones[id];
+
+    if (drone.row !== state.healthPack.row || drone.column !== state.healthPack.column) {
+      continue;
+    }
+
+    drone.health = Math.min(3, drone.health + 1);
+    events.push(`${state.players[id].name} collected the health pack.`);
+    state.healthPack = createDroneHealthPack(state.drones);
+    return;
+  }
+}
+
+function settleDroneWinner(state, events) {
+  const defeated = ['p1', 'p2'].filter((id) => state.drones[id].health <= 0);
+
+  if (defeated.length > 0) {
+    state.winner = defeated.length === 2 ? 'tie' : defeated[0] === 'p1' ? 'p2' : 'p1';
+    state.status = 'finished';
+    events.push(defeated.length === 2 ? 'Both drones were destroyed.' : `${state.players[defeated[0]].name} was destroyed.`);
+    return;
+  }
+
+  const extracted = ['p1', 'p2'].find((id) => `${state.drones[id].row}-${state.drones[id].column}` === DRONE_EXIT);
+
+  if (extracted) {
+    state.winner = extracted;
+    state.status = 'finished';
+    events.push(`${state.players[extracted].name} reached the extraction point.`);
+  }
+}
+
+function applyDroneDamage(state, playerId, events, source) {
+  const drone = state.drones[playerId];
+
+  if (drone.shieldTicks > 0) {
+    drone.shieldTicks = 0;
+    events.push(`${state.players[playerId].name}'s shield absorbed ${source}.`);
+    return;
+  }
+
+  drone.health = Math.max(0, drone.health - 1);
+  events.push(`${state.players[playerId].name} lost one health to ${source}.`);
+}
+
+function droneHasLineOfFire(state, attackerId, targetId, range) {
+  const attacker = state.drones[attackerId];
+  const target = state.drones[targetId];
+
+  for (let distance = 1; distance <= range; distance += 1) {
+    const cell = nextDronePosition(attacker, distance);
+
+    if (isDroneCellBlocked(cell)) {
+      return false;
+    }
+
+    if (sameCell(cell, target)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function dronesAreAdjacent(first, second) {
+  return Math.abs(first.row - second.row) <= 1
+    && Math.abs(first.column - second.column) <= 1;
+}
+
+function createCpuDroneQueue(state, cpuId) {
+  const available = ['forward', 'left', 'right', 'wait', 'shoot'];
+  const queue = [];
+
+  for (const ability of DRONE_LIMITED_ABILITIES) {
+    if (state.abilities[cpuId][ability] > 0) {
+      available.push(ability);
+    }
+  }
+
+  while (queue.length < 5) {
+    const command = available[Math.floor(Math.random() * available.length)];
+    queue.push(command);
+
+    if (DRONE_LIMITED_ABILITIES.includes(command)) {
+      available.splice(available.indexOf(command), 1);
+    }
+  }
+
+  return queue;
+}
+
+function createDroneAbilities() {
+  return {
+    p1: { 'long-shot': 1, pulse: 1, jump: 1, shield: 1 },
+    p2: { 'long-shot': 1, pulse: 1, jump: 1, shield: 1 }
+  };
+}
+
+function createDroneHealthPack(drones = null) {
+  const occupiedCells = drones
+    ? Object.values(drones).map((drone) => `${drone.row}-${drone.column}`)
+    : ['6-1', '6-5'];
+  const availableCells = [];
+
+  for (let row = 0; row < 7; row += 1) {
+    for (let column = 0; column < 7; column += 1) {
+      const cell = `${row}-${column}`;
+
+      if (!DRONE_WALLS.includes(cell) && cell !== DRONE_EXIT && !occupiedCells.includes(cell)) {
+        availableCells.push({ row, column });
+      }
+    }
+  }
+
+  return availableCells[Math.floor(Math.random() * availableCells.length)];
 }
 
 function rotateDrone(direction, command) {
@@ -814,7 +1003,7 @@ function rotateDrone(direction, command) {
   return DRONE_DIRECTIONS[(currentIndex + delta + DRONE_DIRECTIONS.length) % DRONE_DIRECTIONS.length];
 }
 
-function nextDronePosition(drone) {
+function nextDronePosition(drone, distance = 1) {
   const offsets = {
     N: { row: -1, column: 0 },
     E: { row: 0, column: 1 },
@@ -824,8 +1013,8 @@ function nextDronePosition(drone) {
   const offset = offsets[drone.direction];
 
   return {
-    row: drone.row + offset.row,
-    column: drone.column + offset.column
+    row: drone.row + offset.row * distance,
+    column: drone.column + offset.column * distance
   };
 }
 
@@ -841,11 +1030,15 @@ function sameCell(first, second) {
   return first.row === second.row && first.column === second.column;
 }
 
+function formatDroneCommand(command) {
+  return command.replace('-', ' ').toUpperCase();
+}
+
 function resolveMode(gameId, requestedMode) {
   if (['firewall-auction', 'drone-relay'].includes(gameId)) {
     return requestedMode === 'solo'
       ? 'solo'
-      : gameId === 'firewall-auction' ? 'versus' : 'coop';
+      : 'versus';
   }
 
   return gameId === 'mastermind' && requestedMode === 'coop' ? 'coop' : 'versus';

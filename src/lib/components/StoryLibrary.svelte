@@ -3715,7 +3715,7 @@
                 <option value="lo-hi">Lo-Hi</option>
                 <option value="mastermind">Cipher</option>
                 <option value="chopsticks">Overclock</option>
-                <option value="firewall-auction">Firewall Auction</option>
+                <option value="firewall-auction">Breach</option>
                 <option value="drone-relay">Drone Relay</option>
               </select>
               <p class="inspector-help">

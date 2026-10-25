@@ -9,18 +9,23 @@
 
   type Screen = 'menu' | 'instructions' | 'game';
   type PlayMode = 'solo' | 'multi';
-  type Command = 'forward' | 'left' | 'right' | 'wait';
+  type Command = 'forward' | 'left' | 'right' | 'wait' | 'shoot' | 'long-shot' | 'pulse' | 'jump' | 'shield';
 
   const walls = new Set(['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4']);
-  const cores = new Set(['1-3', '5-3']);
-  const exits = new Set(['2-0', '4-0']);
+  const exitCell = '0-3';
+  const basicCommands: Command[] = ['forward', 'left', 'right', 'wait', 'shoot'];
+  const abilityCommands: Command[] = ['long-shot', 'pulse', 'jump', 'shield'];
   const commandLabels: Record<Command, string> = {
     forward: '↑ FORWARD',
     left: '↺ LEFT',
     right: '↻ RIGHT',
-    wait: '· WAIT'
+    wait: '· WAIT',
+    shoot: '⌁ SHOOT',
+    'long-shot': '⇈ LONG SHOT',
+    pulse: '✦ PULSE',
+    jump: '⇑ JUMP',
+    shield: '⬡ SHIELD'
   };
-  const commands: Command[] = ['forward', 'left', 'right', 'wait'];
   const directionGlyphs: Record<string, string> = {
     N: '▲',
     E: '▶',
@@ -30,26 +35,41 @@
 
   let screen: Screen = 'menu';
   let pendingMode: PlayMode = 'solo';
-  let selectedDrone: PlayerId = 'p1';
   let queue: Command[] = [];
   let error = '';
   let waitingForStoryPartner = false;
+  let animatedExecutionId = 0;
+  let animationToken = 0;
+  let isAnimating = false;
+  let activeFrame: Record<string, any> | null = null;
+  let animationTimer: number | null = null;
+  let animationResolve: (() => void) | null = null;
 
   $: state = $arcadeStates['drone-relay'] ?? null;
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
-  $: isSolo = state?.mode === 'solo';
-  $: controlledDrone = isSolo ? selectedDrone : playerId;
-  $: submitted = Boolean(state?.submitted?.[controlledDrone]);
+  $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
+  $: submitted = Boolean(state?.submitted?.[playerId]);
+  $: displayDrones = activeFrame?.drones ?? state?.drones ?? null;
+  $: displayHealthPack = activeFrame?.healthPack ?? state?.healthPack ?? null;
+  $: displayRound = isAnimating
+    ? activeFrame?.round ?? state?.lastExecution?.[0]?.round ?? state?.round ?? 1
+    : state?.round ?? 1;
+  $: currentAbilities = state?.abilities?.[playerId] ?? {};
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
   $: setMinigameSessionActive('drone-relay', screen === 'game' && Boolean(state?.participants[playerId]));
   $: if (launchedFromStory && screen === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
     screen = 'instructions';
   }
+  $: if (state?.executionId && state.executionId !== animatedExecutionId) {
+    playExecution(state.executionId, state.lastExecution);
+  }
 
 
-  // A solo pilot submits two independent queues through the same server rules.
+  // Timers are cancelled when leaving so playback cannot mutate a hidden game.
   onDestroy(() => {
+    cancelAnimation();
+
     if (screen === 'game') {
       socket.emit('arcade:leave', 'drone-relay');
     }
@@ -63,12 +83,13 @@
   function begin(): void {
     queue = [];
     error = '';
+    animatedExecutionId = 0;
     screen = 'game';
     socket.emit('arcade:join', 'drone-relay', pendingMode, handleResult);
   }
 
   function addCommand(command: Command): void {
-    if (queue.length >= 5 || submitted) {
+    if (queue.length >= 5 || submitted || isAnimating || commandUnavailable(command)) {
       return;
     }
 
@@ -76,20 +97,19 @@
   }
 
   function removeCommand(index: number): void {
-    if (submitted) {
+    if (submitted || isAnimating) {
       return;
     }
 
     queue = queue.filter((_, commandIndex) => commandIndex !== index);
   }
 
-  function selectDrone(droneId: PlayerId): void {
-    if (!isSolo || state?.submitted?.[droneId]) {
-      return;
+  function commandUnavailable(command: Command): boolean {
+    if (!abilityCommands.includes(command)) {
+      return false;
     }
 
-    selectedDrone = droneId;
-    queue = [];
+    return !currentAbilities[command] || queue.includes(command);
   }
 
   function submitQueue(): void {
@@ -97,32 +117,36 @@
       'arcade:action',
       {
         game: 'drone-relay',
-        action: { type: 'program', droneId: controlledDrone, queue }
+        action: { type: 'program', queue }
       },
       (result: { ok: boolean; error?: string }) => {
         handleResult(result);
 
         if (result.ok) {
           queue = [];
-
-          if (isSolo && controlledDrone === 'p1') {
-            selectedDrone = 'p2';
-          }
         }
       }
     );
   }
 
   function restart(): void {
+    cancelAnimation();
     queue = [];
-    selectedDrone = 'p1';
+    animatedExecutionId = 0;
     waitingForStoryPartner = false;
     socket.emit('arcade:restart', 'drone-relay');
   }
 
-  function exitGame(): void {
+  function returnToMenu(): void {
+    cancelAnimation();
     socket.emit('arcade:leave', 'drone-relay');
+    queue = [];
+    waitingForStoryPartner = false;
     screen = 'menu';
+  }
+
+  function exitGame(): void {
+    returnToMenu();
     location.set('minigames');
   }
 
@@ -142,12 +166,12 @@
   }
 
   function cellDrone(row: number, column: number): PlayerId | null {
-    if (!state) {
+    if (!displayDrones) {
       return null;
     }
 
     for (const droneId of ['p1', 'p2'] as PlayerId[]) {
-      const drone = state.drones[droneId];
+      const drone = displayDrones[droneId];
 
       if (drone.row === row && drone.column === column) {
         return droneId;
@@ -155,6 +179,68 @@
     }
 
     return null;
+  }
+
+  async function playExecution(executionId: number, frames: Array<Record<string, any>>): Promise<void> {
+    const token = animationToken + 1;
+
+    cancelAnimation();
+    animationToken = token;
+    animatedExecutionId = executionId;
+    isAnimating = true;
+
+    for (const frame of frames) {
+      if (token !== animationToken) {
+        return;
+      }
+
+      activeFrame = frame;
+      await waitForNextFrame(1000);
+    }
+
+    if (token === animationToken) {
+      activeFrame = null;
+      isAnimating = false;
+    }
+  }
+
+  function waitForNextFrame(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => {
+      animationTimer = window.setTimeout(() => {
+        animationTimer = null;
+        animationResolve = null;
+        resolve();
+      }, milliseconds);
+      animationResolve = resolve;
+    });
+  }
+
+  function cancelAnimation(): void {
+    animationToken += 1;
+    activeFrame = null;
+    isAnimating = false;
+
+    if (animationTimer !== null) {
+      window.clearTimeout(animationTimer);
+      animationTimer = null;
+    }
+
+    if (animationResolve) {
+      animationResolve();
+      animationResolve = null;
+    }
+  }
+
+  function commandLabel(command: string): string {
+    return commandLabels[command as Command] ?? command.toUpperCase();
+  }
+
+  function resultTitle(): string {
+    if (state?.winner === 'tie') {
+      return 'BATTLE DRAWN';
+    }
+
+    return state?.winner === playerId ? 'DRONE VICTORIOUS' : 'DRONE DESTROYED';
   }
 </script>
 
@@ -166,81 +252,101 @@
 
   {#if screen === 'menu'}
     <div class="menu">
-      <p>SIMULTANEOUS COMMAND PUZZLE</p>
+      <p>SIMULTANEOUS PROGRAMMING DUEL</p>
       <h1>DRONE RELAY</h1>
-      <span>Program two drones, recover both data cores, and reach extraction together.</span>
+      <span>Out-program the rival drone, destroy it, or reach extraction first.</span>
       <div>
-        <button on:click={() => openInstructions('solo')}>1P CONTROL BOTH</button>
-        <button on:click={() => openInstructions('multi')}>2P CO-OP</button>
+        <button on:click={() => openInstructions('solo')}>1P VS CPU</button>
+        <button on:click={() => openInstructions('multi')}>1P VS 2P</button>
       </div>
     </div>
   {:else if screen === 'instructions'}
     <div class="instructions">
-      <p>MISSION BRIEF</p>
-      <h2>Plan first. Both queues execute together.</h2>
+      <p>BATTLE BRIEF</p>
+      <h2>Lock five actions. Watch both programs execute together.</h2>
       <ul>
-        <li>Queue up to five commands: move forward, rotate left, rotate right, or wait.</li>
-        <li>Rotating changes direction without moving. Forward moves one grid cell.</li>
-        <li>Drones that hit a wall, collide, or swap cells take damage and stay in place.</li>
-        <li>Three damage disables a drone. Recover both cores and park both drones on exits within six cycles.</li>
-        <li>In solo mode, submit DRONE 1 and DRONE 2 separately before the cycle executes.</li>
+        <li>Both drones have three health. Shots, collisions, and wall impacts deal one damage.</li>
+        <li><strong>SHOOT</strong> hits one square ahead and has unlimited uses.</li>
+        <li><strong>LONG SHOT</strong> reaches three squares, <strong>PULSE</strong> hits every adjacent square, and <strong>JUMP</strong> moves two squares. Each is available once.</li>
+        <li><strong>SHIELD</strong> lasts three action ticks and blocks the next damage from any source. It is available once.</li>
+        <li>The visible health pack restores one health and respawns after collection.</li>
+        <li>Destroy the opponent or reach the single EXIT square. Round ten ends in a draw if neither happens.</li>
       </ul>
       <div>
         <button on:click={() => screen = 'menu'}>BACK</button>
-        <button class="primary" on:click={begin}>DEPLOY DRONES</button>
+        <button class="primary" on:click={begin}>ENTER ARENA</button>
       </div>
     </div>
   {:else if state?.status === 'waiting'}
     <div class="waiting">
-      <h2>WAITING FOR CO-PILOT</h2>
+      <h2>WAITING FOR OPPONENT</h2>
       <p>{state.participantCount}/2 CONNECTED</p>
     </div>
-  {:else if state}
+  {:else if state && displayDrones}
     <div class="game">
       <section class="mission-status">
-        <span>CYCLE {state.cycle}/{state.maximumCycles}</span>
-        <span>CORES {state.collectedCores.length}/2</span>
-        <span>D1 DAMAGE {state.drones.p1.damage}/3</span>
-        <span>D2 DAMAGE {state.drones.p2.damage}/3</span>
+        <span>ROUND {displayRound}/{state.maximumRounds}</span>
+        <span class="health health--self">YOU {'♥'.repeat(displayDrones[playerId].health)}{'♡'.repeat(3 - displayDrones[playerId].health)}</span>
+        <span class="health health--rival">RIVAL {'♥'.repeat(displayDrones[opponentId].health)}{'♡'.repeat(3 - displayDrones[opponentId].health)}</span>
+        <span>{isAnimating ? `EXECUTING TICK ${activeFrame?.step ?? 1}` : submitted ? 'QUEUE LOCKED' : 'PROGRAM READY'}</span>
       </section>
 
       <div class="workspace">
-        <section class="grid" aria-label="Drone facility map">
+        <section class="grid" aria-label="Drone battle arena">
           {#each Array(49) as _, index}
             {@const row = Math.floor(index / 7)}
             {@const column = index % 7}
             {@const key = `${row}-${column}`}
             {@const droneId = cellDrone(row, column)}
-            <div class:wall={walls.has(key)} class:core={cores.has(key)} class:exit-cell={exits.has(key)} class:collected={state.collectedCores.includes(key)}>
+            <div
+              class:wall={walls.has(key)}
+              class:exit-cell={key === exitCell}
+              class:health-pack={displayHealthPack?.row === row && displayHealthPack?.column === column}
+            >
               {#if droneId}
-                <strong class="drone drone--{droneId}">{directionGlyphs[state.drones[droneId].direction]}</strong>
+                <strong class="drone drone--{droneId}" class:shielded={displayDrones[droneId].shieldTicks > 0}>
+                  {directionGlyphs[displayDrones[droneId].direction]}
+                </strong>
               {:else if walls.has(key)}
                 <span>▓</span>
-              {:else if cores.has(key) && !state.collectedCores.includes(key)}
-                <span>◆</span>
-              {:else if exits.has(key)}
+              {:else if key === exitCell}
                 <span>EXIT</span>
+              {:else if displayHealthPack?.row === row && displayHealthPack?.column === column}
+                <span class="pack">✚</span>
               {/if}
             </div>
           {/each}
         </section>
 
         <aside>
-          {#if isSolo}
-            <div class="drone-tabs">
-              <button class:active={selectedDrone === 'p1'} on:click={() => selectDrone('p1')}>DRONE 1 {state.submitted.p1 ? '✓' : ''}</button>
-              <button class:active={selectedDrone === 'p2'} on:click={() => selectDrone('p2')}>DRONE 2 {state.submitted.p2 ? '✓' : ''}</button>
-            </div>
-          {/if}
-          <h2>PROGRAM {controlledDrone === 'p1' ? 'DRONE 1' : 'DRONE 2'}</h2>
-          {#if submitted}
-            <p>Queue received. Waiting for the other drone.</p>
+          <h2>PROGRAM YOUR DRONE</h2>
+          {#if isAnimating && activeFrame}
+            <section class="execution-panel">
+              <p>YOU: <strong>{commandLabel(activeFrame.commands[playerId])}</strong></p>
+              <p>RIVAL: <strong>{commandLabel(activeFrame.commands[opponentId])}</strong></p>
+              {#each activeFrame.events as event}<span>{event}</span>{/each}
+            </section>
+          {:else if submitted}
+            <p>Queue encrypted. Waiting for the opposing program…</p>
           {:else if state.status === 'playing'}
+            <h3>BASIC COMMANDS</h3>
             <div class="command-buttons">
-              {#each commands as command}
+              {#each basicCommands as command}
                 <button on:click={() => addCommand(command)} disabled={queue.length >= 5}>{commandLabels[command]}</button>
               {/each}
             </div>
+
+            <h3>ONE-USE ABILITIES</h3>
+            <div class="command-buttons ability-buttons">
+              {#each abilityCommands as command}
+                <button
+                  class:spent={!currentAbilities[command]}
+                  on:click={() => addCommand(command)}
+                  disabled={queue.length >= 5 || commandUnavailable(command)}
+                >{commandLabels[command]} <small>{currentAbilities[command] ? '1' : '0'}</small></button>
+              {/each}
+            </div>
+
             <div class="queue">
               {#each Array(5) as _, index}
                 <button class:filled={Boolean(queue[index])} on:click={() => removeCommand(index)}>
@@ -248,23 +354,27 @@
                 </button>
               {/each}
             </div>
-            <button class="primary submit" disabled={queue.length === 0} on:click={submitQueue}>UPLOAD QUEUE</button>
+            <button class="primary submit" disabled={queue.length === 0} on:click={submitQueue}>LOCK PROGRAM</button>
           {/if}
+
           <section class="log">
             {#each state.log.slice(0, 5) as entry}<p>{entry.message}</p>{/each}
           </section>
         </aside>
       </div>
 
-      {#if state.status === 'finished'}
-        <section class:lost={state.winner !== 'players'} class="result">
-          <h2>{state.winner === 'players' ? 'EXTRACTION COMPLETE' : 'MISSION FAILED'}</h2>
+      {#if state.status === 'finished' && !isAnimating}
+        <section class:lost={state.winner !== playerId && state.winner !== 'tie'} class="result">
+          <h2>{resultTitle()}</h2>
           {#if waitingForStoryPartner}
-            <p>Waiting for your co-pilot to return…</p>
+            <p>Waiting for your opponent to return…</p>
           {:else if launchedFromStory}
             <button on:click={returnToStory}>RETURN TO STORY</button>
           {:else}
-            <button on:click={restart}>REDEPLOY</button>
+            <div>
+              <button on:click={restart}>REMATCH</button>
+              <button on:click={returnToMenu}>MAIN MENU</button>
+            </div>
           {/if}
         </section>
       {/if}
@@ -304,14 +414,14 @@
   }
 
   button:hover,
-  button.active,
   .primary {
     color: #03130b;
     background: #63efa8;
   }
 
-  button:disabled {
-    opacity: 0.4;
+  button:disabled,
+  button.spent {
+    opacity: 0.38;
     cursor: not-allowed;
   }
 
@@ -349,9 +459,9 @@
   }
 
   .instructions {
-    width: min(720px, 100%);
+    width: min(760px, 100%);
     margin: auto;
-    line-height: 1.6;
+    line-height: 1.55;
 
     > div {
       display: flex;
@@ -378,11 +488,23 @@
     gap: 12px;
   }
 
+  .health {
+    letter-spacing: 2px;
+  }
+
+  .health--self {
+    color: #67dfff;
+  }
+
+  .health--rival {
+    color: #ff75c8;
+  }
+
   .workspace {
     margin-top: 14px;
 
     display: grid;
-    grid-template-columns: minmax(380px, 1.25fr) minmax(280px, 0.75fr);
+    grid-template-columns: minmax(380px, 1.25fr) minmax(290px, 0.75fr);
     gap: 16px;
   }
 
@@ -413,24 +535,39 @@
       border-color: #3f4944;
     }
 
-    > div.core {
-      color: #ffe26b;
-      box-shadow: inset 0 0 18px #ffe26b22;
-    }
-
-    > div.core.collected {
-      opacity: 0.35;
-    }
-
     > div.exit-cell {
       color: #73f7b5;
       border: 2px dashed #49e89b;
+      box-shadow: inset 0 0 18px #49e89b22;
+    }
+
+    > div.health-pack {
+      border-color: #ffe26b;
+      box-shadow: inset 0 0 18px #ffe26b2d;
     }
   }
 
+  .pack {
+    color: #ffe26b;
+    font-size: clamp(1rem, 3vw, 1.8rem);
+    filter: drop-shadow(0 0 7px #ffe26b);
+  }
+
   .drone {
+    width: 62%;
+    aspect-ratio: 1;
+    border: 2px solid transparent;
+    border-radius: 50%;
     font-size: clamp(1rem, 3vw, 2rem);
     filter: drop-shadow(0 0 7px currentColor);
+
+    display: grid;
+    place-items: center;
+
+    &.shielded {
+      border-color: #ffe26b;
+      box-shadow: 0 0 18px #ffe26b;
+    }
   }
 
   .drone--p1 {
@@ -445,13 +582,37 @@
     padding: 16px;
     background: #071710;
     border: 1px solid #1f5e43;
+
+    h3 {
+      margin: 15px 0 7px;
+      color: #91b5a2;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+    }
   }
 
-  .drone-tabs,
   .command-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
+
+    button {
+      position: relative;
+      font-size: 0.72rem;
+
+      small {
+        position: absolute;
+        right: 5px;
+        top: 4px;
+        color: #ffe26b;
+      }
+    }
+  }
+
+  .ability-buttons button {
+    color: #ffe26b;
+    background: #211d08;
+    border-color: #91761c;
   }
 
   .queue {
@@ -474,6 +635,20 @@
     width: 100%;
   }
 
+  .execution-panel {
+    padding: 12px;
+    background: #10251c;
+    border: 1px solid #49e89b;
+
+    span {
+      margin-top: 6px;
+
+      display: block;
+      color: #ffe26b;
+      font-size: 0.76rem;
+    }
+  }
+
   .log {
     margin-top: 18px;
     color: #91b5a2;
@@ -492,6 +667,12 @@
     place-content: center;
     text-align: center;
 
+    > div {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+    }
+
     &.lost {
       background: #290812ef;
       border-color: #ff5577;
@@ -509,6 +690,10 @@
 
     .grid {
       min-width: 0;
+    }
+
+    .mission-status {
+      justify-content: flex-start;
     }
   }
 </style>
