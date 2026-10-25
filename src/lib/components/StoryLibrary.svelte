@@ -4620,13 +4620,17 @@
     }
 
     &.expanded {
-      position: fixed;
-      z-index: 51;
-      inset: clamp(20px, 5vh, 52px) clamp(20px, 7vw, 110px);
-      width: auto;
+      position: absolute;
+      z-index: 61;
+      top: clamp(16px, 4vh, 40px);
+      bottom: clamp(16px, 4vh, 40px);
+      left: 50%;
+      width: min(760px, calc(100% - 40px));
       padding: clamp(20px, 3vw, 38px);
+      box-sizing: border-box;
       border: 1px solid #ff8a32;
       box-shadow: 0 24px 80px #000000bb, 0 0 34px #ff8a3244;
+      transform: translateX(-50%);
 
       textarea {
         min-height: 150px;
@@ -4677,11 +4681,11 @@
   }
 
   .inspector-modal-backdrop {
-    position: fixed;
-    z-index: 50;
+    position: absolute;
+    z-index: 60;
     inset: 0;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     padding: 0;
     background: #02050bd9;
     border: 0;
@@ -6312,8 +6316,12 @@
     }
 
     .node-inspector.expanded {
-      inset: 10px;
+      top: 10px;
+      bottom: 10px;
+      left: 50%;
+      width: calc(100% - 20px);
       padding: 18px;
+      transform: translateX(-50%);
     }
 
     // Start the solo lane at the edge on phones so it is immediately reachable by touch.
