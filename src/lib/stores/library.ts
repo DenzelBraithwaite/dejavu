@@ -63,7 +63,7 @@ export type StoryNode = {
   stopMusicIds?: string[];
   stopMusicLayers?: number[];
   stopSounds?: boolean;
-  screenEffect?: 'shake' | 'blink' | 'mirror' | 'spin' | 'glow' | 'scan';
+  screenEffect?: 'color' | 'shake' | 'blink' | 'mirror' | 'spin' | 'glow' | 'scan';
   effectDurationSeconds?: number;
   effectIterations?: number;
   effectLoop?: boolean;

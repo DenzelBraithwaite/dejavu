@@ -51,7 +51,7 @@
  * @property {string | null} [music]
  * @property {string} [sound]
  * @property {boolean} [stopMusic]
- * @property {'shake' | 'blink'} [screenEffect]
+ * @property {'color' | 'shake' | 'blink' | 'mirror' | 'spin' | 'glow' | 'scan'} [screenEffect]
  * @property {number} [effectDurationSeconds]
  * @property {number} [effectIterations]
  * @property {string} [attachedTo]

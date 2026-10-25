@@ -252,6 +252,9 @@
             <button
               type="button"
               disabled={storyIsUsingMinigame(minigame.id)}
+              title={storyIsUsingMinigame(minigame.id)
+                ? 'Resume this minigame from Story Mode.'
+                : `Launch ${minigame.title}`}
               on:click={() => location.set(minigame.id)}
             >
               {storyIsUsingMinigame(minigame.id)

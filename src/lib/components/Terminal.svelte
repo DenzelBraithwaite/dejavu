@@ -186,7 +186,7 @@
     ? `${audioCampaignId}:${sceneId}:${sceneAudioCues.map(audioCueSignature).join('|')}`
     : '';
 
-  $: if (scene && audioSceneKey !== lastAudioSceneKey) {
+  $: if ($location === 'terminal' && scene && audioSceneKey !== lastAudioSceneKey) {
     lastAudioSceneKey = audioSceneKey;
     applySceneAudio(sceneAudioCues);
   }
@@ -578,15 +578,15 @@
                   style:object-position={`${entry.imagePositionX ?? 50}% ${entry.imagePositionY ?? 50}%`}
                 >
               </figure>
-              {#if entry.text}
-                <div>
-                  <p class="history-scene-id">{entry.sceneId}</p>
+              <div>
+                {#if entry.text}
                   {#if entry.speaker}
                     <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
                   {/if}
                   <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
-                </div>
-              {/if}
+                {/if}
+                <p class="history-scene-id terminal-image-scene-id">{entry.sceneId}</p>
+              </div>
             </article>
           {:else}
             <article class="terminal-history-entry" class:terminal-history-entry--portrait={Boolean(entry.portrait)}>
@@ -947,6 +947,11 @@
     .scene-image-wrapper {
       margin-bottom: 18px;
     }
+  }
+
+  .terminal-image-scene-id {
+    margin-top: 12px;
+    margin-bottom: 0;
   }
 
   .history-portrait {

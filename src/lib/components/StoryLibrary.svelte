@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { unlockAudioPlayback } from '../audio/audioManager';
   import { socket } from '../socket';
   import {
     characterLibraryState,
@@ -80,7 +81,6 @@
 
   const companionNodeTypes = [
     { type: 'effect', label: 'Item / effect' },
-    { type: 'background', label: 'Terminal Color' },
     { type: 'note', label: 'Note' },
     { type: 'music', label: 'Play music' },
     { type: 'sound-effect', label: 'Sound effect' },
@@ -157,12 +157,6 @@
       description: 'Change the atmosphere, show visual content, or launch a coded game.',
       nodes: [
         {
-          name: 'Terminal Color',
-          type: 'background',
-          description: 'Changes the terminal color theme without affecting music or sound effects.',
-          usage: 'Choose a premade color theme and attach it to the scene where the terminal should change.'
-        },
-        {
           name: 'Play music',
           type: 'music',
           description: 'Starts layered music without stopping tracks already playing.',
@@ -201,8 +195,8 @@
         {
           name: 'Terminal effect',
           type: 'screen-effect',
-          description: 'Shakes the screen or blinks the terminal when its host becomes active.',
-          usage: 'Choose Shake or Blink, duration and repeat count, then attach it. Reduced-motion settings disable animation.'
+          description: 'Changes terminal color or applies animated presentation effects when its host becomes active.',
+          usage: 'Choose a color, shake, blink, mirror, spin, glow, or scan effect, configure it, then attach it.'
         }
       ]
     },
@@ -804,7 +798,16 @@
       return;
     }
 
+    unlockAudioPlayback();
+
     const launch = (): void => {
+      if ($libraryState.activeStoryId === editingStory?.id
+        && $libraryState.activeStoryMode === activeStoryMap) {
+        playtestWarningOpen = false;
+        location.set('terminal');
+        return;
+      }
+
       socket.emit('library:select-story', {
         storyId: editingStory?.id,
         mode: activeStoryMap
@@ -901,6 +904,14 @@
         node.audience = 'p1';
       }
 
+      if (node.type === 'background') {
+        node.type = 'screen-effect';
+        node.screenEffect = 'color';
+        node.backgroundTheme ??= terminalThemes.includes(String(node.background))
+          ? node.background as StoryNode['backgroundTheme']
+          : 'blue';
+      }
+
       if (node.type === 'image') {
         node.text ??= '';
         node.imagePositionX ??= 50;
@@ -944,12 +955,6 @@
         node.spinDirection ??= 'clockwise';
         node.effectColor ??= '#39ff88';
         node.scanDirection ??= 'left-to-right';
-      }
-
-      if (node.type === 'background') {
-        node.backgroundTheme ??= terminalThemes.includes(String(node.background))
-          ? node.background as StoryNode['backgroundTheme']
-          : 'blue';
       }
 
       if (node.type === 'label') {
@@ -1062,6 +1067,9 @@
 
     if (requestedEffect === 'glow') {
       selectedNode.effectLoop = true;
+    } else if (requestedEffect === 'color') {
+      selectedNode.effectLoop = false;
+      selectedNode.backgroundTheme ??= 'blue';
     }
 
     refreshStory();
@@ -1113,7 +1121,7 @@
       shapeClass = 'node-shape-label';
     } else if (['ambience', 'music', 'sound-effect'].includes(type)) {
       shapeClass = 'node-shape-audio';
-    } else if (['background', 'image'].includes(type)) {
+    } else if (type === 'image') {
       shapeClass = 'node-shape-image';
     } else if (type === 'minigame') {
       shapeClass = 'node-shape-minigame';
@@ -1293,6 +1301,7 @@
 
     if (insertionTarget.companionOnly && type === 'screen-effect') {
       const effectTypes: NonNullable<StoryNode['screenEffect']>[] = [
+        'color',
         'shake',
         'blink',
         'mirror',
@@ -1312,18 +1321,6 @@
       }
 
       node.screenEffect = availableEffect;
-    }
-
-    if (
-      insertionTarget.companionOnly
-      && type === 'background'
-      && editingStory.nodes.some((candidate) => (
-        candidate.type === 'background'
-        && candidate.attachedTo === insertionTarget?.sourceId
-      ))
-    ) {
-      errorMessage = 'That node already has a background companion.';
-      return;
     }
 
     rememberForUndo();
@@ -2768,14 +2765,6 @@
           music: null,
           sound: ''
         };
-      case 'background':
-        return {
-          id,
-          type,
-          audience: 'both',
-          attachedTo: '',
-          backgroundTheme: 'blue'
-        };
       case 'note':
         return {
           id,
@@ -2832,6 +2821,7 @@
           audience: 'both',
           attachedTo: '',
           screenEffect: 'shake',
+          backgroundTheme: 'blue',
           effectDurationSeconds: 0.6,
           effectIterations: 1,
           effectLoop: false,
@@ -3178,7 +3168,11 @@
           aria-label="Story flow"
           bind:this={flowCanvasElement}
         >
-          <div class="map-zoom-controls" aria-label="Story map zoom controls">
+          <div
+            class="map-zoom-controls"
+            class:link-active={Boolean(linkSelection)}
+            aria-label="Story map zoom controls"
+          >
             <button
               type="button"
               aria-label="Zoom out story map"
@@ -3246,6 +3240,7 @@
                         <div
                           role="listitem"
                           class="node-wrapper"
+                          class:selected-node-wrapper={selectedNodeId === node.id}
                           data-node-id={node.id}
                           data-revision={storyRevision}
                           class:branch-node={nodeHasBranches(node)}
@@ -3809,6 +3804,7 @@
             {#if selectedNode.type === 'screen-effect'}
               <label for="screen-effect-type">Terminal effect</label>
               <select id="screen-effect-type" value={selectedNode.screenEffect} on:change={setScreenEffectType}>
+                <option value="color">Terminal color</option>
                 <option value="shake">Screen shake</option>
                 <option value="blink">Terminal blink</option>
                 <option value="mirror">Mirror terminal</option>
@@ -3816,7 +3812,15 @@
                 <option value="glow">Pulse glow</option>
                 <option value="scan">Scanner bar</option>
               </select>
-              {#if selectedNode.screenEffect === 'mirror'}
+              {#if selectedNode.screenEffect === 'color'}
+                <label for="terminal-color-theme">Terminal color theme</label>
+                <select id="terminal-color-theme" bind:value={selectedNode.backgroundTheme}>
+                  {#each terminalThemes as theme}
+                    <option value={theme}>{theme[0].toUpperCase() + theme.slice(1)}</option>
+                  {/each}
+                </select>
+                <p class="inspector-help">The premade terminal palette is applied while the attached host scene is active.</p>
+              {:else if selectedNode.screenEffect === 'mirror'}
                 <label for="mirror-axis">Mirror axis</label>
                 <select id="mirror-axis" bind:value={selectedNode.mirrorAxis}>
                   <option value="horizontal">Read backwards</option>
@@ -3846,38 +3850,43 @@
                   <option value="bottom-to-top">Bottom to top</option>
                 </select>
               {/if}
-              <div class="field-grid">
-                <div>
-                  <label for="screen-effect-duration">Speed in seconds</label>
-                  <input
-                    id="screen-effect-duration"
-                    type="number"
-                    min="0.1"
-                    max="20"
-                    step="0.1"
-                    bind:value={selectedNode.effectDurationSeconds}
-                  >
+              {#if selectedNode.screenEffect !== 'color'}
+                <div class="field-grid">
+                  <div>
+                    <label for="screen-effect-duration">Speed in seconds</label>
+                    <input
+                      id="screen-effect-duration"
+                      type="number"
+                      min="0.1"
+                      max="20"
+                      step="0.1"
+                      bind:value={selectedNode.effectDurationSeconds}
+                    >
+                  </div>
+                  <div class:field-disabled={Boolean(selectedNode.effectLoop)}>
+                    <label for="screen-effect-iterations">Trigger / spin count</label>
+                    <input
+                      id="screen-effect-iterations"
+                      type="number"
+                      min="1"
+                      max="20"
+                      step="1"
+                      disabled={Boolean(selectedNode.effectLoop)}
+                      bind:value={selectedNode.effectIterations}
+                    >
+                    {#if selectedNode.effectLoop}
+                      <small>Unavailable while this effect loops infinitely.</small>
+                    {/if}
+                  </div>
                 </div>
-                <div>
-                  <label for="screen-effect-iterations">Trigger / spin count</label>
-                  <input
-                    id="screen-effect-iterations"
-                    type="number"
-                    min="1"
-                    max="20"
-                    step="1"
-                    disabled={Boolean(selectedNode.effectLoop)}
-                    bind:value={selectedNode.effectIterations}
-                  >
-                </div>
-              </div>
-              <label class="choice-disabled-toggle">
-                <input type="checkbox" bind:checked={selectedNode.effectLoop}>
-                Loop until the story moves to the next node
-              </label>
-              <p class="inspector-help">
-                Different terminal effects attached to the same host stack together. The same effect type can only be attached once.
-              </p>
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.effectLoop}>
+                  Loop until the story moves to the next node
+                </label>
+                <p class="inspector-help">
+                  Different terminal effects attached to the same host stack together. The same effect type can only be attached once.
+                </p>
+              {/if}
             {/if}
 
             {#if selectedNode.type === 'effect'}
@@ -4003,16 +4012,6 @@
               <label for="sound-source">Sound effect path</label>
               <input id="sound-source" bind:value={selectedNode.sound} placeholder="/audio/sounds/door.mp3">
               <p class="inspector-warning">Legacy atmosphere node. New stories should use separate Music and Sound effect companions.</p>
-            {/if}
-
-            {#if selectedNode.type === 'background'}
-              <label for="background-theme">Terminal color theme</label>
-              <select id="background-theme" bind:value={selectedNode.backgroundTheme}>
-                {#each terminalThemes as theme}
-                  <option value={theme}>{theme[0].toUpperCase() + theme.slice(1)}</option>
-                {/each}
-              </select>
-              <p class="inspector-help">The premade terminal palette is applied while the attached host scene is active.</p>
             {/if}
 
             {#if selectedNode.type === 'music'}
@@ -5112,6 +5111,10 @@
     display: flex;
     gap: 4px;
 
+    &.link-active {
+      top: 58px;
+    }
+
     button {
       min-width: 34px;
       min-height: 30px;
@@ -5383,6 +5386,10 @@
     z-index: 4;
     top: 5px;
     right: 5px;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
 
     display: flex;
     gap: 3px;
@@ -5416,6 +5423,14 @@
       stroke: #02fbfb;
     }
 
+  }
+
+  .node-wrapper:hover > .node-quick-actions,
+  .node-wrapper:focus-within > .node-quick-actions,
+  .node-wrapper.selected-node-wrapper > .node-quick-actions {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .flow-node {
@@ -5755,6 +5770,18 @@
     input,
     select {
       width: 100%;
+    }
+  }
+
+  .field-disabled {
+    opacity: 0.42;
+
+    small {
+      display: block;
+      margin-top: 5px;
+      color: #94a3b8;
+      font-size: 0.64rem;
+      line-height: 1.35;
     }
   }
 

@@ -26,6 +26,7 @@ export function createStoryRepository(databasePath) {
   `);
 
   seedBuiltInStory(database, dejaVuStoryDocument);
+  migrateLegacyTerminalColorNodes(database);
 
   return {
     listStories() {
@@ -300,6 +301,7 @@ function createStoryDocument(input) {
 
 function normalizeStoryDocument(document) {
   const title = String(document.title ?? '').trim().slice(0, 80);
+  const nodes = normalizeTerminalColorNodes(document.nodes);
 
   if (!title) {
     throw new Error('Enter a story title.');
@@ -309,10 +311,14 @@ function normalizeStoryDocument(document) {
     throw new Error('A story document requires a nodes array.');
   }
 
-  validateStoryStructure(document);
+  validateStoryStructure({
+    ...document,
+    nodes
+  });
 
   return {
     ...document,
+    nodes,
     schemaVersion: 1,
     title,
     description: String(document.description ?? '').trim().slice(0, 500),
@@ -332,6 +338,70 @@ function normalizeStoryDocument(document) {
       ? document.supportedMinigames
       : []
   };
+}
+
+function normalizeTerminalColorNodes(nodes) {
+  if (!Array.isArray(nodes)) {
+    return nodes;
+  }
+
+  return nodes.map((node) => {
+    if (node?.type !== 'background') {
+      return node;
+    }
+
+    const backgroundTheme = node.backgroundTheme ?? node.background ?? 'blue';
+    const migratedNode = {
+      ...node,
+      type: 'screen-effect',
+      screenEffect: 'color',
+      backgroundTheme,
+      effectLoop: false
+    };
+
+    delete migratedNode.background;
+    return migratedNode;
+  });
+}
+
+function migrateLegacyTerminalColorNodes(database) {
+  const stories = database.prepare(`
+    SELECT
+      id,
+      version,
+      document_json AS documentJson
+    FROM stories
+  `).all();
+
+  for (const storedStory of stories) {
+    const document = JSON.parse(storedStory.documentJson);
+    const hasLegacyNode = document.nodes?.some((node) => node.type === 'background');
+
+    if (!hasLegacyNode) {
+      continue;
+    }
+
+    const version = Number(storedStory.version) + 1;
+    const migratedDocument = {
+      ...document,
+      version,
+      nodes: normalizeTerminalColorNodes(document.nodes)
+    };
+
+    database.prepare(`
+      UPDATE stories
+      SET
+        version = ?,
+        document_json = ?,
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      version,
+      JSON.stringify(migratedDocument),
+      new Date().toISOString(),
+      storedStory.id
+    );
+  }
 }
 
 function normalizeMainCharacterIds(value) {

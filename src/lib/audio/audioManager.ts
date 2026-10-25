@@ -27,6 +27,7 @@ type ActiveAudio = {
 const activeMusic = new Map<string, ActiveAudio>();
 const activeSounds = new Map<string, ActiveAudio>();
 const pendingPlayback = new Set<HTMLAudioElement>();
+const silentWaveData = 'data:audio/wav;base64,UklGRioAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQYAAACAgICAgA==';
 
 if (typeof window !== 'undefined') {
   audioSettings.subscribe((settings) => {
@@ -65,6 +66,24 @@ export function applySceneAudio(sceneAudio: SceneAudio | SceneAudio[]): void {
       playSound(cue);
     }
   }
+}
+
+// Prime browser media playback during the player's Play-button gesture so
+// audio loaded after the asynchronous save response can begin immediately.
+export function unlockAudioPlayback(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  retryPendingPlayback();
+  const unlocker = new Audio(silentWaveData);
+
+  void unlocker.play().then(() => {
+    unlocker.pause();
+    unlocker.removeAttribute('src');
+  }).catch(() => {
+    // The normal pending-playback retry remains available on the next input.
+  });
 }
 
 export function playMusic(cue: SceneAudio): void {

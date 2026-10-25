@@ -553,6 +553,27 @@ io.on('connection', (socket) => {
         storyId,
         request?.story
       );
+
+      // Keep an active playtest on its current node while refreshing the
+      // authored document that drives media, routes, and companion effects.
+      if (campaignState.story?.id === story.id) {
+        campaignState.story = structuredClone(story);
+        campaignState.updatedAt = new Date().toISOString();
+
+        for (const participantId of ['p1', 'p2']) {
+          const currentSceneId = campaignState.currentScene[participantId];
+
+          if (currentSceneId
+            && !story.nodes.some((node) => node.id === currentSceneId)) {
+            campaignState.currentScene[participantId] = campaignState.sessionMode === 'singleplayer'
+              ? story.singleplayerInitialSceneId
+              : story.initialSceneIds[participantId];
+          }
+        }
+
+        io.emit('campaign:state', getCampaignSnapshot(campaignState));
+      }
+
       acknowledge({
         ok: true,
         story
