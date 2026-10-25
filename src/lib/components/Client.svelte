@@ -274,7 +274,6 @@
       'lo-hi',
       'mastermind',
       'chopsticks',
-      'ghost-packet',
       'firewall-auction',
       'drone-relay'
     ];
@@ -307,7 +306,7 @@
       return false;
     }
 
-    if (['lo-hi', 'mastermind', 'chopsticks', 'ghost-packet', 'firewall-auction', 'drone-relay'].includes($location)) {
+    if (['lo-hi', 'mastermind', 'chopsticks', 'firewall-auction', 'drone-relay'].includes($location)) {
       const state = $arcadeStates[$location as ArcadeGameId];
 
       if (!state?.participants[$sessionState.playerId as PlayerId] || state.status === 'finished') {
@@ -351,7 +350,7 @@
       return Boolean($packetWarServerState?.participants[playerId]);
     }
 
-    if (['lo-hi', 'mastermind', 'chopsticks', 'ghost-packet', 'firewall-auction', 'drone-relay'].includes($location)) {
+    if (['lo-hi', 'mastermind', 'chopsticks', 'firewall-auction', 'drone-relay'].includes($location)) {
       const state = $arcadeStates[$location as ArcadeGameId];
 
       return Boolean(state?.participants[playerId] && state.mode !== 'solo');
@@ -381,7 +380,7 @@
       return ($packetWarServerState?.participantCount ?? 0) < 2;
     }
 
-    if (['lo-hi', 'mastermind', 'chopsticks', 'ghost-packet', 'firewall-auction', 'drone-relay'].includes($location)) {
+    if (['lo-hi', 'mastermind', 'chopsticks', 'firewall-auction', 'drone-relay'].includes($location)) {
       return ($arcadeStates[$location as ArcadeGameId]?.participantCount ?? 0) < 2;
     }
 

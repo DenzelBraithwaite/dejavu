@@ -7,19 +7,6 @@ const SUIT_NAMES = {
   blue: 'Blue Eagle'
 };
 
-const GHOST_PACKET_LINKS = {
-  A: ['B', 'C'],
-  B: ['A', 'D', 'E'],
-  C: ['A', 'E', 'F'],
-  D: ['B', 'G'],
-  E: ['B', 'C', 'G', 'H'],
-  F: ['C', 'H'],
-  G: ['D', 'E', 'I'],
-  H: ['E', 'F', 'I'],
-  I: ['G', 'H', 'J'],
-  J: ['I']
-};
-
 const DRONE_WALLS = ['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4'];
 const DRONE_CORES = ['1-3', '5-3'];
 const DRONE_EXITS = ['2-0', '4-0'];
@@ -32,7 +19,6 @@ export function createArcadeSessions() {
     'lo-hi': createLoHiState(),
     mastermind: createMastermindState(),
     chopsticks: createChopsticksState(),
-    'ghost-packet': createGhostPacketState(),
     'firewall-auction': createFirewallAuctionState(),
     'drone-relay': createDroneRelayState()
   };
@@ -116,10 +102,6 @@ export function performArcadeAction(sessions, gameId, playerId, action) {
     return playChopsticks(state, playerId, action);
   }
 
-  if (gameId === 'ghost-packet') {
-    return playGhostPacket(state, playerId, action);
-  }
-
   if (gameId === 'firewall-auction') {
     return playFirewallAuction(state, playerId, action);
   }
@@ -171,14 +153,6 @@ export function getArcadeSnapshot(sessions, gameId, playerId = null) {
 
   if (gameId === 'mastermind') {
     delete snapshot.secret;
-  }
-
-  if (gameId === 'ghost-packet') {
-    delete snapshot.compromisedNodes;
-
-    if (state.mode !== 'solo' && playerId === 'p1') {
-      snapshot.scanResults = {};
-    }
   }
 
   if (gameId === 'firewall-auction') {
@@ -263,22 +237,6 @@ function createChopsticksState() {
   };
 }
 
-function createGhostPacketState() {
-  return {
-    ...createBaseState('ghost-packet'),
-    packetNode: 'A',
-    destination: 'J',
-    phase: 'scan',
-    round: 1,
-    maximumRounds: 7,
-    trace: 0,
-    maximumTrace: 4,
-    scansRemaining: 4,
-    scanResults: {},
-    compromisedNodes: createCompromisedNodes()
-  };
-}
-
 function createFirewallAuctionState() {
   return {
     ...createBaseState('firewall-auction'),
@@ -343,17 +301,6 @@ function resetGame(state) {
     state.redistributionsRemaining = { p1: 3, p2: 3 };
     state.activePlayer = 'p1';
     state.turn = 1;
-  }
-
-  if (state.game === 'ghost-packet') {
-    state.packetNode = 'A';
-    state.destination = 'J';
-    state.phase = 'scan';
-    state.round = 1;
-    state.trace = 0;
-    state.scansRemaining = 4;
-    state.scanResults = {};
-    state.compromisedNodes = createCompromisedNodes();
   }
 
   if (state.game === 'firewall-auction') {
@@ -655,84 +602,6 @@ function playChopsticks(state, playerId, action) {
 }
 
 
-// Ghost Packet alternates between information gathering and movement.
-function playGhostPacket(state, playerId, action) {
-  const canScan = state.mode === 'solo' || playerId === 'p2';
-  const canRoute = state.mode === 'solo' || playerId === 'p1';
-
-  if (action.type === 'scan') {
-    const node = String(action.node ?? '');
-
-    if (!canScan || state.phase !== 'scan') {
-      return errorResult('The scanner acts before the router each round.');
-    }
-
-    if (!GHOST_PACKET_LINKS[node] || node === state.packetNode || node === state.destination) {
-      return errorResult('Choose an unreached relay to scan.');
-    }
-
-    if (state.scansRemaining <= 0) {
-      return errorResult('The scanner has no probes remaining.');
-    }
-
-    state.scanResults[node] = state.compromisedNodes.includes(node) ? 'compromised' : 'safe';
-    state.scansRemaining -= 1;
-    state.phase = 'route';
-    addLog(state, `Scanner classified relay ${node}. Router may now move the packet.`);
-    return successResult();
-  }
-
-  if (action.type === 'skip-scan') {
-    if (!canScan || state.phase !== 'scan') {
-      return errorResult('The scanner cannot pass right now.');
-    }
-
-    state.phase = 'route';
-    addLog(state, 'Scanner conserved a probe. Router may move the packet.');
-    return successResult();
-  }
-
-  if (action.type !== 'route' || !canRoute || state.phase !== 'route') {
-    return errorResult('Wait for the route phase before moving the packet.');
-  }
-
-  const destination = String(action.node ?? '');
-
-  if (!GHOST_PACKET_LINKS[state.packetNode].includes(destination)) {
-    return errorResult('The packet can only move across a connected link.');
-  }
-
-  state.packetNode = destination;
-
-
-  // Compromised relays are intentionally absent from router snapshots.
-  if (state.compromisedNodes.includes(destination)) {
-    state.trace += 2;
-    addLog(state, `Relay ${destination} was compromised. TRACE increased by 2.`);
-  } else {
-    addLog(state, `Packet crossed relay ${destination} without exposing its signature.`);
-  }
-
-  if (destination === state.destination) {
-    state.winner = 'players';
-    state.status = 'finished';
-    addLog(state, 'The ghost packet reached the dead drop. Route complete.');
-    return successResult();
-  }
-
-  if (state.trace >= state.maximumTrace || state.round >= state.maximumRounds) {
-    state.winner = 'network';
-    state.status = 'finished';
-    addLog(state, 'BLACK ICE isolated the packet before it reached the dead drop.');
-    return successResult();
-  }
-
-  state.round += 1;
-  state.phase = 'scan';
-  return successResult();
-}
-
-
 // Firewall bids remain hidden until both players have committed their allocation.
 function playFirewallAuction(state, playerId, action) {
   if (action.type !== 'allocate' || state.pendingAllocations[playerId]) {
@@ -972,19 +841,8 @@ function sameCell(first, second) {
   return first.row === second.row && first.column === second.column;
 }
 
-function createCompromisedNodes() {
-  const networkBands = [
-    ['B', 'C'],
-    ['D', 'E', 'F'],
-    ['G', 'H']
-  ];
-
-  // One threat per band keeps every generated map dangerous but still solvable.
-  return networkBands.map((band) => band[Math.floor(Math.random() * band.length)]);
-}
-
 function resolveMode(gameId, requestedMode) {
-  if (['ghost-packet', 'firewall-auction', 'drone-relay'].includes(gameId)) {
+  if (['firewall-auction', 'drone-relay'].includes(gameId)) {
     return requestedMode === 'solo'
       ? 'solo'
       : gameId === 'firewall-auction' ? 'versus' : 'coop';

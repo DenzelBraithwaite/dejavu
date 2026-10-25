@@ -95,6 +95,14 @@
     location.set('minigames');
   }
 
+  function returnToMenu(): void {
+    socket.emit('arcade:leave', 'firewall-auction');
+    attack = 0;
+    defense = 0;
+    waitingForStoryPartner = false;
+    screen = 'menu';
+  }
+
   function returnToStory(): void {
     socket.emit(
       'arcade:story-complete',
@@ -210,7 +218,10 @@
           {:else if launchedFromStory}
             <button on:click={returnToStory}>RETURN TO STORY</button>
           {:else}
-            <button on:click={restart}>REMATCH</button>
+            <div class="result-actions">
+              <button on:click={restart}>REMATCH</button>
+              <button on:click={returnToMenu}>MAIN MENU</button>
+            </div>
           {/if}
         </section>
       {/if}
@@ -428,6 +439,12 @@
       background: #290812ef;
       border-color: #ff5577;
     }
+  }
+
+  .result-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
   }
 
   .error {

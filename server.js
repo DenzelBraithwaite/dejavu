@@ -134,7 +134,6 @@ const storyMinigameFinishedPlayers = {
   'lo-hi': new Set(),
   mastermind: new Set(),
   chopsticks: new Set(),
-  'ghost-packet': new Set(),
   'firewall-auction': new Set(),
   'drone-relay': new Set()
 };
@@ -144,7 +143,6 @@ const storyMinigameCompletionScenes = {
   'lo-hi': null,
   mastermind: null,
   chopsticks: null,
-  'ghost-packet': null,
   'firewall-auction': null,
   'drone-relay': null
 };

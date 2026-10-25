@@ -9,7 +9,6 @@ export type MinigameId =
   | 'lo-hi'
   | 'mastermind'
   | 'chopsticks'
-  | 'ghost-packet'
   | 'firewall-auction'
   | 'drone-relay';
 
@@ -26,7 +25,6 @@ const gameIds: MinigameId[] = [
   'lo-hi',
   'mastermind',
   'chopsticks',
-  'ghost-packet',
   'firewall-auction',
   'drone-relay'
 ];

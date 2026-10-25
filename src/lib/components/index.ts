@@ -10,7 +10,6 @@ import Dice from './Dice.svelte';
 import DiceTerminal from './DiceTerminal.svelte';
 import DroneRelay from './DroneRelay.svelte';
 import FirewallAuction from './FirewallAuction.svelte';
-import GhostPacket from './GhostPacket.svelte';
 import Item from './Item.svelte';
 import Journal from './Journal.svelte';
 import LoHi from './LoHi.svelte';
@@ -39,7 +38,6 @@ export {
   DiceTerminal,
   DroneRelay,
   FirewallAuction,
-  GhostPacket,
   Item,
   Journal,
   LoHi,

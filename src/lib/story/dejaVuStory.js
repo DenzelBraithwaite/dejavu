@@ -42,7 +42,6 @@ export const dejaVuStoryDocument = {
     'lo-hi',
     'mastermind',
     'chopsticks',
-    'ghost-packet',
     'firewall-auction',
     'drone-relay'
   ]

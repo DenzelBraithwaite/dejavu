@@ -96,16 +96,6 @@
       modes: ['singleplayer', 'multiplayer']
     },
     {
-      id: 'ghost-packet',
-      title: 'Ghost Packet',
-      description: 'Scan hidden threats and route a covert packet through a compromised network.',
-      playerCount: 2,
-      playerLabel: '1–2 PLAYERS',
-      status: 'V1 READY',
-      artwork: 'ghost-packet',
-      modes: ['singleplayer', 'multiplayer']
-    },
-    {
       id: 'firewall-auction',
       title: 'Firewall Auction',
       description: 'Secretly bid processing power on attack or defense, then bank what you do not spend.',
@@ -206,6 +196,25 @@
                 <span class="packet-deck">P1</span>
                 <div class="packet-stream"><i></i><i></i><i></i></div>
                 <span class="packet-deck packet-deck--hostile">ICE</span>
+              </div>
+            {:else if minigame.artwork === 'firewall-auction'}
+              <div class="firewall-preview">
+                <div class="firewall-shield"><span>8</span></div>
+                <div class="firewall-bid firewall-bid--attack"><small>ATK</small><strong>3</strong></div>
+                <div class="firewall-bid firewall-bid--defense"><small>DEF</small><strong>2</strong></div>
+                <div class="firewall-reserve">RESERVE 4</div>
+              </div>
+            {:else if minigame.artwork === 'drone-relay'}
+              <div class="drone-preview">
+                <div class="drone-grid">
+                  {#each Array(20) as _, index}
+                    <i class:wall={[2, 7, 12, 13].includes(index)}></i>
+                  {/each}
+                </div>
+                <span class="preview-drone preview-drone--one">▲</span>
+                <span class="preview-drone preview-drone--two">◀</span>
+                <span class="preview-core">◆</span>
+                <div class="preview-queue"><b>↑</b><b>↻</b><b>↑</b></div>
               </div>
             {:else}
               {#if minigame.artwork === 'lo-hi'}
@@ -578,7 +587,6 @@
   .module-art--lo-hi,
   .module-art--mastermind,
   .module-art--chopsticks,
-  .module-art--ghost-packet,
   .module-art--firewall-auction,
   .module-art--drone-relay {
     background:
@@ -599,16 +607,151 @@
     background-image: radial-gradient(circle at center, #165435, #030905 70%);
   }
 
-  .module-art--ghost-packet {
-    background-image: radial-gradient(circle at center, #164d62, #02070b 70%);
-  }
-
   .module-art--firewall-auction {
     background-image: radial-gradient(circle at center, #552060, #09030d 70%);
   }
 
   .module-art--drone-relay {
     background-image: radial-gradient(circle at center, #18503a, #020806 70%);
+  }
+
+  .firewall-preview {
+    position: relative;
+    width: 260px;
+    height: 160px;
+  }
+
+  .firewall-shield {
+    position: absolute;
+    left: 91px;
+    top: 16px;
+    width: 78px;
+    height: 98px;
+    color: #f6c8ff;
+    background: linear-gradient(145deg, #d45cff66, #4c135c);
+    border: 2px solid #ed8eff;
+    clip-path: polygon(50% 0, 95% 18%, 84% 72%, 50% 100%, 16% 72%, 5% 18%);
+    filter: drop-shadow(0 0 14px #d45cff);
+
+    display: grid;
+    place-items: center;
+
+    span {
+      font-size: 2.2rem;
+    }
+  }
+
+  .firewall-bid {
+    position: absolute;
+    top: 43px;
+    width: 60px;
+    padding: 8px 5px;
+    color: #ff829e;
+    background: #260813;
+    border: 1px solid currentColor;
+    box-shadow: 0 0 12px #ff557755;
+    text-align: center;
+
+    display: grid;
+
+    strong {
+      font-size: 1.5rem;
+    }
+
+    &--attack {
+      left: 10px;
+    }
+
+    &--defense {
+      right: 10px;
+      color: #68dcff;
+      background: #061d27;
+      box-shadow: 0 0 12px #48cfff55;
+    }
+  }
+
+  .firewall-reserve {
+    position: absolute;
+    bottom: 5px;
+    left: 75px;
+    width: 110px;
+    padding: 6px;
+    color: #ffe277;
+    background: #252006;
+    border: 1px solid #9c7d16;
+    font-size: 0.65rem;
+    text-align: center;
+  }
+
+  .drone-preview {
+    position: relative;
+    width: 260px;
+    height: 160px;
+  }
+
+  .drone-grid {
+    position: absolute;
+    inset: 7px 52px 7px 7px;
+
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 3px;
+
+    i {
+      background: #0a2118;
+      border: 1px solid #2b6c50;
+    }
+
+    i.wall {
+      background: repeating-linear-gradient(45deg, #38433e 0 3px, #17201c 3px 6px);
+      border-color: #68756f;
+    }
+  }
+
+  .preview-drone,
+  .preview-core {
+    position: absolute;
+    z-index: 2;
+    filter: drop-shadow(0 0 7px currentColor);
+  }
+
+  .preview-drone--one {
+    left: 30px;
+    bottom: 22px;
+    color: #68dcff;
+  }
+
+  .preview-drone--two {
+    left: 129px;
+    top: 22px;
+    color: #ff73cb;
+  }
+
+  .preview-core {
+    left: 89px;
+    top: 68px;
+    color: #ffe277;
+  }
+
+  .preview-queue {
+    position: absolute;
+    right: 6px;
+    top: 27px;
+
+    display: grid;
+    gap: 6px;
+
+    b {
+      width: 35px;
+      height: 29px;
+      color: #7ff0b9;
+      background: #092219;
+      border: 1px solid #39a66f;
+
+      display: grid;
+      place-items: center;
+    }
   }
 
   .arcade-glyph {
