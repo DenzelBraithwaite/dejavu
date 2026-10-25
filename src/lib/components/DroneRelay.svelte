@@ -49,9 +49,12 @@
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: submitted = Boolean(state?.submitted?.[playerId]);
-  $: pendingExecutionStart = state?.executionId !== animatedExecutionId ? state?.executionStart : null;
-  $: displayDrones = activeFrame?.drones ?? pendingExecutionStart?.drones ?? state?.drones ?? null;
-  $: displayHealthPack = activeFrame?.healthPack ?? pendingExecutionStart?.healthPack ?? state?.healthPack ?? null;
+  $: displayDrones = activeFrame?.drones
+    ?? (state?.executionId !== animatedExecutionId ? state?.executionStart?.drones : state?.drones)
+    ?? null;
+  $: displayHealthPack = activeFrame?.healthPack
+    ?? (state?.executionId !== animatedExecutionId ? state?.executionStart?.healthPack : state?.healthPack)
+    ?? null;
   $: currentAbilities = state?.abilities?.[playerId] ?? {};
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
   $: setMinigameSessionActive('drone-relay', screen === 'game' && Boolean(state?.participants[playerId]));
@@ -220,7 +223,21 @@
   }
 
   function finishAnimation(): void {
-    cancelAnimation();
+    const finalFrame = playbackFrames[playbackFrames.length - 1] ?? null;
+
+    if (animationTimer !== null) {
+      window.clearInterval(animationTimer);
+      animationTimer = null;
+    }
+
+    // Keep the final resolved board mounted between rounds. Only transient damage and healing
+    // flashes are removed so the drones cannot fall back to the round-start playback snapshot.
+    activeFrame = finalFrame
+      ? { ...finalFrame, cellEffects: [] }
+      : null;
+    playbackFrames = [];
+    playbackFrameIndex = -1;
+    isAnimating = false;
   }
 
   function cellHasEffect(row: number, column: number, type: string): boolean {
