@@ -4792,24 +4792,24 @@
     }
 
     &.connected-before .flow-node {
-      background: linear-gradient(90deg, #40350c, #17170e 74%);
-      border: 2px solid #f8d84e;
-      box-shadow: 0 0 20px #f8d84e45;
+      border-color: #c084fc !important;
+      border-style: dotted !important;
+      border-width: 2px !important;
+      box-shadow: none;
 
       &::after {
-        content: 'PREVIOUS';
-        color: #ffe77a;
+        content: none;
       }
     }
 
     &.connected-after .flow-node {
-      background: linear-gradient(90deg, #16452d, #0b1820 74%);
-      border: 2px solid #6bff9d;
-      box-shadow: 0 0 20px #6bff9d45;
+      border-color: #c084fc !important;
+      border-style: dashed !important;
+      border-width: 2px !important;
+      box-shadow: none;
 
       &::after {
-        content: 'NEXT';
-        color: #8effb3;
+        content: none;
       }
     }
 
