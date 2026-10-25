@@ -31,6 +31,7 @@
     sourceId?: string;
     field?: string;
     insertAfterId?: string;
+    companionOnly?: boolean;
   };
   type LaneGraphLevel = {
     depth: number;
@@ -66,12 +67,12 @@
     { type: 'choice', label: 'Choice' },
     { type: 'checkpoint', label: 'Checkpoint' },
     { type: 'conversation', label: 'Open floor' },
-    { type: 'dice-check', label: 'Dice check' },
+    { type: 'dice-check', label: 'Dice' },
     { type: 'vote', label: 'Shared vote' },
     { type: 'timed-choice', label: 'Timed choice' },
     { type: 'condition', label: 'Condition' },
     { type: 'clear-terminal', label: 'Clear terminal' },
-    { type: 'image', label: 'Show image' },
+    { type: 'image', label: 'Image' },
     { type: 'minigame', label: 'Minigame' },
     { type: 'label', label: 'Visual label' },
     { type: 'ending', label: 'Ending' }
@@ -131,7 +132,7 @@
           usage: 'Set the duration, buttons, fallback option, and a destination for every option.'
         },
         {
-          name: 'Dice check',
+          name: 'Dice',
           type: 'dice-check',
           description: 'Rolls a selected die against a character stat and target value.',
           usage: 'Choose the die, stat, and target, then connect both Success and Failure.'
@@ -157,8 +158,8 @@
         {
           name: 'Background',
           type: 'background',
-          description: 'Changes the terminal background without affecting music or sound effects.',
-          usage: 'Provide an image path and attach it to the scene where the new background should appear.'
+          description: 'Changes the terminal color theme without affecting music or sound effects.',
+          usage: 'Choose a premade color theme and attach it to the scene where the terminal should change.'
         },
         {
           name: 'Play music',
@@ -173,7 +174,7 @@
           usage: 'Choose a library sound, volume, loop behavior, and fades, then attach it to the triggering scene.'
         },
         {
-          name: 'Show image',
+          name: 'Image',
           type: 'image',
           description: 'Displays uploaded artwork as a routed step inside the terminal.',
           usage: 'Select and position an image, write its Log text for the cartridge log, and connect Next.'
@@ -264,6 +265,13 @@
   const mapZoomStep = 0.1;
   const minimumInspectorWidth = 280;
   const maximumInspectorWidth = 720;
+  const terminalThemes = ['blue', 'red', 'purple', 'green', 'amber', 'pink', 'cyan', 'white'];
+  const minigamesWithDraws = new Set([
+    'billywig',
+    'lo-hi',
+    'firewall-auction',
+    'drone-relay'
+  ]);
 
   let mode: EditorMode = 'library';
   let newTitle = '';
@@ -319,6 +327,7 @@
   let autosaveTimer: number | undefined;
   let savePulseTimer: number | undefined;
   let inspectorElement: HTMLElement;
+  let flowCanvasElement: HTMLElement;
   let editorLockStoryId = '';
   let inspectorExpanded = false;
   let inspectorWidth = 340;
@@ -326,6 +335,7 @@
   let inspectorResizeStartWidth = 340;
   let isResizingInspector = false;
   let mapZoom = 1;
+  let mobileToolbarCollapsed = false;
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -552,6 +562,27 @@
     location.set('editor');
   }
 
+  async function scrollSelectedNodeIntoView(): Promise<void> {
+    await tick();
+
+    if (!flowCanvasElement || !selectedNodeId) {
+      return;
+    }
+
+    const escapedNodeId = window.CSS?.escape
+      ? window.CSS.escape(selectedNodeId)
+      : selectedNodeId.replace(/["\\]/g, '\\$&');
+    const selectedElement = flowCanvasElement.querySelector<HTMLElement>(
+      `[data-node-id="${escapedNodeId}"]`
+    );
+
+    selectedElement?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'center'
+    });
+  }
+
   function closeStoryEditor(): void {
     showEditorHome();
   }
@@ -660,6 +691,7 @@
       lastSavedStoryKey = storyContentKey(editingStory);
       resetHistory();
       showEditor();
+      void scrollSelectedNodeIntoView();
     });
   }
 
@@ -896,6 +928,31 @@
       if (node.type === 'screen-effect') {
         node.effectDurationSeconds ??= node.screenEffect === 'blink' ? 0.75 : 0.6;
         node.effectIterations ??= 1;
+        node.effectLoop ??= false;
+        node.mirrorAxis ??= 'horizontal';
+        node.spinDirection ??= 'clockwise';
+        node.effectColor ??= '#39ff88';
+        node.scanDirection ??= 'left-to-right';
+      }
+
+      if (node.type === 'background') {
+        node.backgroundTheme ??= terminalThemes.includes(String(node.background))
+          ? node.background as StoryNode['backgroundTheme']
+          : 'blue';
+      }
+
+      if (node.type === 'minigame') {
+        const legacyDestination = node.resultNext?.completed ?? '';
+        node.resultNext ??= {};
+        node.resultNext.won ??= legacyDestination;
+        node.resultNext.lost ??= legacyDestination;
+        node.resultNext.cancelled ??= '';
+
+        if (minigamesWithDraws.has(String(node.minigameId))) {
+          node.resultNext.draw ??= legacyDestination;
+        }
+
+        delete node.resultNext.completed;
       }
 
       if (node.type === 'music' || node.type === 'sound-effect') {
@@ -953,13 +1010,55 @@
     nodeSearch = '';
   }
 
-  function nodeAvailableForMap(type: string): boolean {
-    return activeStoryMap !== 'singleplayer'
-      || !['checkpoint', 'conversation', 'vote'].includes(type);
+  function openCompanionPicker(host: StoryNode): void {
+    openNodePicker({
+      lane: (host.audience ?? 'both') as LaneId,
+      sourceId: host.id,
+      insertAfterId: host.id,
+      companionOnly: true
+    });
   }
 
-  function nodeMatchesSearch(node: TutorialNode): boolean {
-    const query = nodeSearch.trim().toLowerCase();
+  function setScreenEffectType(event: Event): void {
+    if (!editingStory || !selectedNode || selectedNode.type !== 'screen-effect') {
+      return;
+    }
+
+    const select = event.currentTarget as HTMLSelectElement;
+    const requestedEffect = select.value as StoryNode['screenEffect'];
+    const duplicate = editingStory.nodes.some((candidate) => (
+      candidate.id !== selectedNode.id
+      && candidate.type === 'screen-effect'
+      && candidate.attachedTo === selectedNode.attachedTo
+      && candidate.screenEffect === requestedEffect
+    ));
+
+    if (duplicate) {
+      select.value = String(selectedNode.screenEffect ?? 'shake');
+      errorMessage = 'That host already has this terminal effect. Choose a different effect to stack.';
+      return;
+    }
+
+    selectedNode.screenEffect = requestedEffect;
+
+    if (requestedEffect === 'glow') {
+      selectedNode.effectLoop = true;
+    }
+
+    refreshStory();
+  }
+
+  function nodeAvailableForMap(type: string): boolean {
+    const modeAllowsNode = activeStoryMap !== 'singleplayer'
+      || !['checkpoint', 'conversation', 'vote'].includes(type);
+    const targetAllowsNode = !insertionTarget?.companionOnly
+      || isCompanionNodeType(type);
+
+    return modeAllowsNode && targetAllowsNode;
+  }
+
+  function nodeMatchesSearch(node: TutorialNode, searchValue: string): boolean {
+    const query = searchValue.trim().toLowerCase();
 
     return !query || [node.name, node.type, node.description, node.usage]
       .some((value) => value.toLowerCase().includes(query));
@@ -1026,9 +1125,12 @@
       checkpoint: 'CHECKPOINT',
       'clear-terminal': 'CLEAR',
       'stop-music': 'STOP MUSIC',
-      label: 'LABEL',
       ending: 'END'
     };
+
+    if (node.type === 'label') {
+      return String(node.text || 'UNTITLED LABEL').slice(0, 28).toUpperCase();
+    }
 
     return titles[node.type] ?? nodeTypeName(node.type).toUpperCase();
   }
@@ -1163,9 +1265,45 @@
       return;
     }
 
-    rememberForUndo();
     const nodeId = createUniqueNodeId(type);
     const node = createNode(type, nodeId);
+
+    if (insertionTarget.companionOnly && type === 'screen-effect') {
+      const effectTypes: NonNullable<StoryNode['screenEffect']>[] = [
+        'shake',
+        'blink',
+        'mirror',
+        'spin',
+        'glow',
+        'scan'
+      ];
+      const usedEffects = new Set(editingStory.nodes.filter((candidate) => (
+        candidate.type === 'screen-effect'
+        && candidate.attachedTo === insertionTarget?.sourceId
+      )).map((candidate) => candidate.screenEffect));
+      const availableEffect = effectTypes.find((effect) => !usedEffects.has(effect));
+
+      if (!availableEffect) {
+        errorMessage = 'That node already has every available terminal effect.';
+        return;
+      }
+
+      node.screenEffect = availableEffect;
+    }
+
+    if (
+      insertionTarget.companionOnly
+      && type === 'background'
+      && editingStory.nodes.some((candidate) => (
+        candidate.type === 'background'
+        && candidate.attachedTo === insertionTarget?.sourceId
+      ))
+    ) {
+      errorMessage = 'That node already has a background companion.';
+      return;
+    }
+
+    rememberForUndo();
     node.audience = insertionTarget.lane;
     node.map = activeStoryMap;
 
@@ -1179,6 +1317,11 @@
 
   function pasteNode(): void {
     if (!copiedNode || !editingStory || !insertionTarget) {
+      return;
+    }
+
+    if (insertionTarget.companionOnly && !isCompanionNode(copiedNode)) {
+      errorMessage = 'Only companion nodes can be added from this shortcut.';
       return;
     }
 
@@ -1346,7 +1489,12 @@
     for (const candidate of editingStory.nodes) {
       for (const field of routeFields(candidate)) {
         if (getRouteValue(candidate, field) === node.id) {
-          setRouteValue(candidate, field, replacementId);
+          // Branch slots belong to their specific option. Clearing the slot
+          // restores its add button; reconnecting it silently changes meaning.
+          const replacementForRoute = nodeHasBranches(candidate)
+            ? ''
+            : replacementId;
+          setRouteValue(candidate, field, replacementForRoute);
         }
       }
     }
@@ -1364,7 +1512,7 @@
     editingStory = {
       ...editingStory
     };
-    statusMessage = `${displayNodeName(node)} deleted. Incoming routes were ${replacementId ? 'reconnected' : 'cleared'}.`;
+    statusMessage = `${displayNodeName(node)} deleted. Branch routes were cleared and linear routes were ${replacementId ? 'reconnected' : 'cleared'}.`;
   }
 
   function addChoice(): void {
@@ -1387,6 +1535,12 @@
         disabled: false
       }
     ];
+  }
+
+  function nextChoiceLabel(): string {
+    const optionNumber = (selectedNode?.choices?.length ?? 0) + 1;
+
+    return `Add option ${optionNumber}`;
   }
 
   function enabledNodeChoices(node: StoryNode): NonNullable<StoryNode['choices']> {
@@ -1487,57 +1641,77 @@
 
   function getLaneGraph(lane: LaneId): LaneGraph {
     const laneNodes = getLaneNodes(lane);
-    const flowNodes = laneNodes.filter((node) => !isCompanionNode(node));
-    const nodeIndex = new Map(flowNodes.map((node, index) => [node.id, index]));
-    const nodeDepth = new Map(flowNodes.map((node) => [node.id, 0]));
+    const flowNodes = laneNodes.filter(
+      (node) => !isCompanionNode(node) && node.type !== 'label'
+    );
+    const flowNodeById = new Map(flowNodes.map((node) => [node.id, node]));
+    const nodeDepth = new Map<string, number>();
+    const nodeOrder = new Map<string, number>();
+    let order = 0;
 
-    // Repeated relaxation finds the longest forward route into each node.
-    // Backward links are loops and do not push the graph into an infinite depth.
-    for (let pass = 0; pass < flowNodes.length; pass += 1) {
-      let changed = false;
+    const visitRoutes = (root: StoryNode, rootDepth: number): void => {
+      const queue: Array<{ node: StoryNode; depth: number }> = [
+        { node: root, depth: rootDepth }
+      ];
 
-      for (const source of flowNodes) {
-        const sourceIndex = nodeIndex.get(source.id) ?? 0;
-        const sourceDepth = nodeDepth.get(source.id) ?? 0;
+      while (queue.length > 0) {
+        const queued = queue.shift();
 
-        for (const field of routeFields(source)) {
-          const destinationId = getRouteValue(source, field);
-          const destinationIndex = nodeIndex.get(destinationId);
+        if (!queued || nodeDepth.has(queued.node.id)) {
+          continue;
+        }
 
-          if (destinationIndex === undefined || destinationIndex <= sourceIndex) {
-            continue;
-          }
+        nodeDepth.set(queued.node.id, queued.depth);
+        nodeOrder.set(queued.node.id, order);
+        order += 1;
 
-          const nextDepth = sourceDepth + 1;
+        // Route fields preserve author order. Choice destinations therefore
+        // occupy one row from the first/top option through the last/bottom one.
+        for (const field of routeFields(queued.node)) {
+          const destination = flowNodeById.get(getRouteValue(queued.node, field));
 
-          if (nextDepth > (nodeDepth.get(destinationId) ?? 0)) {
-            nodeDepth.set(destinationId, nextDepth);
-            changed = true;
+          if (destination && !nodeDepth.has(destination.id)) {
+            queue.push({
+              node: destination,
+              depth: queued.depth + 1
+            });
           }
         }
       }
+    };
 
-      if (!changed) {
-        break;
-      }
+    const configuredStartId = activeStoryMap === 'singleplayer'
+      ? editingStory?.singleplayerInitialSceneId
+      : editingStory?.initialSceneIds[lane === 'p2' ? 'p2' : 'p1'];
+    const configuredStart = configuredStartId
+      ? flowNodeById.get(configuredStartId)
+      : undefined;
+
+    if (configuredStart) {
+      visitRoutes(configuredStart, 0);
     }
 
-    // Unconnected visual labels and incomplete nodes still receive their own
-    // level instead of stacking on top of unrelated graph roots.
-    let lastStandaloneDepth = -1;
-
+    // Shared-lane roots and alternate connected components follow the primary
+    // route. Truly detached nodes are deliberately placed at the bottom.
     for (const node of flowNodes) {
+      if (nodeDepth.has(node.id)) {
+        continue;
+      }
+
       const hasIncoming = flowNodes.some((candidate) => routeFields(candidate).some(
         (field) => getRouteValue(candidate, field) === node.id
       ));
-      const hasOutgoing = routeFields(node).some((field) => Boolean(getRouteValue(node, field)));
 
-      if (!hasIncoming && !hasOutgoing && node.type !== 'ending') {
-        lastStandaloneDepth = Math.max(
-          lastStandaloneDepth + 1,
-          nodeDepth.get(node.id) ?? 0
-        );
-        nodeDepth.set(node.id, lastStandaloneDepth);
+      if (!hasIncoming && routeFields(node).some((field) => getRouteValue(node, field))) {
+        const nextDepth = Math.max(-1, ...nodeDepth.values()) + 1;
+        visitRoutes(node, nextDepth);
+      }
+    }
+
+    for (const node of flowNodes) {
+      if (!nodeDepth.has(node.id)) {
+        const nextDepth = Math.max(-1, ...nodeDepth.values()) + 1;
+        visitRoutes(node, nextDepth);
       }
     }
 
@@ -1547,7 +1721,14 @@
       const hostDepth = isCompanionNode(node)
         ? nodeDepth.get(String(node.attachedTo ?? ''))
         : undefined;
-      const depth = hostDepth ?? nodeDepth.get(node.id) ?? 0;
+      const nodeIndex = laneNodes.findIndex((candidate) => candidate.id === node.id);
+      const adjacentFlowNode = node.type === 'label'
+        ? [...laneNodes.slice(nodeIndex + 1), ...laneNodes.slice(0, nodeIndex).reverse()]
+          .find((candidate) => !isCompanionNode(candidate) && candidate.type !== 'label')
+        : undefined;
+      const depth = hostDepth
+        ?? nodeDepth.get(adjacentFlowNode?.id ?? node.id)
+        ?? Math.max(0, ...nodeDepth.values());
       const levelNodes = levels.get(depth) ?? [];
       levelNodes.push(node);
       levels.set(depth, levelNodes);
@@ -1555,7 +1736,16 @@
 
     const orderedLevels = [...levels.entries()]
       .sort(([leftDepth], [rightDepth]) => leftDepth - rightDepth)
-      .map(([depth, nodes]) => ({ depth, nodes }));
+      .map(([depth, nodes]) => ({
+        depth,
+        nodes: nodes.sort((left, right) => {
+          const leftHostId = isCompanionNode(left) ? String(left.attachedTo ?? '') : left.id;
+          const rightHostId = isCompanionNode(right) ? String(right.attachedTo ?? '') : right.id;
+
+          return (nodeOrder.get(leftHostId) ?? Number.MAX_SAFE_INTEGER)
+            - (nodeOrder.get(rightHostId) ?? Number.MAX_SAFE_INTEGER);
+        })
+      }));
 
     return {
       levels: orderedLevels,
@@ -1889,8 +2079,16 @@
         .slice(0, 18);
     }
 
-    if (field === 'resultNext.completed') {
-      return 'FINISHED';
+    if (field === 'resultNext.won') {
+      return 'WON';
+    }
+
+    if (field === 'resultNext.lost') {
+      return 'LOST';
+    }
+
+    if (field === 'resultNext.draw') {
+      return 'DRAW';
     }
 
     if (field === 'resultNext.cancelled') {
@@ -2023,7 +2221,9 @@
     }
 
     if (node.type === 'minigame') {
-      return ['resultNext.completed', 'resultNext.cancelled'];
+      return minigameOutcomeIds(node.minigameId).map(
+        (outcome) => `resultNext.${outcome}`
+      );
     }
 
     return [];
@@ -2087,6 +2287,32 @@
       .includes(node.type);
   }
 
+  function minigameOutcomeIds(minigameId: unknown): string[] {
+    const outcomes = ['won', 'lost'];
+
+    if (minigamesWithDraws.has(String(minigameId))) {
+      outcomes.push('draw');
+    }
+
+    outcomes.push('cancelled');
+    return outcomes;
+  }
+
+  function setMinigameId(event: Event): void {
+    if (!selectedNode || selectedNode.type !== 'minigame') {
+      return;
+    }
+
+    selectedNode.minigameId = (event.currentTarget as HTMLSelectElement).value;
+    selectedNode.resultNext ??= {};
+
+    for (const outcome of minigameOutcomeIds(selectedNode.minigameId)) {
+      selectedNode.resultNext[outcome] ??= '';
+    }
+
+    refreshStory();
+  }
+
   function clearNodeRoutes(node: StoryNode): void {
     if (isCompanionNode(node)) {
       node.attachedTo = '';
@@ -2097,25 +2323,6 @@
     for (const field of routeFields(node)) {
       setRouteValue(node, field, '');
     }
-  }
-
-  function moveNodeBefore(nodeId: string, targetId: string): void {
-    if (!editingStory) {
-      return;
-    }
-
-    const node = editingStory.nodes.find((candidate) => candidate.id === nodeId);
-    const remainingNodes = editingStory.nodes.filter((candidate) => candidate.id !== nodeId);
-    const targetIndex = remainingNodes.findIndex((candidate) => candidate.id === targetId);
-
-    if (!node || targetIndex < 0) {
-      return;
-    }
-
-    rememberForUndo();
-    remainingNodes.splice(targetIndex, 0, node);
-    editingStory.nodes = remainingNodes;
-    refreshStory();
   }
 
   function updateConversationCount(player: PlayerId, value: number): void {
@@ -2297,29 +2504,6 @@
       errorMessage = error instanceof Error
         ? error.message
         : 'The image could not be deleted.';
-    }
-  }
-
-  function moveSelectedNode(direction: -1 | 1): void {
-    if (!editingStory || !selectedNode) {
-      return;
-    }
-
-    const laneGraph = getLaneGraph((selectedNode.audience ?? 'both') as LaneId);
-    const level = laneGraph.levels.find((candidate) => (
-      candidate.nodes.some((node) => node.id === selectedNode.id)
-    ));
-    const currentIndex = level?.nodes.findIndex((node) => node.id === selectedNode.id) ?? -1;
-    const targetNode = level?.nodes[currentIndex + direction];
-
-    if (!targetNode) {
-      return;
-    }
-
-    if (direction < 0) {
-      moveNodeBefore(selectedNode.id, targetNode.id);
-    } else {
-      moveNodeBefore(targetNode.id, selectedNode.id);
     }
   }
 
@@ -2526,7 +2710,7 @@
           type,
           audience: 'both',
           attachedTo: '',
-          background: ''
+          backgroundTheme: 'blue'
         };
       case 'music':
         return {
@@ -2577,14 +2761,20 @@
           attachedTo: '',
           screenEffect: 'shake',
           effectDurationSeconds: 0.6,
-          effectIterations: 1
+          effectIterations: 1,
+          effectLoop: false,
+          mirrorAxis: 'horizontal',
+          spinDirection: 'clockwise',
+          effectColor: '#39ff88',
+          scanDirection: 'left-to-right'
         };
       case 'minigame':
         return {
           ...baseNode,
           minigameId: 'netrunners',
           resultNext: {
-            completed: '',
+            won: '',
+            lost: '',
             cancelled: ''
           }
         };
@@ -2789,7 +2979,15 @@
       on:focusin={rememberFieldEdit}
       on:change={refreshStory}
     >
-      <div class="editor-toolbar">
+      <div class="editor-toolbar" class:mobile-collapsed={mobileToolbarCollapsed}>
+        <button
+          class="mobile-toolbar-toggle"
+          type="button"
+          aria-expanded={!mobileToolbarCollapsed}
+          on:click={() => mobileToolbarCollapsed = !mobileToolbarCollapsed}
+        >
+          {mobileToolbarCollapsed ? 'Show editor controls' : 'Hide editor controls'}
+        </button>
         <button class="back-button" type="button" on:click={closeStoryEditor}>
           ← Editor
         </button>
@@ -2887,7 +3085,7 @@
       </div>
 
       <p class="graph-position-help">
-        Routes control rows. Select a node to move it up or down, change its audience, or edit its previous and next connections in the inspector.
+        Routes control rows. Select a node to change its audience or edit its previous and next connections in the inspector.
       </p>
 
       <div class="editor-workspace" style={`--inspector-width: ${inspectorWidth}px`}>
@@ -2895,6 +3093,7 @@
           class="flow-canvas"
           class:selecting-route={Boolean(linkSelection)}
           aria-label="Story flow"
+          bind:this={flowCanvasElement}
         >
           <div class="map-zoom-controls" aria-label="Story map zoom controls">
             <button
@@ -2964,6 +3163,7 @@
                         <div
                           role="listitem"
                           class="node-wrapper"
+                          data-node-id={node.id}
                           data-revision={storyRevision}
                           class:branch-node={nodeHasBranches(node)}
                           class:merge-node={nodeMergesRoutes(node)}
@@ -2979,6 +3179,19 @@
                             <span class="branch-path-label merge-label">MERGED PATHS</span>
                           {/if}
                       <div class="node-quick-actions" aria-label={`Quick actions for ${displayNodeName(node)}`}>
+                        {#if !isCompanionNode(node) && node.type !== 'label'}
+                          <button
+                            class="node-companion-button"
+                            type="button"
+                            aria-label={`Add companion to ${displayNodeName(node)}`}
+                            title="Add companion"
+                            on:click|stopPropagation={() => openCompanionPicker(node)}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M12 5v14M5 12h14"></path>
+                            </svg>
+                          </button>
+                        {/if}
                         <button
                           class="node-expand-button"
                           type="button"
@@ -3066,7 +3279,7 @@
                             insertAfterId: node.id
                           })}
                         >
-                          + {field.replace('trueNext', 'true').replace('falseNext', 'false').replace('resultNext.', '').replace(/choices\.\d+\.next/, 'option')}
+                          + {routeFieldLabel(node, field)}
                         </button>
                       {/each}
                         </div>
@@ -3133,8 +3346,6 @@
                 <code>{selectedNode.id}</code>
               </div>
               <div class="inspector-actions">
-                <button type="button" aria-label="Move node up" on:click={() => moveSelectedNode(-1)}>↑</button>
-                <button type="button" aria-label="Move node down" on:click={() => moveSelectedNode(1)}>↓</button>
                 <button type="button" on:click={copySelectedNode}>Copy</button>
                 <button type="button" on:click={duplicateSelectedNode}>Duplicate</button>
               </div>
@@ -3409,12 +3620,27 @@
                     type="button"
                     disabled={(selectedNode.choices?.length ?? 0) >= 5}
                     on:click={addChoice}
-                  >+ Option</button>
+                  >+ {nextChoiceLabel()}</button>
                 </div>
                 {#each selectedNode.choices ?? [] as choice, index}
                   <div class="choice-row">
-                    <input aria-label="Option ID" bind:value={choice.id} placeholder="option-id">
-                    <input aria-label="Option label" bind:value={choice.label} placeholder="Player-facing label">
+                    <div class="choice-row-heading">
+                      <strong>OPTION {index + 1}</strong>
+                      <button
+                        type="button"
+                        aria-label={`Remove option ${index + 1}`}
+                        disabled={(selectedNode.choices?.length ?? 0) <= 2}
+                        on:click={() => removeChoice(index)}
+                      >× Remove</button>
+                    </div>
+                    <label>
+                      <span>Internal option ID</span>
+                      <input bind:value={choice.id} placeholder="option-id">
+                    </label>
+                    <label>
+                      <span>Button text</span>
+                      <input bind:value={choice.label} placeholder="Player-facing label">
+                    </label>
                     <label class="choice-disabled-toggle">
                       <input
                         type="checkbox"
@@ -3426,11 +3652,14 @@
                     <label>
                       <span>Player mode</span>
                       <select bind:value={choice.playerMode}>
-                        <option value={undefined}>Keep current mode</option>
+                        <option value="">Keep current mode</option>
                         <option value="singleplayer">Set 1 player</option>
                         <option value="multiplayer">Set 2 players</option>
                       </select>
                     </label>
+                    <p class="choice-field-help">
+                      Keep current mode follows this option normally. The other values switch the active session to that player count and open its map.
+                    </p>
                     <label class="choice-disabled-toggle">
                       <input
                         type="checkbox"
@@ -3467,16 +3696,11 @@
                       </p>
                     {:else}
                       <div class="choice-route">
+                        <span>Destination</span>
                         <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
                         <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
                       </div>
                     {/if}
-                    <button
-                      type="button"
-                      aria-label={`Remove option ${index + 1}`}
-                      disabled={(selectedNode.choices?.length ?? 0) <= 2}
-                      on:click={() => removeChoice(index)}
-                    >×</button>
                   </div>
                 {/each}
               </div>
@@ -3484,13 +3708,47 @@
 
             {#if selectedNode.type === 'screen-effect'}
               <label for="screen-effect-type">Terminal effect</label>
-              <select id="screen-effect-type" bind:value={selectedNode.screenEffect}>
+              <select id="screen-effect-type" value={selectedNode.screenEffect} on:change={setScreenEffectType}>
                 <option value="shake">Screen shake</option>
                 <option value="blink">Terminal blink</option>
+                <option value="mirror">Mirror terminal</option>
+                <option value="spin">Spin terminal</option>
+                <option value="glow">Pulse glow</option>
+                <option value="scan">Scanner bar</option>
               </select>
+              {#if selectedNode.screenEffect === 'mirror'}
+                <label for="mirror-axis">Mirror axis</label>
+                <select id="mirror-axis" bind:value={selectedNode.mirrorAxis}>
+                  <option value="horizontal">Read backwards</option>
+                  <option value="vertical">Flip upside down</option>
+                  <option value="both">Flip both axes</option>
+                </select>
+              {/if}
+              {#if selectedNode.screenEffect === 'spin'}
+                <label for="spin-direction">Spin direction</label>
+                <select id="spin-direction" bind:value={selectedNode.spinDirection}>
+                  <option value="clockwise">Clockwise</option>
+                  <option value="counterclockwise">Counterclockwise</option>
+                </select>
+              {/if}
+              {#if ['glow', 'scan'].includes(selectedNode.screenEffect)}
+                <label class="image-color-control" for="screen-effect-color">
+                  <span>Effect color</span>
+                  <input id="screen-effect-color" type="color" bind:value={selectedNode.effectColor}>
+                </label>
+              {/if}
+              {#if selectedNode.screenEffect === 'scan'}
+                <label for="scan-direction">Scan direction</label>
+                <select id="scan-direction" bind:value={selectedNode.scanDirection}>
+                  <option value="left-to-right">Left to right</option>
+                  <option value="right-to-left">Right to left</option>
+                  <option value="top-to-bottom">Top to bottom</option>
+                  <option value="bottom-to-top">Bottom to top</option>
+                </select>
+              {/if}
               <div class="field-grid">
                 <div>
-                  <label for="screen-effect-duration">Seconds per trigger</label>
+                  <label for="screen-effect-duration">Speed in seconds</label>
                   <input
                     id="screen-effect-duration"
                     type="number"
@@ -3501,7 +3759,7 @@
                   >
                 </div>
                 <div>
-                  <label for="screen-effect-iterations">Trigger count</label>
+                  <label for="screen-effect-iterations">Trigger / spin count</label>
                   <input
                     id="screen-effect-iterations"
                     type="number"
@@ -3512,8 +3770,12 @@
                   >
                 </div>
               </div>
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.effectLoop}>
+                Loop until the story moves to the next node
+              </label>
               <p class="inspector-help">
-                The effect plays for the chosen duration and repeat count when its host node becomes active.
+                Different terminal effects attached to the same host stack together. The same effect type can only be attached once.
               </p>
             {/if}
 
@@ -3526,8 +3788,10 @@
                 <option value="adjust-stat">Adjust stat</option>
                 <option value="adjust-relationship">Adjust relationship</option>
                 <option value="discover-character">Discover character</option>
-                <option value="install-mod">Install neuro mod</option>
-                <option value="remove-mod">Remove neuro mod</option>
+                {#if activeStoryMap === 'multiplayer'}
+                  <option value="install-mod">Install multiplayer neuro mod</option>
+                  <option value="remove-mod">Remove multiplayer neuro mod</option>
+                {/if}
               </select>
               <label for="effect-key">Item, flag, stat, relationship, character, or mod ID</label>
               <input id="effect-key" bind:value={selectedNode.effects[0].key}>
@@ -3641,9 +3905,13 @@
             {/if}
 
             {#if selectedNode.type === 'background'}
-              <label for="background-source">Background image path</label>
-              <input id="background-source" bind:value={selectedNode.background} placeholder="/backgrounds/location.webp">
-              <p class="inspector-help">The background is displayed while the attached host scene is active.</p>
+              <label for="background-theme">Terminal color theme</label>
+              <select id="background-theme" bind:value={selectedNode.backgroundTheme}>
+                {#each terminalThemes as theme}
+                  <option value={theme}>{theme[0].toUpperCase() + theme.slice(1)}</option>
+                {/each}
+              </select>
+              <p class="inspector-help">The premade terminal palette is applied while the attached host scene is active.</p>
             {/if}
 
             {#if selectedNode.type === 'music'}
@@ -3727,7 +3995,7 @@
 
             {#if selectedNode.type === 'minigame'}
               <label for="minigame-id">Minigame</label>
-              <select id="minigame-id" bind:value={selectedNode.minigameId}>
+              <select id="minigame-id" value={selectedNode.minigameId} on:change={setMinigameId}>
                 <option value="netrunners">NetRunners</option>
                 <option value="billywig">Billywig</option>
                 <option value="pigz">Pigz</option>
@@ -3740,20 +4008,25 @@
                 <option value="drone-relay">Drone Relay</option>
               </select>
               <p class="inspector-help">
-                <strong>Finished</strong> means the round reached a normal result,
-                whether the players won or lost. <strong>Exited early</strong> means
-                someone left before the round produced a result.
+                Route wins, losses, supported draws, and early exits independently.
+                Outcomes are evaluated from Player 1’s perspective for shared multiplayer nodes.
               </p>
-              <div class="route-label">Finished game destination</div>
-              <div class="route-control">
-                <button class="route-node-link" type="button" disabled={!selectedNode.resultNext.completed} on:click={() => selectConnectedNode(selectedNode.resultNext.completed)}>{routeLabel(selectedNode, 'resultNext.completed')}</button>
-                <button type="button" on:click={() => startLinkSelection('resultNext.completed', 'Finished game destination')}>Select node</button>
-              </div>
-              <div class="route-label">Exited early destination</div>
-              <div class="route-control">
-                <button class="route-node-link" type="button" disabled={!selectedNode.resultNext.cancelled} on:click={() => selectConnectedNode(selectedNode.resultNext.cancelled)}>{routeLabel(selectedNode, 'resultNext.cancelled')}</button>
-                <button type="button" on:click={() => startLinkSelection('resultNext.cancelled', 'Exited early destination')}>Select node</button>
-              </div>
+              {#each minigameOutcomeIds(selectedNode.minigameId) as outcome}
+                {@const routeField = `resultNext.${outcome}`}
+                <div class="route-label">{routeFieldLabel(selectedNode, routeField)} destination</div>
+                <div class="route-control">
+                  <button
+                    class="route-node-link"
+                    type="button"
+                    disabled={!selectedNode.resultNext[outcome]}
+                    on:click={() => selectConnectedNode(selectedNode.resultNext[outcome])}
+                  >{routeLabel(selectedNode, routeField)}</button>
+                  <button type="button" on:click={() => startLinkSelection(routeField, `${routeFieldLabel(selectedNode, routeField)} destination`)}>Select node</button>
+                  {#if selectedNode.resultNext[outcome]}
+                    <button type="button" aria-label={`Clear ${outcome} destination`} on:click={() => clearRoute(selectedNode, routeField)}>×</button>
+                  {/if}
+                </div>
+              {/each}
             {/if}
 
             <div class="inspector-delete-zone">
@@ -3771,6 +4044,7 @@
         <div
           class="node-picker-backdrop"
           role="presentation"
+          on:click|self={closeNodePicker}
         >
           <section
             class="node-picker"
@@ -3786,7 +4060,7 @@
               <button type="button" aria-label="Close node picker" on:click={closeNodePicker}>×</button>
             </header>
 
-            {#if copiedNode}
+            {#if copiedNode && (!insertionTarget.companionOnly || isCompanionNode(copiedNode))}
               <button class="paste-node-button" type="button" on:click={pasteNode}>
                 <span>PASTE COPIED NODE</span>
                 <strong>{displayNodeName(copiedNode)}</strong>
@@ -3819,7 +4093,7 @@
             {/if}
 
             {#each tutorialNodeSections as section}
-              {@const visibleNodes = section.nodes.filter((node) => nodeAvailableForMap(node.type) && nodeMatchesSearch(node))}
+              {@const visibleNodes = section.nodes.filter((node) => nodeAvailableForMap(node.type) && nodeMatchesSearch(node, nodeSearch))}
               {#if visibleNodes.length > 0}
                 <p class="node-group-label">{section.title}</p>
                 <p class="node-group-description">{section.description}</p>
@@ -4396,7 +4670,7 @@
     height: calc(100% - 38px);
 
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
   }
 
   .play-mode-fieldset {
@@ -4576,6 +4850,10 @@
     }
   }
 
+  .mobile-toolbar-toggle {
+    display: none;
+  }
+
   .toolbar-actions {
     display: flex !important;
     grid-template-columns: none !important;
@@ -4751,12 +5029,16 @@
 
   // A solo graph has one usable lane, so keep it visually balanced on desktop.
   .flow-lanes.singleplayer-map {
-    width: 100%;
+    width: max-content;
     min-width: 100%;
-    justify-content: center;
+    justify-content: flex-start;
 
     .singleplayer-disabled {
       display: none;
+    }
+
+    .flow-lane {
+      margin-inline: auto;
     }
   }
 
@@ -4789,6 +5071,7 @@
   }
 
   .flow-lane {
+    flex: 0 0 auto;
     width: calc(
       (var(--lane-columns, 1) * 258px)
       + ((var(--lane-columns, 1) - 1) * 12px)
@@ -5345,12 +5628,6 @@
       font-size: 0.64rem;
     }
 
-    button:nth-child(-n + 2) {
-      font-size: 1.35rem;
-      font-weight: 900;
-      line-height: 1;
-    }
-
   }
 
   .inspector-heading p {
@@ -5396,15 +5673,60 @@
   }
 
   .choice-row {
-    margin-top: 8px;
+    margin-top: 12px;
+    padding: 12px;
+    background: #080f1b;
+    border: 1px solid #2c3b54;
 
     display: grid;
-    grid-template-columns: 0.8fr 1fr;
-    gap: 5px;
+    grid-template-columns: 1fr;
+    gap: 8px;
 
-    input {
+    > label {
+      color: #6dc2fb;
+      font-size: 0.66rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+
+      display: grid;
+      gap: 5px;
+    }
+
+    input,
+    select {
+      width: 100%;
       min-width: 0;
     }
+  }
+
+  .choice-row-heading {
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #334155;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+
+    strong {
+      color: #c4b5fd;
+      font-size: 0.68rem;
+      letter-spacing: 1px;
+    }
+
+    button {
+      min-height: 30px;
+      padding: 4px 8px;
+      color: #ffb4aa;
+      border-color: #71362e;
+    }
+  }
+
+  .choice-field-help {
+    margin: -2px 0 2px;
+    color: #8893a2;
+    font-size: 0.66rem;
+    line-height: 1.45;
   }
 
   .choice-disabled-toggle {
@@ -5441,11 +5763,17 @@
   }
 
   .choice-route {
-    grid-column: 1 / -1;
-
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 5px;
+
+    > span {
+      grid-column: 1 / -1;
+      color: #6dc2fb;
+      font-size: 0.66rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
 
     .route-node-link {
       padding: 9px;
@@ -5559,7 +5887,13 @@
     box-shadow: 0 0 48px #02fbfb33;
 
     > header {
+      position: sticky;
+      z-index: 3;
+      top: -22px;
       margin-bottom: 20px;
+      padding: 22px 0 12px;
+      background: #09111ef5;
+      border-bottom: 1px solid #243750;
 
       display: flex;
       justify-content: space-between;
@@ -6335,6 +6669,17 @@
       .back-button {
         width: fit-content;
       }
+    }
+
+    .mobile-toolbar-toggle {
+      width: 100%;
+      display: block;
+    }
+
+    .editor-toolbar.mobile-collapsed > :not(.mobile-toolbar-toggle),
+    .editor-toolbar.mobile-collapsed + .map-toolbar,
+    .editor-toolbar.mobile-collapsed + .map-toolbar + .graph-position-help {
+      display: none;
     }
 
     .toolbar-actions {

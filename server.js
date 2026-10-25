@@ -124,8 +124,10 @@ let pigzState = createPigzState();
 let traceRaceState = createTraceRaceState();
 let packetWarState = createPacketWarState();
 const arcadeSessions = createArcadeSessions();
+const storyArcadeSessions = createArcadeSessions();
 let billywigCompletionSceneId = null;
 const billywigFinishedPlayers = new Set();
+const billywigReportedOutcomes = {};
 let pigzCompletionSceneId = null;
 const pigzFinishedPlayers = new Set();
 const storyMinigameFinishedPlayers = {
@@ -895,6 +897,7 @@ io.on('connection', (socket) => {
       const campaignResult = completeActiveMinigame(campaignState, 'cancelled');
 
       if (campaignResult.ok) {
+        resetCompletedStoryMinigame('netrunners');
         io.emit('campaign:state', getCampaignSnapshot(campaignState));
       }
     }
@@ -926,16 +929,23 @@ io.on('connection', (socket) => {
       io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
 
       if (!wantsRematch && campaignState.activeMinigame?.id === 'netrunners') {
-        const campaignResult = completeActiveMinigame(campaignState, 'completed');
+        const campaignResult = completeActiveMinigame(
+          campaignState,
+          resolveStoryMinigameOutcome('netrunners')
+        );
 
         if (campaignResult.ok) {
+          resetCompletedStoryMinigame('netrunners');
           io.emit('campaign:state', getCampaignSnapshot(campaignState));
         }
       }
     }
   });
 
-  socket.on('billywig:complete', (acknowledge = () => {}) => {
+  socket.on('billywig:complete', (outcome, callback = () => {}) => {
+    const acknowledge = typeof outcome === 'function' ? outcome : callback;
+    const reportedOutcome = typeof outcome === 'string' ? outcome : '';
+
     if (campaignState.activeMinigame?.id !== 'billywig') {
       acknowledge({
         ok: false,
@@ -946,6 +956,7 @@ io.on('connection', (socket) => {
 
     synchronizeBillywigCompletionScene();
     billywigFinishedPlayers.add(playerId);
+    billywigReportedOutcomes[playerId] = reportedOutcome;
 
     const requiredPlayers = campaignState.sessionMode === 'singleplayer' ? 1 : 2;
 
@@ -957,7 +968,14 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = completeActiveMinigame(campaignState, 'completed');
+    const result = completeActiveMinigame(
+      campaignState,
+      normalizeStoryOutcome(
+        billywigReportedOutcomes[
+          campaignState.activeMinigame?.perspectivePlayerId ?? 'p1'
+        ] ?? reportedOutcome
+      )
+    );
     acknowledge(result);
 
     if (result.ok) {
@@ -1065,11 +1083,15 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = completeActiveMinigame(campaignState, 'completed');
+    const result = completeActiveMinigame(
+      campaignState,
+      resolveStoryMinigameOutcome('pigz')
+    );
     acknowledge(result);
 
     if (result.ok) {
       resetPigzCompletion();
+      resetCompletedStoryMinigame('pigz');
       io.emit('campaign:state', getCampaignSnapshot(campaignState));
     }
   });
@@ -1088,6 +1110,7 @@ io.on('connection', (socket) => {
 
     if (result.ok) {
       resetPigzCompletion();
+      resetCompletedStoryMinigame('pigz');
       io.emit('campaign:state', getCampaignSnapshot(campaignState));
     }
   });
@@ -1200,9 +1223,12 @@ io.on('connection', (socket) => {
     cancelStoryMinigame('packet-war', acknowledge);
   });
 
-  socket.on('arcade:join', (gameId, mode, acknowledge = () => {}) => {
+  socket.on('arcade:join', (gameId, mode, scope = 'main', callback = () => {}) => {
+    const acknowledge = typeof scope === 'function' ? scope : callback;
+    const sessionScope = scope === 'story' ? 'story' : 'main';
+    const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
     const result = joinArcadeGame(
-      arcadeSessions,
+      sessions,
       gameId,
       playerId,
       campaignState.players[playerId].name,
@@ -1211,18 +1237,22 @@ io.on('connection', (socket) => {
     acknowledge(result);
 
     if (result.ok) {
-      broadcastArcadeState(gameId);
+      broadcastArcadeState(gameId, sessionScope);
     }
   });
 
-  socket.on('arcade:leave', (gameId) => {
-    leaveArcadeGame(arcadeSessions, gameId, playerId);
-    broadcastArcadeState(gameId);
+  socket.on('arcade:leave', (gameId, scope = 'main') => {
+    const sessionScope = scope === 'story' ? 'story' : 'main';
+    const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
+    leaveArcadeGame(sessions, gameId, playerId);
+    broadcastArcadeState(gameId, sessionScope);
   });
 
   socket.on('arcade:action', (request, acknowledge = () => {}) => {
+    const sessionScope = request?.scope === 'story' ? 'story' : 'main';
+    const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
     const result = performArcadeAction(
-      arcadeSessions,
+      sessions,
       request?.game,
       playerId,
       request?.action ?? {}
@@ -1230,18 +1260,23 @@ io.on('connection', (socket) => {
     acknowledge(result);
 
     if (result.ok) {
-      broadcastArcadeState(request.game);
+      broadcastArcadeState(request.game, sessionScope);
     }
   });
 
-  socket.on('arcade:restart', (gameId) => {
-    restartArcadeGame(arcadeSessions, gameId);
-    broadcastArcadeState(gameId);
+  socket.on('arcade:restart', (gameId, scope = 'main') => {
+    const sessionScope = scope === 'story' ? 'story' : 'main';
+    const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
+    restartArcadeGame(sessions, gameId);
+    broadcastArcadeState(gameId, sessionScope);
   });
 
-  socket.on('arcade:rematch', (gameId, wantsRematch, acknowledge = () => {}) => {
+  socket.on('arcade:rematch', (gameId, wantsRematch, scope = 'main', callback = () => {}) => {
+    const acknowledge = typeof scope === 'function' ? scope : callback;
+    const sessionScope = scope === 'story' ? 'story' : 'main';
+    const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
     const result = voteArcadeRematch(
-      arcadeSessions,
+      sessions,
       gameId,
       playerId,
       wantsRematch
@@ -1249,12 +1284,14 @@ io.on('connection', (socket) => {
     acknowledge(result);
 
     if (result.ok) {
-      broadcastArcadeState(gameId);
+      broadcastArcadeState(gameId, sessionScope);
     }
   });
 
-  socket.on('arcade:story-complete', (gameId, acknowledge = () => {}) => {
-    completeStoryMinigame(gameId, playerId, acknowledge);
+  socket.on('arcade:story-complete', (gameId, outcome, callback = () => {}) => {
+    const acknowledge = typeof outcome === 'function' ? outcome : callback;
+    const reportedOutcome = typeof outcome === 'string' ? outcome : '';
+    completeStoryMinigame(gameId, playerId, acknowledge, reportedOutcome);
   });
 
   socket.on('arcade:story-cancel', (gameId, acknowledge = () => {}) => {
@@ -1278,7 +1315,9 @@ io.on('connection', (socket) => {
 
     for (const gameId of Object.keys(arcadeSessions)) {
       leaveArcadeGame(arcadeSessions, gameId, playerId);
-      broadcastArcadeState(gameId);
+      leaveArcadeGame(storyArcadeSessions, gameId, playerId);
+      broadcastArcadeState(gameId, 'main');
+      broadcastArcadeState(gameId, 'story');
     }
 
     if (campaignState.activeMinigame?.id === 'netrunners') {
@@ -1446,18 +1485,26 @@ function emitAllArcadeStates(socket) {
   for (const gameId of Object.keys(arcadeSessions)) {
     socket.emit('arcade:state', {
       game: gameId,
-      state: getArcadeSnapshot(arcadeSessions, gameId, playerId)
+      state: getArcadeSnapshot(arcadeSessions, gameId, playerId),
+      scope: 'main'
+    });
+    socket.emit('arcade:state', {
+      game: gameId,
+      state: getArcadeSnapshot(storyArcadeSessions, gameId, playerId),
+      scope: 'story'
     });
   }
 }
 
-function broadcastArcadeState(gameId) {
+function broadcastArcadeState(gameId, scope = 'main') {
+  const sessions = scope === 'story' ? storyArcadeSessions : arcadeSessions;
+
   for (const playerId of ['p1', 'p2']) {
     const socketId = playerSlots[playerId].socketId;
-    const state = getArcadeSnapshot(arcadeSessions, gameId, playerId);
+    const state = getArcadeSnapshot(sessions, gameId, playerId);
 
     if (socketId && state) {
-      io.to(socketId).emit('arcade:state', { game: gameId, state });
+      io.to(socketId).emit('arcade:state', { game: gameId, state, scope });
     }
   }
 }
@@ -1642,12 +1689,16 @@ function synchronizeBillywigCompletionScene() {
   if (billywigCompletionSceneId !== activeSceneId) {
     billywigCompletionSceneId = activeSceneId;
     billywigFinishedPlayers.clear();
+    delete billywigReportedOutcomes.p1;
+    delete billywigReportedOutcomes.p2;
   }
 }
 
 function resetBillywigCompletion() {
   billywigCompletionSceneId = null;
   billywigFinishedPlayers.clear();
+  delete billywigReportedOutcomes.p1;
+  delete billywigReportedOutcomes.p2;
 }
 
 function synchronizePigzCompletionScene() {
@@ -1664,7 +1715,7 @@ function resetPigzCompletion() {
   pigzFinishedPlayers.clear();
 }
 
-function completeStoryMinigame(minigameId, playerId, acknowledge) {
+function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcome = '') {
   if (campaignState.activeMinigame?.id !== minigameId) {
     acknowledge({
       ok: false,
@@ -1693,12 +1744,18 @@ function completeStoryMinigame(minigameId, playerId, acknowledge) {
     return;
   }
 
-  const result = completeActiveMinigame(campaignState, 'completed');
+  const result = completeActiveMinigame(
+    campaignState,
+    reportedOutcome
+      ? normalizeStoryOutcome(reportedOutcome)
+      : resolveStoryMinigameOutcome(minigameId)
+  );
   acknowledge(result);
 
   if (result.ok) {
     finishedPlayers.clear();
     storyMinigameCompletionScenes[minigameId] = null;
+    resetCompletedStoryMinigame(minigameId);
     io.emit('campaign:state', getCampaignSnapshot(campaignState));
   }
 }
@@ -1718,6 +1775,78 @@ function cancelStoryMinigame(minigameId, acknowledge) {
   if (result.ok) {
     storyMinigameFinishedPlayers[minigameId].clear();
     storyMinigameCompletionScenes[minigameId] = null;
+    resetCompletedStoryMinigame(minigameId);
     io.emit('campaign:state', getCampaignSnapshot(campaignState));
+  }
+}
+
+function normalizeStoryOutcome(outcome) {
+  if (['tie', 'draw'].includes(outcome)) {
+    return 'draw';
+  }
+
+  if (['win', 'won', 'perfect', 'six-card'].includes(outcome)) {
+    return 'won';
+  }
+
+  return 'lost';
+}
+
+function resolveStoryMinigameOutcome(minigameId) {
+  const perspectivePlayerId = campaignState.activeMinigame?.perspectivePlayerId ?? 'p1';
+  let winner = null;
+
+  if (minigameId === 'netrunners') {
+    return netRunnersState.players[perspectivePlayerId].colorBet === netRunnersState.winner
+      ? 'won'
+      : 'lost';
+  }
+
+  if (minigameId === 'pigz') {
+    winner = pigzState.winner;
+  } else if (minigameId === 'trace-race') {
+    winner = traceRaceState.winner;
+  } else if (minigameId === 'packet-war') {
+    winner = packetWarState.winner;
+  } else {
+    winner = storyArcadeSessions[minigameId]?.winner ?? null;
+  }
+
+  if (winner === 'tie') {
+    return 'draw';
+  }
+
+  if (winner === perspectivePlayerId || winner === 'players') {
+    return 'won';
+  }
+
+  return 'lost';
+}
+
+function resetCompletedStoryMinigame(minigameId) {
+  for (const participantId of ['p1', 'p2']) {
+    if (minigameId === 'netrunners') {
+      leaveNetRunners(netRunnersState, participantId);
+    } else if (minigameId === 'pigz') {
+      leavePigz(pigzState, participantId);
+    } else if (minigameId === 'trace-race') {
+      leaveTraceRace(traceRaceState, participantId);
+    } else if (minigameId === 'packet-war') {
+      leavePacketWar(packetWarState, participantId);
+    } else if (storyArcadeSessions[minigameId]) {
+      leaveArcadeGame(storyArcadeSessions, minigameId, participantId);
+    }
+  }
+
+  if (minigameId === 'netrunners') {
+    io.emit('netrunners:state', getNetRunnersSnapshot(netRunnersState));
+  } else if (minigameId === 'pigz') {
+    io.emit('pigz:state', getPigzSnapshot(pigzState));
+  } else if (minigameId === 'trace-race') {
+    broadcastTraceRaceState();
+  } else if (minigameId === 'packet-war') {
+    broadcastPacketWarState();
+  } else if (storyArcadeSessions[minigameId]) {
+    broadcastArcadeState(minigameId, 'story');
   }
 }

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import location from '../stores/location';
-  import { arcadeStates } from '../stores/arcade';
+  import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { socket } from '../socket';
 
   type Screen = 'menu' | 'instructions' | 'game';
@@ -18,14 +18,18 @@
   let error = '';
   let waitingForStoryPartner = false;
 
-  $: state = $arcadeStates['firewall-auction'] ?? null;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'firewall-auction'
+    && $storyMinigameView;
+  $: arcadeScope = launchedFromStory ? 'story' : 'main';
+  $: state = launchedFromStory
+    ? $storyArcadeStates['firewall-auction'] ?? null
+    : $arcadeStates['firewall-auction'] ?? null;
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: availablePower = state?.power?.[playerId] ?? 0;
   $: actionCost = attack + defense + (heal ? 5 : 0);
   $: reservedPower = Math.max(0, availablePower - actionCost);
   $: submitted = Boolean(state?.submitted?.[playerId]);
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'firewall-auction';
   $: setMinigameSessionActive('firewall-auction', screen === 'game' && Boolean(state?.participants[playerId]));
   $: if (launchedFromStory && screen === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
@@ -42,7 +46,7 @@
   // The server owns both solo CPU decisions and multiplayer hidden bids.
   onDestroy(() => {
     if (screen === 'game') {
-      socket.emit('arcade:leave', 'firewall-auction');
+      socket.emit('arcade:leave', 'firewall-auction', arcadeScope);
     }
   });
 
@@ -57,7 +61,7 @@
     heal = false;
     error = '';
     screen = 'game';
-    socket.emit('arcade:join', 'firewall-auction', pendingMode, handleResult);
+    socket.emit('arcade:join', 'firewall-auction', pendingMode, arcadeScope, handleResult);
   }
 
   function setAttack(value: number): void {
@@ -93,6 +97,7 @@
       'arcade:action',
       {
         game: 'firewall-auction',
+        scope: arcadeScope,
         action: { type: 'allocate', attack, defense, heal }
       },
       (result: { ok: boolean; error?: string }) => {
@@ -112,17 +117,23 @@
     defense = 0;
     heal = false;
     waitingForStoryPartner = false;
-    socket.emit('arcade:restart', 'firewall-auction');
+    socket.emit('arcade:restart', 'firewall-auction', arcadeScope);
   }
 
   function exitGame(): void {
-    socket.emit('arcade:leave', 'firewall-auction');
+    if (launchedFromStory) {
+      socket.emit('arcade:story-cancel', 'firewall-auction', handleResult);
+      screen = 'menu';
+      return;
+    }
+
+    socket.emit('arcade:leave', 'firewall-auction', arcadeScope);
     screen = 'menu';
     location.set('minigames');
   }
 
   function returnToMenu(): void {
-    socket.emit('arcade:leave', 'firewall-auction');
+    socket.emit('arcade:leave', 'firewall-auction', arcadeScope);
     attack = 0;
     defense = 0;
     heal = false;
@@ -149,7 +160,7 @@
 <section class="firewall-auction" class:hide={$location !== 'firewall-auction'}>
   <header>
     <span>DEJAVU://BREACH</span>
-    <button class="exit" on:click={exitGame}>EXIT</button>
+    <button class="exit" on:click={exitGame}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}</button>
   </header>
 
   {#if screen === 'menu'}

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import location from '../stores/location';
-  import { arcadeStates, type ArcadeState } from '../stores/arcade';
+  import { arcadeStates, storyArcadeStates, type ArcadeState } from '../stores/arcade';
   import { sessionState } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -43,7 +43,12 @@
   let wagerArmed = false;
   let lastMultiplayerStatus = '';
 
-  $: serverState = $arcadeStates['lo-hi'] ?? null;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'lo-hi'
+    && $storyMinigameView;
+  $: arcadeScope = launchedFromStory ? 'story' : 'main';
+  $: serverState = launchedFromStory
+    ? $storyArcadeStates['lo-hi'] ?? null
+    : $arcadeStates['lo-hi'] ?? null;
   $: state = mode === 'solo' ? localState : serverState;
   $: playerId = $sessionState.playerId ?? 'p1';
   $: canAct = state?.status === 'playing'
@@ -53,7 +58,6 @@
     ? Boolean(state.rematchVotes?.[playerId])
     : false;
   $: liveFaction = factionFor(state?.currentCard?.suit);
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'lo-hi';
   $: setMinigameSessionActive(
     'lo-hi',
     (mode === 'solo' || mode === 'multi') && !state?.departureNotice
@@ -93,7 +97,7 @@
 
   onDestroy(() => {
     if (mode === 'multi') {
-      socket.emit('arcade:leave', 'lo-hi');
+      socket.emit('arcade:leave', 'lo-hi', arcadeScope);
     }
   });
 
@@ -145,12 +149,12 @@
     }
 
     mode = 'multi';
-    socket.emit('arcade:join', 'lo-hi', 'versus', handleResult);
+    socket.emit('arcade:join', 'lo-hi', 'versus', arcadeScope, handleResult);
   }
 
   function returnToMenu(): void {
     if (mode === 'multi') {
-      socket.emit('arcade:leave', 'lo-hi');
+      socket.emit('arcade:leave', 'lo-hi', arcadeScope);
     }
 
     mode = 'menu';
@@ -186,7 +190,7 @@
       return;
     }
 
-    socket.emit('arcade:action', { game: 'lo-hi', action }, handleResult);
+    socket.emit('arcade:action', { game: 'lo-hi', action, scope: arcadeScope }, handleResult);
   }
 
   function hold(): void {
@@ -195,7 +199,7 @@
     if (mode === 'solo') {
       applyLocalAction('p1', action);
     } else {
-      socket.emit('arcade:action', { game: 'lo-hi', action }, handleResult);
+      socket.emit('arcade:action', { game: 'lo-hi', action, scope: arcadeScope }, handleResult);
     }
   }
 
@@ -293,7 +297,7 @@
     }
 
     if (state?.status === 'finished') {
-      socket.emit('arcade:rematch', 'lo-hi', true, handleResult);
+      socket.emit('arcade:rematch', 'lo-hi', true, arcadeScope, handleResult);
       return;
     }
 
@@ -302,7 +306,7 @@
   }
 
   function confirmMultiplayerReset(): void {
-    socket.emit('arcade:leave', 'lo-hi');
+    socket.emit('arcade:leave', 'lo-hi', arcadeScope);
     showResetConfirmation = false;
     mode = 'menu';
 
@@ -312,6 +316,12 @@
   }
 
   function requestExit(): void {
+    if (launchedFromStory) {
+      socket.emit('arcade:story-cancel', 'lo-hi', handleResult);
+      mode = 'menu';
+      return;
+    }
+
     if (mode === 'multi') {
       resetShouldExit = true;
       showResetConfirmation = true;
@@ -344,9 +354,18 @@
   }
 
   function returnToStory(): void {
+    const reportedOutcome = $campaignState?.sessionMode === 'singleplayer'
+      ? state?.winner === 'tie'
+        ? 'draw'
+        : state?.winner === playerId
+          ? 'won'
+          : 'lost'
+      : '';
+
     socket.emit(
       'arcade:story-complete',
       'lo-hi',
+      reportedOutcome,
       (result: { ok: boolean; error?: string; waitingForPartner?: boolean }) => {
         error = result.ok ? '' : result.error ?? 'Could not return to the story.';
         waitingForStoryPartner = Boolean(result.waitingForPartner);
@@ -440,7 +459,7 @@
         <button type="button" on:click={openHelp}>HOW TO PLAY</button>
         <button type="button" on:click={restart}>RESET</button>
       {/if}
-      <button class="exit-button" type="button" on:click={requestExit}>EXIT</button>
+      <button class="exit-button" type="button" on:click={requestExit}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}</button>
     </div>
   </header>
 

@@ -55,6 +55,10 @@ export function createCampaignState(story = null, options = {}) {
       p1: '',
       p2: ''
     },
+    lastScene: {
+      p1: '',
+      p2: ''
+    },
     players: {
       p1: createPlayerState(playerCharacters.p1, 'Nova', DEFAULT_STATS.p1),
       p2: createPlayerState(playerCharacters.p2, 'Avona', DEFAULT_STATS.p2)
@@ -167,6 +171,10 @@ export function restoreCampaignState(candidate) {
     characters: candidate.characters ?? [],
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
+    lastScene: candidate.lastScene ?? {
+      p1: candidate.currentScene?.p1 ?? '',
+      p2: candidate.currentScene?.p2 ?? ''
+    },
     pendingDice: candidate.pendingDice ?? {},
     appliedCompanions: candidate.appliedCompanions ?? {
       p1: [],
@@ -296,6 +304,7 @@ function handleMinigameLaunch(state, playerId, scene, action) {
     state.activeMinigame = {
       id: scene.minigameId,
       sceneId: scene.id,
+      perspectivePlayerId: scene.audience === 'p2' ? 'p2' : 'p1',
       startedAt: new Date().toISOString()
     };
   }
@@ -309,7 +318,8 @@ export function completeActiveMinigame(state, resultId) {
   }
 
   const scene = getScene(state, state.activeMinigame.sceneId);
-  const nextSceneId = scene?.resultNext?.[resultId];
+  const nextSceneId = scene?.resultNext?.[resultId]
+    ?? (resultId !== 'cancelled' ? scene?.resultNext?.completed : undefined);
 
   state.decisions.push({
     type: 'minigame',
@@ -514,7 +524,11 @@ function handleDiceCheck(state, playerId, scene, action) {
   const die = scene.die ?? 20;
   const roll = Math.floor(Math.random() * die) + 1;
   const base = Number(state.players[playerId].stats[scene.stat] ?? 0);
-  const luck = Number(state.players[playerId].stats.luck ?? 0);
+  // A luck check already uses luck as its base stat, so it must not receive
+  // the same modifier a second time.
+  const luck = scene.stat === 'luck'
+    ? 0
+    : Number(state.players[playerId].stats.luck ?? 0);
   const total = roll + base + luck;
   const successful = total >= (scene.threshold ?? 0);
 
@@ -593,7 +607,7 @@ function handleVote(state, playerId, scene, action) {
       state,
       participantId,
       scene,
-      `> ${selectedChoice.label}${votes.p1 !== votes.p2 ? ' (randomly resolved)' : ''}`
+      `> ${selectedChoice.label}${votes.p1 !== votes.p2 ? ' (randomly selected)' : ''}`
     );
   }
 
@@ -669,6 +683,11 @@ function setPlayerScene(state, playerId, nextSceneId) {
     (candidate) => candidate !== playerId
   );
   state.currentScene[playerId] = nextScene.id;
+  state.lastScene ??= {
+    p1: '',
+    p2: ''
+  };
+  state.lastScene[playerId] = nextScene.id;
   applyAttachedCompanions(state, playerId, nextScene);
   appendSceneImages(state, playerId, nextScene);
   delete state.deadlines[playerId];
@@ -721,7 +740,25 @@ function applyAttachedCompanions(state, playerId, scene) {
       continue;
     }
 
-    applyEffects(state, playerId, companion.effects ?? []);
+    const allowedEffects = (companion.effects ?? []).filter((effect) => {
+      return state.sessionMode !== 'singleplayer'
+        || !['install-mod', 'remove-mod'].includes(effect.type);
+    });
+
+    applyEffects(state, playerId, allowedEffects);
+
+    for (const effect of allowedEffects) {
+      const announcement = effectAnnouncement(effect, companion.text);
+
+      if (announcement) {
+        appendTerminalEntry(state, playerId, {
+          sceneId: companion.id,
+          speaker: 'SYSTEM',
+          text: announcement
+        });
+      }
+    }
+
     applied.add(companion.id);
   }
 
@@ -732,12 +769,35 @@ function applyAttachedCompanions(state, playerId, scene) {
   state.appliedCompanions[playerId] = [...applied];
 }
 
+function effectAnnouncement(effect, authoredText) {
+  const customText = String(authoredText ?? '').trim();
+
+  if (customText && customText !== 'You acquired a new item.') {
+    return customText;
+  }
+
+  switch (effect.type) {
+    case 'add-item':
+      return `Acquired item: ${effect.key}.`;
+    case 'discover-character':
+      return `Character added to your records: ${effect.key}.`;
+    case 'install-mod':
+      return `Installed mod: ${effect.key}.`;
+    default:
+      return '';
+  }
+}
+
 function resolveAutomaticNodes(state, playerId, startingSceneId) {
   let scene = getScene(state, startingSceneId);
   let traversedNodes = 0;
 
   // Automatic nodes alter state or routing without ever becoming an interactive terminal scene.
-  while (scene?.type === 'condition' || scene?.type === 'clear-terminal') {
+  while (
+    scene?.type === 'condition'
+    || scene?.type === 'clear-terminal'
+    || scene?.type === 'label'
+  ) {
     traversedNodes += 1;
 
     if (traversedNodes > 50) {
@@ -746,6 +806,13 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
 
     if (scene.type === 'clear-terminal') {
       state.terminalOutput[playerId] = [];
+      scene = getScene(state, scene.next);
+      continue;
+    }
+
+    // Labels are editor-only annotations. Older cartridges may still route
+    // through one, so skip it without rendering anything in the terminal.
+    if (scene.type === 'label') {
       scene = getScene(state, scene.next);
       continue;
     }
@@ -790,6 +857,13 @@ function choiceIsAvailable(state, playerId, choice) {
 }
 
 function markPlayerEnded(state, playerId) {
+  state.lastScene ??= {
+    p1: '',
+    p2: ''
+  };
+  state.lastScene[playerId] = state.currentScene[playerId]
+    || state.lastScene[playerId]
+    || '';
   state.endedPlayers ??= [];
   addUnique(state.endedPlayers, playerId);
   state.currentScene[playerId] = '';
@@ -879,8 +953,11 @@ function appendTerminalEntry(state, playerId, entry) {
 
 function formatDiceResult(result) {
   const outcome = result.successful ? 'SUCCESS' : 'FAILURE';
+  const luckSummary = result.luck > 0
+    ? ` + ${result.luck} luck`
+    : '';
 
-  return `> D${result.die}: ${result.roll} + ${result.base} ${result.stat} + ${result.luck} luck = ${result.total} / ${result.threshold} — ${outcome}`;
+  return `> D${result.die}: ${result.roll} + ${result.base} ${result.stat}${luckSummary} = ${result.total} / ${result.threshold} — ${outcome}`;
 }
 
 function setSharedScene(state, nextSceneId) {

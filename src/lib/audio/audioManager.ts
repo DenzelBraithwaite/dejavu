@@ -26,6 +26,7 @@ type ActiveAudio = {
 
 const activeMusic = new Map<string, ActiveAudio>();
 const activeSounds = new Map<string, ActiveAudio>();
+const pendingPlayback = new Set<HTMLAudioElement>();
 
 if (typeof window !== 'undefined') {
   audioSettings.subscribe((settings) => {
@@ -37,6 +38,11 @@ if (typeof window !== 'undefined') {
       updateTrackSettings(sound, settings.soundsVolume, settings.soundsEnabled);
     }
   });
+
+  // A story scene can arrive after the click that advanced into it. When a
+  // browser declines that delayed playback, retry on the player's next input.
+  window.addEventListener('pointerdown', retryPendingPlayback);
+  window.addEventListener('keydown', retryPendingPlayback);
 }
 
 export function applySceneAudio(sceneAudio: SceneAudio | SceneAudio[]): void {
@@ -80,6 +86,10 @@ export function playMusic(cue: SceneAudio): void {
   prepareTrack(track, settings.musicVolume, settings.musicEnabled, cue.fadeInSeconds ?? 0);
 
   track.element.addEventListener('ended', () => {
+    releaseTrack(activeMusic, id);
+  }, { once: true });
+
+  track.element.addEventListener('error', () => {
     releaseTrack(activeMusic, id);
   }, { once: true });
 }
@@ -253,17 +263,26 @@ function releaseTrack(collection: Map<string, ActiveAudio>, id: string): void {
   }
 
   track.element.pause();
+  pendingPlayback.delete(track.element);
   track.element.removeAttribute('src');
   track.element.load();
   collection.delete(id);
 }
 
+function retryPendingPlayback(): void {
+  for (const audio of pendingPlayback) {
+    void safelyPlay(audio);
+  }
+}
+
 async function safelyPlay(audio: HTMLAudioElement): Promise<boolean> {
   try {
     await audio.play();
+    pendingPlayback.delete(audio);
     return true;
   } catch {
     // Browsers can defer playback until the player interacts with the page.
+    pendingPlayback.add(audio);
     return false;
   }
 }

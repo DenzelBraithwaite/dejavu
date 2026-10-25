@@ -6,7 +6,7 @@
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { pigzServerState } from '../stores/pigzSession';
   import { sessionState } from '../stores/session';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import WagerPanel from './WagerPanel.svelte';
 
   type Mode = 'singleplayer' | 'multiplayer';
@@ -45,7 +45,8 @@
   $: serverPlayer = playerId && $pigzServerState
     ? $pigzServerState.players[playerId]
     : null;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'pigz';
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'pigz'
+    && $storyMinigameView;
   $: activeBalance = mode === 'singleplayer'
     ? $netRunnersGameState.p1.money
     : serverPlayer?.money ?? 0;
@@ -449,7 +450,7 @@
         <p class="eyebrow">HIGH-STAKES DICE PROTOCOL</p>
         <h1 id="pigz-title">PIG<span>Z</span></h1>
       </div>
-      <button class="exit-button" type="button" on:click={exitGame}>EXIT</button>
+      <button class="exit-button" type="button" on:click={exitGame}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}</button>
     </div>
 
     {#if mode === 'singleplayer' && localPhase === 'menu'}

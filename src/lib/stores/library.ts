@@ -50,6 +50,7 @@ export type StoryNode = {
   imagePositionY?: number;
   imageBorderColor?: string;
   background?: string;
+  backgroundTheme?: 'blue' | 'red' | 'purple' | 'green' | 'amber' | 'pink' | 'cyan' | 'white';
   music?: string | null;
   sound?: string;
   stopMusic?: boolean;
@@ -62,9 +63,14 @@ export type StoryNode = {
   stopMusicIds?: string[];
   stopMusicLayers?: number[];
   stopSounds?: boolean;
-  screenEffect?: 'shake' | 'blink';
+  screenEffect?: 'shake' | 'blink' | 'mirror' | 'spin' | 'glow' | 'scan';
   effectDurationSeconds?: number;
   effectIterations?: number;
+  effectLoop?: boolean;
+  mirrorAxis?: 'horizontal' | 'vertical' | 'both';
+  spinDirection?: 'clockwise' | 'counterclockwise';
+  effectColor?: string;
+  scanDirection?: 'left-to-right' | 'right-to-left' | 'top-to-bottom' | 'bottom-to-top';
   attachedTo?: string;
   minigameId?: string;
   resultNext?: Record<string, string>;

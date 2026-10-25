@@ -9,6 +9,7 @@
   export let sidebarExpanded = true;
   export let chatUnreadCount = 0;
   export let chatAvailable = false;
+  export let storyModeActive = false;
 
   const createEvent = createEventDispatcher();
 </script>
@@ -28,6 +29,30 @@
       <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
     </svg>
   </button>
+
+  {#if storyModeActive}
+    <div class="story-tools" aria-label="Current story tools">
+      <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'} label="Story character">
+        <span slot="title">Character</span>
+        <span slot="description">View this player’s story stats</span>
+      </Item>
+
+      {#if chatAvailable}
+        <Item
+          on:click={() => createEvent('toggle-chat')}
+          collapsed={!sidebarExpanded}
+          color={'blue'}
+          iconType={'chat'}
+          badge={chatUnreadCount}
+          label="Messages"
+        >
+          <span slot="title">Messages</span>
+          <span slot="description">Open your unlocked Neuro-Link</span>
+        </Item>
+      {/if}
+    </div>
+    <div class="story-tools-divider" aria-hidden="true"></div>
+  {/if}
   
   <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
     <span slot="title">Story Mode</span>
@@ -48,20 +73,6 @@
     <span slot="title">Characters</span>
     <span slot="description">Create and manage the cast</span>
   </Item>
-
-  {#if chatAvailable}
-    <Item
-      on:click={() => createEvent('toggle-chat')}
-      collapsed={!sidebarExpanded}
-      color={'blue'}
-      iconType={'chat'}
-      badge={chatUnreadCount}
-      label="Neuro-Link chat"
-    >
-      <span slot="title">Neuro-Link</span>
-      <span slot="description">Transmit thoughts to your partner</span>
-    </Item>
-  {/if}
 
   <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'} label="Editor">
     <span slot="title">Editor</span>
@@ -132,6 +143,16 @@
     }
   }
 
+  .story-tools {
+    display: contents;
+  }
+
+  .story-tools-divider {
+    height: 1px;
+    margin: 10px 4px;
+    background: #475569;
+  }
+
   // Utility
   .sidebar-collapsed {
     width: 70px;
@@ -166,6 +187,19 @@
 
     .collapse-button {
       display: none;
+    }
+
+    .story-tools {
+      display: flex;
+      gap: 7px;
+    }
+
+    .story-tools-divider {
+      width: 1px;
+      height: 48px;
+      margin: 4px 2px;
+
+      flex: 0 0 1px;
     }
 
     .sidebar :global(.item) {

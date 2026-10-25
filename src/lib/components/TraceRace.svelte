@@ -6,7 +6,7 @@
   import location from '../stores/location';
   import { sessionState, type PlayerId } from '../stores/session';
   import { traceRaceServerState } from '../stores/traceRaceSession';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -66,7 +66,8 @@
   let cpuTimer: number | undefined;
 
   $: playerId = $sessionState.playerId;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'trace-race';
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'trace-race'
+    && $storyMinigameView;
   $: serverPlayer = playerId && $traceRaceServerState
     ? $traceRaceServerState.players[playerId]
     : null;
@@ -676,7 +677,7 @@
     <div>
       <button type="button" on:click={() => showInstructions = true}>HOW TO PLAY</button>
       <button type="button" on:click={() => launchedFromStory ? cancelStoryGame() : leaveMultiplayer()}>
-        EXIT
+        {launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}
       </button>
     </div>
   </header>

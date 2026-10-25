@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import location from '../stores/location';
-  import { arcadeStates, type ArcadeState } from '../stores/arcade';
+  import { arcadeStates, storyArcadeStates, type ArcadeState } from '../stores/arcade';
   import { sessionState, type PlayerId } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -27,7 +27,12 @@
   let wagerSettled = false;
   let wagerArmed = false;
 
-  $: serverState = $arcadeStates.chopsticks ?? null;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks'
+    && $storyMinigameView;
+  $: arcadeScope = launchedFromStory ? 'story' : 'main';
+  $: serverState = launchedFromStory
+    ? $storyArcadeStates.chopsticks ?? null
+    : $arcadeStates.chopsticks ?? null;
   $: state = mode === 'solo' ? localState : serverState;
   $: networkPlayerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: playerId = (mode === 'solo' ? 'p1' : networkPlayerId) as PlayerId;
@@ -45,7 +50,6 @@
     && playerHands[selectedHand] === 4
     && playerHands.filter((value: number) => value > 0).length === 1
     && playerHands.filter((value: number) => value === 0).length === 3;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks';
   $: setMinigameSessionActive(
     'chopsticks',
     (mode === 'solo' || mode === 'multi') && !state?.departureNotice
@@ -64,7 +68,7 @@
   }
   onDestroy(() => {
     if (mode === 'multi') {
-      socket.emit('arcade:leave', 'chopsticks');
+      socket.emit('arcade:leave', 'chopsticks', arcadeScope);
     }
   });
 
@@ -113,7 +117,7 @@
       mode = 'solo';
     } else {
       mode = 'multi';
-      socket.emit('arcade:join', 'chopsticks', 'versus', handleResult);
+      socket.emit('arcade:join', 'chopsticks', 'versus', arcadeScope, handleResult);
     }
   }
 
@@ -170,7 +174,7 @@
     if (mode === 'solo') {
       applyLocalAction('p1', action);
     } else {
-      socket.emit('arcade:action', { game: 'chopsticks', action }, handleResult);
+      socket.emit('arcade:action', { game: 'chopsticks', action, scope: arcadeScope }, handleResult);
     }
   }
 
@@ -299,7 +303,7 @@
   }
 
   function confirmMultiplayerReset(): void {
-    socket.emit('arcade:leave', 'chopsticks');
+    socket.emit('arcade:leave', 'chopsticks', arcadeScope);
     showResetConfirmation = false;
     mode = 'menu';
 
@@ -309,6 +313,12 @@
   }
 
   function requestExit(): void {
+    if (launchedFromStory) {
+      socket.emit('arcade:story-cancel', 'chopsticks', handleResult);
+      mode = 'menu';
+      return;
+    }
+
     if (mode === 'multi') {
       resetShouldExit = true;
       showResetConfirmation = true;
@@ -320,7 +330,7 @@
 
   function returnToMenu(): void {
     if (mode === 'multi') {
-      socket.emit('arcade:leave', 'chopsticks');
+      socket.emit('arcade:leave', 'chopsticks', arcadeScope);
     }
 
     mode = 'menu';
@@ -337,9 +347,14 @@
   }
 
   function returnToStory(): void {
+    const reportedOutcome = $campaignState?.sessionMode === 'singleplayer'
+      ? state?.winner === playerId ? 'won' : 'lost'
+      : '';
+
     socket.emit(
       'arcade:story-complete',
       'chopsticks',
+      reportedOutcome,
       (result: { ok: boolean; error?: string; waitingForPartner?: boolean }) => {
         error = result.ok ? '' : result.error ?? 'Could not return to the story.';
         waitingForStoryPartner = Boolean(result.waitingForPartner);
@@ -357,7 +372,7 @@
     <span>DEJAVU://OVERCLOCK</span>
     <div class="header-actions">
       {#if mode === 'solo' || mode === 'multi'}<button on:click={openHelp}>HOW TO PLAY</button><button on:click={restart}>RESET</button>{/if}
-      <button class="exit" on:click={requestExit}>EXIT</button>
+      <button class="exit" on:click={requestExit}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}</button>
     </div>
   </header>
 

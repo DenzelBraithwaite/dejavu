@@ -10,6 +10,7 @@ export type TypewriterOptions = {
   text: string;
   timing?: Partial<TypewriterTiming>;
   enabled?: boolean;
+  onUpdate?: () => void;
   onComplete?: () => void;
 };
 
@@ -56,6 +57,7 @@ export function typewriter(node: HTMLElement, options: TypewriterOptions) {
   const finish = (): void => {
     runId += 1;
     node.textContent = currentOptions.text;
+    currentOptions.onUpdate?.();
 
     if (!completed) {
       completed = true;
@@ -90,6 +92,7 @@ export function typewriter(node: HTMLElement, options: TypewriterOptions) {
       }
 
       node.textContent += character;
+      currentOptions.onUpdate?.();
       await wait(getCharacterDelay(character, timing));
     }
 

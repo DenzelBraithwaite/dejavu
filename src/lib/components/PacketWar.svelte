@@ -6,7 +6,7 @@
   import location from '../stores/location';
   import { packetWarServerState, type PacketWarState } from '../stores/packetWarSession';
   import { sessionState, type PlayerId } from '../stores/session';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -30,7 +30,8 @@
   const emptyEffect = () => ({ type: 'damage', target: 'enemy', amount: 1 });
 
   $: playerId = $sessionState.playerId;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'packet-war';
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'packet-war'
+    && $storyMinigameView;
   $: player = playerId && $packetWarServerState
     ? $packetWarServerState.players[playerId]
     : null;
@@ -318,7 +319,7 @@
     <div>
       <button type="button" on:click={() => showInstructions = true}>HOW TO PLAY</button>
       <button type="button" on:click={() => launchedFromStory ? cancelStoryGame() : leaveGame()}>
-        EXIT
+        {launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}
       </button>
     </div>
   </header>

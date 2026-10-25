@@ -20,3 +20,4 @@ export type ArcadeState = {
 };
 
 export const arcadeStates = writable<Partial<Record<ArcadeGameId, ArcadeState>>>({});
+export const storyArcadeStates = writable<Partial<Record<ArcadeGameId, ArcadeState>>>({});

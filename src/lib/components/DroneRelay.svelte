@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import location from '../stores/location';
-  import { arcadeStates } from '../stores/arcade';
+  import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { socket } from '../socket';
 
   type Screen = 'menu' | 'instructions' | 'game';
@@ -45,7 +45,12 @@
   let playbackFrameIndex = -1;
   let animationTimer: number | null = null;
 
-  $: state = $arcadeStates['drone-relay'] ?? null;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay'
+    && $storyMinigameView;
+  $: arcadeScope = launchedFromStory ? 'story' : 'main';
+  $: state = launchedFromStory
+    ? $storyArcadeStates['drone-relay'] ?? null
+    : $arcadeStates['drone-relay'] ?? null;
   $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: submitted = Boolean(state?.submitted?.[playerId]);
@@ -56,7 +61,6 @@
     ?? (state?.executionId !== animatedExecutionId ? state?.executionStart?.healthPack : state?.healthPack)
     ?? null;
   $: currentAbilities = state?.abilities?.[playerId] ?? {};
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
   $: setMinigameSessionActive('drone-relay', screen === 'game' && Boolean(state?.participants[playerId]));
   $: if (launchedFromStory && screen === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
@@ -72,7 +76,7 @@
     cancelAnimation();
 
     if (screen === 'game') {
-      socket.emit('arcade:leave', 'drone-relay');
+      socket.emit('arcade:leave', 'drone-relay', arcadeScope);
     }
   });
 
@@ -86,7 +90,7 @@
     error = '';
     animatedExecutionId = 0;
     screen = 'game';
-    socket.emit('arcade:join', 'drone-relay', pendingMode, handleResult);
+    socket.emit('arcade:join', 'drone-relay', pendingMode, arcadeScope, handleResult);
   }
 
   function addCommand(command: Command): void {
@@ -118,6 +122,7 @@
       'arcade:action',
       {
         game: 'drone-relay',
+        scope: arcadeScope,
         action: { type: 'program', queue }
       },
       (result: { ok: boolean; error?: string }) => {
@@ -134,18 +139,25 @@
     cancelAnimation();
     queue = [];
     waitingForStoryPartner = false;
-    socket.emit('arcade:restart', 'drone-relay');
+    socket.emit('arcade:restart', 'drone-relay', arcadeScope);
   }
 
   function returnToMenu(): void {
     cancelAnimation();
-    socket.emit('arcade:leave', 'drone-relay');
+    socket.emit('arcade:leave', 'drone-relay', arcadeScope);
     queue = [];
     waitingForStoryPartner = false;
     screen = 'menu';
   }
 
   function exitGame(): void {
+    if (launchedFromStory) {
+      cancelAnimation();
+      socket.emit('arcade:story-cancel', 'drone-relay', handleResult);
+      screen = 'menu';
+      return;
+    }
+
     returnToMenu();
     location.set('minigames');
   }
@@ -264,7 +276,7 @@
 <section class="drone-relay" class:hide={$location !== 'drone-relay'}>
   <header>
     <span>DEJAVU://DRONE_RELAY</span>
-    <button class="exit" on:click={exitGame}>EXIT</button>
+    <button class="exit" on:click={exitGame}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}</button>
   </header>
 
   {#if screen === 'menu'}

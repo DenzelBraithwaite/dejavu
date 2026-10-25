@@ -34,6 +34,7 @@ const initialSessions = Object.fromEntries(
 ) as Record<MinigameId, MinigameSession>;
 
 export const minigameSessions = writable(initialSessions);
+export const storyMinigameView = writable(false);
 
 export function setMinigameSessionActive(id: MinigameId, active: boolean): void {
   minigameSessions.update((sessions) => {

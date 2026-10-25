@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import location from '../stores/location';
-  import { arcadeStates } from '../stores/arcade';
+  import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { sessionState } from '../stores/session';
   import { campaignState } from '../stores/campaign';
   import { socket } from '../socket';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
@@ -37,7 +37,12 @@
   let wagerSettled = false;
   let wagerArmed = false;
 
-  $: state = $arcadeStates.mastermind ?? null;
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'mastermind'
+    && $storyMinigameView;
+  $: arcadeScope = launchedFromStory ? 'story' : 'main';
+  $: state = launchedFromStory
+    ? $storyArcadeStates.mastermind ?? null
+    : $arcadeStates.mastermind ?? null;
   $: playerId = $sessionState.playerId ?? 'p1';
   $: attempts = mode === 'solo'
     ? localAttempts
@@ -47,7 +52,6 @@
       : state?.players[playerId]?.attempts ?? [];
   $: waitingForRival = mode === 'multi' && Boolean(state?.pendingGuesses?.[playerId]);
   $: canSubmit = mode !== 'coop' || state?.activePlayer === playerId;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'mastermind';
   $: setMinigameSessionActive(
     'mastermind',
     (mode === 'solo' || mode === 'multi' || mode === 'coop') && !state?.departureNotice
@@ -80,7 +84,7 @@
 
   onDestroy(() => {
     if (mode === 'multi' || mode === 'coop') {
-      socket.emit('arcade:leave', 'mastermind');
+      socket.emit('arcade:leave', 'mastermind', arcadeScope);
     }
   });
 
@@ -113,7 +117,7 @@
     }
 
     mode = pendingMode;
-    socket.emit('arcade:join', 'mastermind', pendingMode === 'coop' ? 'coop' : 'versus', handleResult);
+    socket.emit('arcade:join', 'mastermind', pendingMode === 'coop' ? 'coop' : 'versus', arcadeScope, handleResult);
   }
 
   function submitGuess(): void {
@@ -138,7 +142,7 @@
 
     socket.emit(
       'arcade:action',
-      { game: 'mastermind', action: { type: 'guess', guess } },
+      { game: 'mastermind', action: { type: 'guess', guess }, scope: arcadeScope },
       (result: { ok: boolean; error?: string }) => {
         handleResult(result);
 
@@ -167,7 +171,7 @@
 
   function returnToMenu(): void {
     if (mode === 'multi' || mode === 'coop') {
-      socket.emit('arcade:leave', 'mastermind');
+      socket.emit('arcade:leave', 'mastermind', arcadeScope);
     }
 
     mode = 'menu';
@@ -193,7 +197,7 @@
   }
 
   function confirmMultiplayerReset(): void {
-    socket.emit('arcade:leave', 'mastermind');
+    socket.emit('arcade:leave', 'mastermind', arcadeScope);
     showResetConfirmation = false;
     mode = 'menu';
 
@@ -203,6 +207,12 @@
   }
 
   function requestExit(): void {
+    if (launchedFromStory) {
+      socket.emit('arcade:story-cancel', 'mastermind', handleResult);
+      mode = 'menu';
+      return;
+    }
+
     if (mode === 'multi' || mode === 'coop') {
       resetShouldExit = true;
       showResetConfirmation = true;
@@ -265,9 +275,14 @@
   }
 
   function returnToStory(): void {
+    const reportedOutcome = $campaignState?.sessionMode === 'singleplayer'
+      ? localFinished ? 'won' : 'lost'
+      : '';
+
     socket.emit(
       'arcade:story-complete',
       'mastermind',
+      reportedOutcome,
       (result: { ok: boolean; error?: string; waitingForPartner?: boolean }) => {
         error = result.ok ? '' : result.error ?? 'Could not return to the story.';
         waitingForStoryPartner = Boolean(result.waitingForPartner);
@@ -284,7 +299,7 @@
         <button type="button" on:click={openHelp}>HOW TO PLAY</button>
         <button type="button" on:click={restart}>RESET</button>
       {/if}
-      <button class="exit" type="button" on:click={requestExit}>EXIT</button>
+      <button class="exit" type="button" on:click={requestExit}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT'}</button>
     </div>
   </header>
 

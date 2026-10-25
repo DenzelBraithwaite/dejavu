@@ -54,6 +54,7 @@ export type CampaignState = {
   sessionMode: 'singleplayer' | 'multiplayer';
   soloPlayerId: PlayerId | null;
   currentScene: Record<PlayerId, string>;
+  lastScene: Record<PlayerId, string>;
   players: Record<PlayerId, CampaignPlayer>;
   characters: CharacterRecord[];
   installedMods: string[];
@@ -77,6 +78,7 @@ export type CampaignState = {
   activeMinigame: {
     id: string;
     sceneId: string;
+    perspectivePlayerId?: PlayerId;
     startedAt: string;
   } | null;
   pendingDice: Partial<Record<PlayerId, DiceRollResult>>;

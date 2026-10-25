@@ -51,7 +51,7 @@
   }
 
   function createBriefingSegments(): TypewriterSegment[] {
-    return [
+    const segments: TypewriterSegment[] = [
       { text: 'You are rolling a ' },
       { text: `D${die}`, className: 'dice-value' },
       { text: ' die for your ' },
@@ -60,27 +60,49 @@
       { text: stat, className: 'stat-value' },
       { text: ' base stat is ' },
       { text: String(base), className: 'stat-value' },
-      { text: '.\n\nYour ' },
-      { text: 'luck', className: 'luck-value' },
-      { text: ' stat is ' },
-      { text: String(luck), className: 'luck-value' },
-      { text: ' and will be added to your total roll.\n\nYou need a total of at least ' },
+      { text: '.\n\n' }
+    ];
+
+    if (stat !== 'luck') {
+      segments.push(
+        { text: 'Your ' },
+        { text: 'luck', className: 'luck-value' },
+        { text: ' stat is ' },
+        { text: String(luck), className: 'luck-value' },
+        { text: ' and will be added to your total roll.\n\n' }
+      );
+    }
+
+    segments.push(
+      { text: 'You need a total of at least ' },
       { text: String(threshold), className: 'threshold-value' },
       { text: '.' }
-    ];
+    );
+
+    return segments;
   }
 
   function createResultSegments(rollResult: DiceRollResult): TypewriterSegment[] {
-    return [
+    const segments: TypewriterSegment[] = [
       { text: 'You roll the die and get a ' },
       { text: String(rollResult.roll), className: 'roll-value' },
       { text: '!\n\n' },
       { text: String(rollResult.roll), className: 'roll-value' },
       { text: ' (roll) + ' },
       { text: String(rollResult.base), className: 'stat-value' },
-      { text: ` (${rollResult.stat}) + ` },
-      { text: String(rollResult.luck), className: 'luck-value' },
-      { text: ' (luck) gives you a total of ' },
+      { text: ` (${rollResult.stat})` }
+    ];
+
+    if (rollResult.luck > 0) {
+      segments.push(
+        { text: ' + ' },
+        { text: String(rollResult.luck), className: 'luck-value' },
+        { text: ' (luck)' }
+      );
+    }
+
+    segments.push(
+      { text: ' gives you a total of ' },
       { text: String(rollResult.total), className: 'total-value' },
       { text: '.\n\n' },
       {
@@ -89,7 +111,9 @@
           : 'You were unsuccessful.',
         className: rollResult.successful ? 'outcome-success' : 'outcome-failure'
       }
-    ];
+    );
+
+    return segments;
   }
 </script>
 

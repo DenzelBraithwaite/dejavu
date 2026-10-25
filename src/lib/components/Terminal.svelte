@@ -23,10 +23,14 @@
   let lastScrollKey = '';
   let lastAudioSceneId = '';
   let diceTerminalOpen = false;
-  let scenePresentation: Pick<StoryNode, 'background'> = {};
+  let scenePresentation: Pick<StoryNode, 'background' | 'backgroundTheme'> = {};
   let sceneAudioCues: StoryNode[] = [];
   let shakeEffect: StoryNode | undefined;
   let blinkEffect: StoryNode | undefined;
+  let mirrorEffect: StoryNode | undefined;
+  let spinEffect: StoryNode | undefined;
+  let glowEffect: StoryNode | undefined;
+  let scanEffect: StoryNode | undefined;
   let sceneSpeaker = '';
   let scenePortrait = '';
   let scenePortraitAlt = '';
@@ -39,6 +43,9 @@
   $: scene = sceneId
     ? $campaignState?.story?.nodes.find((candidate) => candidate.id === sceneId)
     : undefined;
+  $: editableNodeId = scene?.id
+    ?? (playerId ? $campaignState?.lastScene?.[playerId] : '')
+    ?? '';
   $: sceneCharacter = scene?.characterId
     ? $campaignState?.characters.find(
         (character) => character.id === scene?.characterId
@@ -66,16 +73,44 @@
     (candidate) => candidate.type === 'screen-effect'
       && candidate.screenEffect === 'blink'
   );
+  $: mirrorEffect = companionNodes.find(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'mirror'
+  );
+  $: spinEffect = companionNodes.find(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'spin'
+  );
+  $: glowEffect = companionNodes.find(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'glow'
+  );
+  $: scanEffect = companionNodes.find(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'scan'
+  );
   $: screenShakeActive = Boolean(shakeEffect);
   $: terminalBlinkActive = Boolean(blinkEffect);
+  $: terminalAnimations = createTerminalAnimations(
+    shakeEffect,
+    blinkEffect,
+    spinEffect,
+    glowEffect
+  );
+  $: terminalTheme = scenePresentation.backgroundTheme ?? 'blue';
   $: {
     scenePresentation = {
-      background: scene?.background
+      background: scene?.background,
+      backgroundTheme: scene?.backgroundTheme
     };
 
     for (const companion of companionNodes) {
       if (companion.background !== undefined) {
         scenePresentation.background = companion.background;
+      }
+
+      if (companion.backgroundTheme !== undefined) {
+        scenePresentation.backgroundTheme = companion.backgroundTheme;
       }
     }
   }
@@ -186,6 +221,51 @@
         errorMessage = result.error ?? 'The action could not be completed.';
       }
     });
+  }
+
+  function createTerminalAnimations(
+    activeShake: StoryNode | undefined,
+    activeBlink: StoryNode | undefined,
+    activeSpin: StoryNode | undefined,
+    activeGlow: StoryNode | undefined
+  ): string {
+    const animations: string[] = [];
+
+    if (activeShake) {
+      animations.push(
+        `terminal-shake ${effectDuration(activeShake, 0.6)}s cubic-bezier(0.36, 0.07, 0.19, 0.97) ${effectIterations(activeShake)} both`
+      );
+    }
+
+    if (activeBlink) {
+      animations.push(
+        `terminal-blink ${effectDuration(activeBlink, 0.75)}s steps(2, end) ${effectIterations(activeBlink)} both`
+      );
+    }
+
+    if (activeSpin) {
+      animations.push(
+        `terminal-spin ${effectDuration(activeSpin, 1.5)}s linear ${effectIterations(activeSpin)} both`
+      );
+    }
+
+    if (activeGlow) {
+      animations.push(
+        `terminal-glow ${effectDuration(activeGlow, 1.4)}s ease-in-out ${effectIterations(activeGlow)} alternate`
+      );
+    }
+
+    return animations.join(', ');
+  }
+
+  function effectDuration(effect: Partial<StoryNode>, fallback: number): number {
+    return Math.max(0.1, Number(effect.effectDurationSeconds ?? fallback));
+  }
+
+  function effectIterations(effect: Partial<StoryNode>): string {
+    return effect.effectLoop
+      ? 'infinite'
+      : String(Math.max(1, Math.trunc(Number(effect.effectIterations ?? 1))));
   }
 
   function advance(): void {
@@ -323,6 +403,11 @@
 
   async function scrollTerminalToBottom(): Promise<void> {
     await tick();
+
+    if (!terminalScreenElement) {
+      return;
+    }
+
     terminalScreenElement.scrollTo({
       top: terminalScreenElement.scrollHeight,
       behavior: 'smooth'
@@ -339,13 +424,13 @@
   }
 
   function editCurrentNode(): void {
-    if (!$libraryState.activeStoryId || !scene) {
+    if (!$libraryState.activeStoryId || !editableNodeId) {
       return;
     }
 
     editorHandoff.set({
       storyId: $libraryState.activeStoryId,
-      nodeId: scene.id,
+      nodeId: editableNodeId,
       map: $libraryState.activeStoryMode ?? 'multiplayer'
     });
     location.set('editor');
@@ -357,7 +442,7 @@
 </script>
 
 <section
-  class="terminal"
+  class="terminal terminal-theme-{terminalTheme}"
   class:hide={$location !== 'terminal'}
   transition:fade={{ duration: 300 }}
   aria-label="Story terminal"
@@ -367,7 +452,7 @@
     <div>
       <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
       <button type="button" disabled={!$libraryState.activeStoryId} on:click={openLogs}>LOGS</button>
-      <button type="button" disabled={!$libraryState.activeStoryId || !scene} on:click={editCurrentNode}>EDIT NODE</button>
+      <button type="button" disabled={!$libraryState.activeStoryId || !editableNodeId} on:click={editCurrentNode}>EDIT NODE</button>
       <button type="button" disabled={!$libraryState.activeStoryId} on:click={resetStory}>RESET STORY</button>
     </div>
   </header>
@@ -377,10 +462,24 @@
     class:has-scene-background={Boolean(scenePresentation.background)}
     class:terminal-screen--shake={screenShakeActive}
     class:terminal-screen--blink={terminalBlinkActive}
-    style:--shake-duration={`${Math.max(0.1, Number(shakeEffect?.effectDurationSeconds ?? 0.6))}s`}
-    style:--shake-iterations={Math.max(1, Math.trunc(Number(shakeEffect?.effectIterations ?? 1)))}
-    style:--blink-duration={`${Math.max(0.1, Number(blinkEffect?.effectDurationSeconds ?? 0.75))}s`}
-    style:--blink-iterations={Math.max(1, Math.trunc(Number(blinkEffect?.effectIterations ?? 1)))}
+    class:terminal-screen--mirror={Boolean(mirrorEffect)}
+    class:terminal-screen--spin={Boolean(spinEffect)}
+    class:terminal-screen--glow={Boolean(glowEffect)}
+    class:terminal-screen--scan={Boolean(scanEffect)}
+    data-scan-direction={scanEffect?.scanDirection ?? 'left-to-right'}
+    style:animation={terminalAnimations || undefined}
+    style:scale={mirrorEffect
+      ? mirrorEffect.mirrorAxis === 'vertical'
+        ? '1 -1'
+        : mirrorEffect.mirrorAxis === 'both'
+          ? '-1 -1'
+          : '-1 1'
+      : undefined}
+    style:--spin-turn={spinEffect?.spinDirection === 'counterclockwise' ? '-1turn' : '1turn'}
+    style:--glow-color={glowEffect?.effectColor ?? '#39ff88'}
+    style:--scan-color={scanEffect?.effectColor ?? '#39ff88'}
+    style:--scan-duration={`${effectDuration(scanEffect ?? {}, 1.5)}s`}
+    style:--scan-iterations={scanEffect ? effectIterations(scanEffect) : '1'}
     style:background-image={scenePresentation.background
       ? `linear-gradient(#070b16dd, #070b16ee), url(${scenePresentation.background})`
       : undefined}
@@ -493,6 +592,7 @@
                 timing: sceneSpeaker
                   ? typewriterProfiles.dialogue
                   : typewriterProfiles.narration,
+                onUpdate: scrollTerminalToBottom,
                 onComplete: completeTyping
               }}
               aria-live="polite"
@@ -541,7 +641,7 @@
         {#each scene.choices ?? [] as choice}
           <button
             type="button"
-            disabled={!typingComplete || !choiceIsAvailable(choice)}
+            disabled={!choiceIsAvailable(choice)}
             on:click={() => choose(choice.id)}
           >
             {choice.label}
@@ -555,12 +655,11 @@
             bind:value={inputValue}
             placeholder={scene.placeholder ?? ''}
             maxlength={scene.maxLength ?? 200}
-            disabled={!typingComplete}
             on:keydown={(event) => handleInputKeydown(event, submitInput)}
           >
           <button
             type="button"
-            disabled={!typingComplete || !inputValue.trim()}
+            disabled={!inputValue.trim()}
             on:click={submitInput}
           >
             Submit
@@ -578,12 +677,11 @@
               id="conversation-input"
               bind:value={inputValue}
               maxlength="300"
-              disabled={!typingComplete}
               on:keydown={(event) => handleInputKeydown(event, sendMessage)}
             >
             <button
               type="button"
-              disabled={!typingComplete || !inputValue.trim()}
+              disabled={!inputValue.trim()}
               on:click={sendMessage}
             >
               Send
@@ -600,7 +698,7 @@
           <span>{scene.stat?.toUpperCase()}</span>
           <span>TARGET {scene.threshold}</span>
         </div>
-        <button type="button" disabled={!typingComplete} on:click={openDiceTerminal}>
+        <button type="button" on:click={openDiceTerminal}>
           Prepare D{scene.die} roll
         </button>
       {:else if scene.type === 'vote'}
@@ -612,7 +710,7 @@
           {#each scene.choices ?? [] as choice}
             <button
               type="button"
-              disabled={!typingComplete || !choiceIsAvailable(choice)}
+              disabled={!choiceIsAvailable(choice)}
               on:click={() => choose(choice.id)}
             >
               Vote: {choice.label}
@@ -625,7 +723,7 @@
             Waiting for partner to launch {scene.minigameId}
           </button>
         {:else}
-          <button type="button" disabled={!typingComplete} on:click={launchMinigame}>
+          <button type="button" on:click={launchMinigame}>
             Launch {scene.minigameId}
           </button>
         {/if}
@@ -661,14 +759,42 @@
     padding: 0;
     overflow: hidden;
     background: #070b16;
-    border: 1px solid #4a98d9;
+    border: 1px solid var(--terminal-accent);
     border-radius: 8px;
     box-shadow:
-      0 0 35px #4a98d94a,
+      0 0 35px color-mix(in srgb, var(--terminal-accent) 30%, transparent),
       inset 0 0 60px #000000;
 
     display: grid;
     grid-template-rows: auto 1fr auto;
+  }
+
+  .terminal-theme-red {
+    --terminal-accent: #ef5b67;
+  }
+
+  .terminal-theme-purple {
+    --terminal-accent: #b77aff;
+  }
+
+  .terminal-theme-green {
+    --terminal-accent: #55f09a;
+  }
+
+  .terminal-theme-amber {
+    --terminal-accent: #f0b94f;
+  }
+
+  .terminal-theme-pink {
+    --terminal-accent: #ff75c8;
+  }
+
+  .terminal-theme-cyan {
+    --terminal-accent: #02fbfb;
+  }
+
+  .terminal-theme-white {
+    --terminal-accent: #e8edf6;
   }
 
   .terminal-header {
@@ -676,7 +802,7 @@
     padding: 8px 14px;
     color: var(--terminal-accent);
     background: #111a2c;
-    border-bottom: 1px solid #4a98d9;
+    border-bottom: 1px solid var(--terminal-accent);
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-size: 0.75rem;
     letter-spacing: 2px;
@@ -709,6 +835,7 @@
   }
 
   .terminal-screen {
+    position: relative;
     min-height: 0;
     padding: clamp(20px, 4vw, 52px);
     overflow-y: auto;
@@ -718,18 +845,34 @@
       background-size: cover;
     }
 
-    &.terminal-screen--shake {
-      animation: terminal-shake var(--shake-duration) cubic-bezier(0.36, 0.07, 0.19, 0.97) var(--shake-iterations) both;
+    &.terminal-screen--scan::after {
+      content: '';
+      position: absolute;
+      z-index: 8;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--scan-color);
+      box-shadow: 0 0 18px 5px var(--scan-color);
+      opacity: 0.72;
+      pointer-events: none;
+      animation: terminal-scan-horizontal var(--scan-duration) linear var(--scan-iterations) both;
     }
 
-    &.terminal-screen--blink {
-      animation: terminal-blink var(--blink-duration) steps(2, end) var(--blink-iterations) both;
+    &.terminal-screen--scan[data-scan-direction='right-to-left']::after {
+      animation-direction: reverse;
     }
 
-    &.terminal-screen--shake.terminal-screen--blink {
-      animation:
-        terminal-shake var(--shake-duration) cubic-bezier(0.36, 0.07, 0.19, 0.97) var(--shake-iterations) both,
-        terminal-blink var(--blink-duration) steps(2, end) var(--blink-iterations) both;
+    &.terminal-screen--scan[data-scan-direction='top-to-bottom']::after,
+    &.terminal-screen--scan[data-scan-direction='bottom-to-top']::after {
+      width: 100%;
+      height: 4px;
+      animation-name: terminal-scan-vertical;
+    }
+
+    &.terminal-screen--scan[data-scan-direction='bottom-to-top']::after {
+      animation-direction: reverse;
     }
   }
 
@@ -775,7 +918,7 @@
 
   .history-speaker {
     margin-bottom: 8px;
-    color: #02bcbc;
+    color: var(--terminal-accent);
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-size: 0.8rem;
     font-weight: 700;
@@ -1069,26 +1212,26 @@
     }
   }
 
-  @keyframes terminal-shake {
+  @keyframes -global-terminal-shake {
     0%,
     100% {
-      transform: translate3d(0, 0, 0);
+      translate: 0 0;
     }
 
     15%,
     45%,
     75% {
-      transform: translate3d(-8px, 2px, 0);
+      translate: -8px 2px;
     }
 
     30%,
     60%,
     90% {
-      transform: translate3d(8px, -2px, 0);
+      translate: 8px -2px;
     }
   }
 
-  @keyframes terminal-blink {
+  @keyframes -global-terminal-blink {
     0%,
     100% {
       filter: brightness(1);
@@ -1108,11 +1251,55 @@
     }
   }
 
+  @keyframes -global-terminal-spin {
+    to {
+      rotate: var(--spin-turn);
+    }
+  }
+
+  @keyframes -global-terminal-glow {
+    from {
+      box-shadow: 0 0 0 transparent;
+    }
+
+    to {
+      box-shadow: 0 0 48px 16px var(--glow-color);
+    }
+  }
+
+  @keyframes terminal-scan-horizontal {
+    from {
+      left: 0;
+    }
+
+    to {
+      left: calc(100% - 4px);
+    }
+  }
+
+  @keyframes terminal-scan-vertical {
+    from {
+      top: 0;
+    }
+
+    to {
+      top: calc(100% - 4px);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .scene-text::after,
     .terminal-screen--shake,
-    .terminal-screen--blink {
+    .terminal-screen--blink,
+    .terminal-screen--spin,
+    .terminal-screen--glow,
+    .terminal-screen--scan {
+      animation: none !important;
+    }
+
+    .terminal-screen--scan::after {
       animation: none;
+      display: none;
     }
   }
 </style>

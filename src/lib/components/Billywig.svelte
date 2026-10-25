@@ -4,7 +4,7 @@
   import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import { setMinigameSessionActive, storyMinigameView } from '../stores/minigameSessions';
   import WagerPanel from './WagerPanel.svelte';
 
   type Phase = 'menu' | 'tutorial' | 'betting' | 'playing' | 'result';
@@ -67,7 +67,8 @@
   let completionError = '';
 
   $: balance = $netRunnersGameState.p1.money;
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'billywig';
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'billywig'
+    && $storyMinigameView;
   $: playerName = $localPlayer?.name ?? 'PLAYER';
   $: setMinigameSessionActive('billywig', phase !== 'menu');
 
@@ -232,6 +233,7 @@
   function returnToStory(): void {
     socket.emit(
       'billywig:complete',
+      result?.outcome ?? 'loss',
       (response: { ok: boolean; waitingForPartner?: boolean; error?: string }) => {
         if (!response.ok) {
           completionError = response.error ?? 'Could not return to the story.';
@@ -239,6 +241,11 @@
         }
 
         waitingForPartner = Boolean(response.waitingForPartner);
+
+        if (!waitingForPartner) {
+          resetRound();
+          phase = 'menu';
+        }
       }
     );
   }
@@ -283,7 +290,7 @@
           <div class="button-row">
             <button class="primary-button" type="button" on:click={openBetting}>PLAY BILLYWIG</button>
             <button type="button" on:click={() => phase = 'tutorial'}>HOW TO PLAY</button>
-            <button type="button" on:click={returnToMinigames}>EXIT TABLE</button>
+            <button type="button" on:click={returnToMinigames}>{launchedFromStory ? 'EXIT TO STORY' : 'EXIT TABLE'}</button>
           </div>
         </div>
       </div>
