@@ -6245,7 +6245,13 @@
     box-shadow: 0 0 45px #4a98d944;
 
     > header {
+      position: sticky;
+      z-index: 3;
+      top: -22px;
       margin-bottom: 18px;
+      padding: 22px 0 12px;
+      background: #09111ef5;
+      border-bottom: 1px solid #243750;
 
       display: flex;
       justify-content: space-between;
@@ -6431,9 +6437,12 @@
     box-shadow: 0 0 48px #02fbfb33;
 
     > header {
+      position: sticky;
+      z-index: 3;
+      top: -24px;
       margin-bottom: 18px;
-      padding-bottom: 16px;
-      background: #09111e;
+      padding: 24px 0 16px;
+      background: #09111ef5;
       border-bottom: 1px solid #1e3a52;
 
       display: flex;
