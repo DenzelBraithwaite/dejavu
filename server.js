@@ -741,6 +741,7 @@ io.on('connection', (socket) => {
       }
 
       if (campaignState.sessionMode === 'singleplayer'
+        && campaignState.soloPlayerId
         && campaignState.soloPlayerId !== playerId) {
         acknowledge({
           ok: false,
@@ -1176,7 +1177,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('trace-race:story-cancel', (acknowledge = () => {}) => {
-    cancelStoryMinigame('trace-race', acknowledge);
+    cancelStoryMinigame('trace-race', playerId, acknowledge);
   });
 
   socket.on('packet-war:join', (mode, acknowledge = () => {}) => {
@@ -1248,12 +1249,21 @@ io.on('connection', (socket) => {
   });
 
   socket.on('packet-war:story-cancel', (acknowledge = () => {}) => {
-    cancelStoryMinigame('packet-war', acknowledge);
+    cancelStoryMinigame('packet-war', playerId, acknowledge);
   });
 
   socket.on('arcade:join', (gameId, mode, scope = 'main', callback = () => {}) => {
     const acknowledge = typeof scope === 'function' ? scope : callback;
     const sessionScope = scope === 'story' ? 'story' : 'main';
+
+    if (sessionScope === 'story' && !playerCanUseActiveStoryMinigame(playerId)) {
+      acknowledge({
+        ok: false,
+        error: 'This story minigame belongs to the other player.'
+      });
+      return;
+    }
+
     const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
     const result = joinArcadeGame(
       sessions,
@@ -1278,6 +1288,15 @@ io.on('connection', (socket) => {
 
   socket.on('arcade:action', (request, acknowledge = () => {}) => {
     const sessionScope = request?.scope === 'story' ? 'story' : 'main';
+
+    if (sessionScope === 'story' && !playerCanUseActiveStoryMinigame(playerId)) {
+      acknowledge({
+        ok: false,
+        error: 'This story minigame belongs to the other player.'
+      });
+      return;
+    }
+
     const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
     const result = performArcadeAction(
       sessions,
@@ -1323,7 +1342,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('arcade:story-cancel', (gameId, acknowledge = () => {}) => {
-    cancelStoryMinigame(gameId, acknowledge);
+    cancelStoryMinigame(gameId, playerId, acknowledge);
   });
 
   socket.on('disconnect', () => {
@@ -1765,6 +1784,14 @@ function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcom
     return;
   }
 
+  if (!playerCanUseActiveStoryMinigame(playerId)) {
+    acknowledge({
+      ok: false,
+      error: 'This story minigame belongs to the other player.'
+    });
+    return;
+  }
+
   const activeSceneId = campaignState.activeMinigame.sceneId;
 
   if (storyMinigameCompletionScenes[minigameId] !== activeSceneId) {
@@ -1801,11 +1828,20 @@ function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcom
   }
 }
 
-function cancelStoryMinigame(minigameId, acknowledge) {
+function cancelStoryMinigame(minigameId, playerId, acknowledge) {
   if (campaignState.activeMinigame?.id !== minigameId) {
     acknowledge({
       ok: false,
       error: `No story-launched ${minigameId} round is active.`
+    });
+    return;
+  }
+
+
+  if (!playerCanUseActiveStoryMinigame(playerId)) {
+    acknowledge({
+      ok: false,
+      error: 'This story minigame belongs to the other player.'
     });
     return;
   }
@@ -1819,6 +1855,15 @@ function cancelStoryMinigame(minigameId, acknowledge) {
     resetCompletedStoryMinigame(minigameId);
     io.emit('campaign:state', getCampaignSnapshot(campaignState));
   }
+}
+
+function playerCanUseActiveStoryMinigame(playerId) {
+  if (campaignState.sessionMode === 'multiplayer') {
+    return true;
+  }
+
+  return campaignState.activeMinigame?.ownerPlayerId === playerId
+    || campaignState.activeMinigame?.perspectivePlayerId === playerId;
 }
 
 function normalizeStoryOutcome(outcome) {

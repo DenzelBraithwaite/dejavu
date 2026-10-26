@@ -4,15 +4,17 @@
   import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
-  import { setMinigameSessionActive } from '../stores/minigameSessions';
+  import {
+    playerOwnsStoryMinigame,
+    setMinigameSessionActive
+  } from '../stores/minigameSessions';
   import { socket } from '../socket';
 
   type Screen = 'menu' | 'instructions' | 'game';
   type PlayMode = 'solo' | 'multi';
   type Command = 'forward' | 'left' | 'right' | 'wait' | 'shoot' | 'long-shot' | 'pulse' | 'jump' | 'shield';
 
-  const walls = new Set(['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4']);
-  const exitCell = '0-3';
+  const defaultWalls = ['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4'];
   const basicCommands: Command[] = ['forward', 'left', 'right', 'wait', 'shoot'];
   const abilityCommands: Command[] = ['long-shot', 'pulse', 'jump', 'shield'];
   const commandLabels: Record<Command, string> = {
@@ -44,8 +46,11 @@
   let playbackFrames: Array<Record<string, any>> = [];
   let playbackFrameIndex = -1;
   let animationTimer: number | null = null;
+  let walls = new Set(defaultWalls);
+  let exitCell = '0-3';
 
-  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay';
+  $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay'
+    && playerOwnsStoryMinigame($campaignState, $sessionState.playerId);
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
   $: state = launchedFromStory
     ? $storyArcadeStates['drone-relay'] ?? null
@@ -60,13 +65,27 @@
     ?? (state?.executionId !== animatedExecutionId ? state?.executionStart?.healthPack : state?.healthPack)
     ?? null;
   $: currentAbilities = state?.abilities?.[playerId] ?? {};
+  $: walls = new Set(state?.walls ?? defaultWalls);
+  $: exitCell = state?.exit ?? '0-3';
   $: setMinigameSessionActive('drone-relay', screen === 'game' && Boolean(state?.participants[playerId]));
   $: if (launchedFromStory && screen === 'menu') {
     pendingMode = $campaignState?.sessionMode === 'singleplayer' ? 'solo' : 'multi';
     screen = 'instructions';
   }
   $: if (state?.executionId && state.executionId !== animatedExecutionId) {
-    playExecution(state.executionId, state.executionStart, state.lastExecution);
+    if ($location === 'drone-relay') {
+      playExecution(state.executionId, state.executionStart, state.lastExecution);
+    } else {
+      showResolvedExecution(state.executionId, state.lastExecution, state.drones, state.healthPack);
+    }
+  }
+  $: if ($location !== 'drone-relay' && isAnimating) {
+    showResolvedExecution(
+      state?.executionId ?? animatedExecutionId,
+      state?.lastExecution ?? [],
+      state?.drones,
+      state?.healthPack
+    );
   }
 
 
@@ -251,6 +270,23 @@
     isAnimating = false;
   }
 
+  function showResolvedExecution(
+    executionId: number,
+    frames: Array<Record<string, any>>,
+    drones: Record<string, any> | undefined,
+    healthPack: Record<string, any> | undefined
+  ): void {
+    cancelAnimation();
+    animatedExecutionId = executionId;
+    const finalFrame = frames?.[frames.length - 1];
+
+    activeFrame = finalFrame
+      ? { ...structuredClone(finalFrame), cellEffects: [] }
+      : drones
+        ? { drones: structuredClone(drones), healthPack: structuredClone(healthPack), cellEffects: [] }
+        : null;
+  }
+
   function cellHasEffect(row: number, column: number, type: string): boolean {
     return Boolean(activeFrame?.cellEffects?.some((effect: Record<string, any>) => (
       effect.row === row
@@ -336,7 +372,13 @@
               class:extraction-flash={cellHasEffect(row, column, 'extraction')}
             >
               {#if droneId}
-                <strong class="drone drone--{droneId}" class:shielded={displayDrones[droneId].shieldTicks > 0}>
+                <strong
+                  class="drone drone--{droneId}"
+                  class:self-drone={droneId === playerId}
+                  class:rival-drone={droneId !== playerId}
+                  class:shielded={displayDrones[droneId].shieldTicks > 0}
+                  aria-label={droneId === playerId ? 'Your drone' : 'Rival drone'}
+                >
                   {directionGlyphs[displayDrones[droneId].direction]}
                 </strong>
               {:else if walls.has(key)}
@@ -645,6 +687,14 @@
   }
 
   .drone--p2 {
+    color: #ff75c8;
+  }
+
+  .drone.self-drone {
+    color: #67dfff;
+  }
+
+  .drone.rival-drone {
     color: #ff75c8;
   }
 

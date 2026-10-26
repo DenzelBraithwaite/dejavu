@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { unlockAudioPlayback } from '../audio/audioManager';
+  import { applySceneAudio, unlockAudioPlayback } from '../audio/audioManager';
   import { socket } from '../socket';
   import {
     characterLibraryState,
@@ -16,6 +16,7 @@
     type StoryNode
   } from '../stores/library';
   import location from '../stores/location';
+  import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
 
   type EditorMode = 'library' | 'create' | 'editor';
@@ -587,6 +588,7 @@
 
   function selectStory(storyId: string, mode: StoryPlayMode): void {
     clearMessages();
+    unlockAudioPlayback();
     socket.emit('library:select-story', {
       storyId,
       mode
@@ -799,6 +801,7 @@
     }
 
     unlockAudioPlayback();
+    primePlaytestAudio();
 
     const launch = (): void => {
       if ($libraryState.activeStoryId === editingStory?.id
@@ -825,6 +828,38 @@
     // Playtesting always waits for a confirmed server save, even when the local
     // document appears unchanged, so the cartridge can never launch stale data.
     saveStory('manual', launch);
+  }
+
+  function primePlaytestAudio(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const playerId = $sessionState.playerId ?? 'p1';
+    const resumeSceneId = $campaignState?.story?.id === editingStory.id
+      ? $campaignState.currentScene[playerId]
+      : activeStoryMap === 'singleplayer'
+        ? editingStory.singleplayerInitialSceneId
+        : editingStory.initialSceneIds[playerId];
+    const scene = editingStory.nodes.find((candidate) => candidate.id === resumeSceneId);
+
+    if (!scene) {
+      return;
+    }
+
+    const audioCues = [
+      scene,
+      ...editingStory.nodes.filter((candidate) => candidate.attachedTo === scene.id)
+    ].filter((candidate) => (
+      Boolean(candidate.music)
+      || Boolean(candidate.sound)
+      || Boolean(candidate.stopMusic)
+      || candidate.type === 'stop-music'
+    ));
+
+    // Start the real scene track inside the Play-button gesture. The terminal
+    // recognizes the same track ID and lets it continue after the save finishes.
+    applySceneAudio(audioCues);
   }
 
   function synchronizeStoryCharacterIds(): void {
@@ -2693,6 +2728,7 @@
           ...baseNode,
           prompt: 'Enter your response.',
           placeholder: 'Type your response…',
+          inputKey: `INPUT_${id.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}`,
           maxLength: 200
         };
       case 'conversation':
@@ -3523,6 +3559,16 @@
             {#if selectedNode.type === 'input'}
               <label for="input-prompt">Player prompt</label>
               <textarea id="input-prompt" bind:value={selectedNode.prompt} rows="5"></textarea>
+              <label for="input-key">Saved input key</label>
+              <input
+                id="input-key"
+                bind:value={selectedNode.inputKey}
+                placeholder="FAVORITE_COLOR"
+              >
+              <p class="inspector-help">
+                This response lasts until the story restarts. Refer to it later with
+                {'{INPUT_FAVORITE_COLOR}'} when the key is FAVORITE_COLOR.
+              </p>
               <label for="input-placeholder">Input placeholder</label>
               <input id="input-placeholder" bind:value={selectedNode.placeholder} placeholder="Type your response…">
               <label for="input-max-length">Maximum response length</label>
@@ -3895,6 +3941,7 @@
                 <option value="add-item">Give item</option>
                 <option value="remove-item">Remove item</option>
                 <option value="set-flag">Set story flag</option>
+                <option value="set-player-name">Set player name</option>
                 <option value="adjust-stat">Adjust stat</option>
                 <option value="adjust-relationship">Adjust relationship</option>
                 <option value="discover-character">Discover character</option>
@@ -3903,10 +3950,15 @@
                   <option value="remove-mod">Remove multiplayer neuro mod</option>
                 {/if}
               </select>
-              <label for="effect-key">Item, flag, stat, relationship, character, or mod ID</label>
-              <input id="effect-key" bind:value={selectedNode.effects[0].key}>
+              {#if selectedNode.effects[0].type !== 'set-player-name'}
+                <label for="effect-key">Item, flag, stat, relationship, character, or mod ID</label>
+                <input id="effect-key" bind:value={selectedNode.effects[0].key}>
+              {/if}
               <label for="effect-value">Optional value</label>
               <input id="effect-value" bind:value={selectedNode.effects[0].value}>
+              <p class="inspector-help">
+                Values can use saved input tokens such as {'{INPUT_FAVORITE_COLOR}'}.
+              </p>
             {/if}
 
             {#if selectedNode.type === 'condition'}
@@ -4015,8 +4067,8 @@
             {/if}
 
             {#if selectedNode.type === 'music'}
-              <label for="music-source">Music path</label>
-              <input id="music-source" bind:value={selectedNode.music} placeholder="/audio/music/theme.mp3">
+              <span class="inspector-label">Selected music</span>
+              <p class="inspector-help">{selectedNode.music || 'No track selected.'}</p>
               <button type="button" on:click={() => openAudioLibrary('music')}>Select from audio library</button>
             {/if}
 

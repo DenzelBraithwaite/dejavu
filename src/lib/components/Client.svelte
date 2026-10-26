@@ -33,7 +33,10 @@
     type ArcadeGameId,
     type ArcadeState
   } from '../stores/arcade';
-  import { storyMinigameView } from '../stores/minigameSessions';
+  import {
+    playerOwnsStoryMinigame,
+    storyMinigameView
+  } from '../stores/minigameSessions';
   import ChatPanel from './ChatPanel.svelte';
   import CharacterLanding from './CharacterLanding.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -137,7 +140,8 @@
   function handleCampaignState(state: CampaignState): void {
     campaignState.set(state);
 
-    if (state.activeMinigame) {
+    if (state.activeMinigame
+      && playerOwnsStoryMinigame(state, $sessionState.playerId)) {
       const minigameKey = `${state.activeMinigame.sceneId}:${state.activeMinigame.startedAt}`;
       minigameWasActive = true;
       activeStoryMinigameId = state.activeMinigame.id;
@@ -157,7 +161,9 @@
       if (state.activeMinigame.id === 'pigz') {
         socket.emit('pigz:join');
       }
-    } else if (minigameWasActive) {
+    } else if (minigameWasActive
+      && (!state.activeMinigame
+        || !playerOwnsStoryMinigame(state, $sessionState.playerId))) {
       minigameWasActive = false;
 
       if ($location === activeStoryMinigameId) {
@@ -284,9 +290,10 @@
   }
 
   function changePage(event: CustomEvent<string>): void {
-    if (event.detail === 'terminal' && $campaignState?.activeMinigame) {
+    if (event.detail === 'terminal'
+      && playerOwnsStoryMinigame($campaignState, $sessionState.playerId)) {
       storyMinigameView.set(true);
-      location.set($campaignState.activeMinigame.id);
+      location.set($campaignState?.activeMinigame?.id ?? 'terminal');
       return;
     }
 

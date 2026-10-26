@@ -66,6 +66,10 @@ export function createCampaignState(story = null, options = {}) {
     characters,
     installedMods: [],
     flags: {},
+    inputs: {
+      p1: {},
+      p2: {}
+    },
     checkpoints: {},
     conversations: {},
     votes: {},
@@ -175,6 +179,10 @@ export function restoreCampaignState(candidate) {
     characters: candidate.characters ?? [],
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
+    inputs: candidate.inputs ?? {
+      p1: {},
+      p2: {}
+    },
     lastScene: candidate.lastScene ?? {
       p1: candidate.currentScene?.p1 ?? '',
       p2: candidate.currentScene?.p2 ?? ''
@@ -314,6 +322,7 @@ function handleMinigameLaunch(state, playerId, scene, action) {
     state.activeMinigame = {
       id: scene.minigameId,
       sceneId: scene.id,
+      ownerPlayerId: playerId,
       perspectivePlayerId: playerId,
       startedAt: new Date().toISOString()
     };
@@ -425,12 +434,25 @@ function handleInput(state, playerId, scene, action) {
     return actionError('Enter a value before continuing.');
   }
 
-  state.players[playerId].name = value;
+  const inputKey = normalizeInputKey(scene.inputKey || scene.id);
+
+  state.inputs ??= { p1: {}, p2: {} };
+  state.inputs[playerId] ??= {};
+  state.inputs[playerId][inputKey] = value;
   recordDecision(state, playerId, scene.id, 'input', value);
   archiveSceneForPlayer(state, playerId, scene, `> ${value}`);
   setPlayerScene(state, playerId, scene.next);
 
   return actionSuccess();
+}
+
+function normalizeInputKey(value) {
+  return String(value ?? 'input')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    || 'INPUT';
 }
 
 function handleCheckpoint(state, playerId, scene, action) {
@@ -991,9 +1013,15 @@ function activePlayerIds(state) {
 
 function applyEffects(state, playerId, effects) {
   for (const effect of effects) {
+    const value = resolveEffectValue(state, playerId, effect.value);
+
     switch (effect.type) {
       case 'set-flag':
-        state.flags[effect.key] = effect.value;
+        state.flags[effect.key] = value;
+        break;
+      case 'set-player-name':
+        state.players[playerId].name = String(value ?? '').trim()
+          || state.players[playerId].name;
         break;
       case 'add-item':
         addUnique(state.players[playerId].inventory, effect.key);
@@ -1009,13 +1037,13 @@ function applyEffects(state, playerId, effects) {
       case 'adjust-stat':
         state.players[playerId].stats[effect.key] = Number(
           state.players[playerId].stats[effect.key] ?? 0
-        ) + Number(effect.value ?? 0);
+        ) + Number(value ?? 0);
         break;
       case 'adjust-relationship':
         state.players[playerId].relationships ??= {};
         state.players[playerId].relationships[effect.key] = Number(
           state.players[playerId].relationships[effect.key] ?? 0
-        ) + Number(effect.value ?? 0);
+        ) + Number(value ?? 0);
         break;
       case 'install-mod':
         addUnique(state.installedMods, effect.key);
@@ -1029,6 +1057,20 @@ function applyEffects(state, playerId, effects) {
         throw new Error(`Unsupported scene effect: ${effect.type}`);
     }
   }
+}
+
+function resolveEffectValue(state, playerId, value) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  return value.replace(/\{([A-Z0-9_]+)\}/g, (token, key) => {
+    const inputKey = key.startsWith('INPUT_') ? key.slice(6) : key;
+    const savedValue = state.inputs?.[playerId]?.[key]
+      ?? state.inputs?.[playerId]?.[inputKey];
+
+    return savedValue === undefined ? token : savedValue;
+  });
 }
 
 function initializeConversation(state, scene) {

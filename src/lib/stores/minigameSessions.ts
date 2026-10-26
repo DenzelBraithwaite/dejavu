@@ -1,4 +1,6 @@
 import { writable } from 'svelte/store';
+import type { CampaignState } from './campaign';
+import type { PlayerId } from './session';
 
 export type MinigameId =
   | 'netrunners'
@@ -35,6 +37,22 @@ const initialSessions = Object.fromEntries(
 
 export const minigameSessions = writable(initialSessions);
 export const storyMinigameView = writable(false);
+
+export function playerOwnsStoryMinigame(
+  state: CampaignState | null,
+  playerId: PlayerId | null
+): boolean {
+  if (!state?.activeMinigame || !playerId) {
+    return false;
+  }
+
+  if (state.sessionMode === 'multiplayer') {
+    return true;
+  }
+
+  return state.activeMinigame.ownerPlayerId === playerId
+    || state.activeMinigame.perspectivePlayerId === playerId;
+}
 
 export function setMinigameSessionActive(id: MinigameId, active: boolean): void {
   minigameSessions.update((sessions) => {

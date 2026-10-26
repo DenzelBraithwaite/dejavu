@@ -18,6 +18,7 @@ export type StoryNode = {
   continueLabel?: string;
   prompt?: string;
   placeholder?: string;
+  inputKey?: string;
   next?: string;
   choices?: Array<{
     id: string;

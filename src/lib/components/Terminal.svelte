@@ -137,7 +137,14 @@
       textValues = {
         PLAYER_1: $campaignState.players.p1.name,
         PLAYER_2: $campaignState.players.p2.name,
-        PLAYER_NAME: player?.name ?? ''
+        PLAYER_NAME: player?.name ?? '',
+        ...Object.fromEntries(
+          Object.entries($campaignState.inputs?.[playerId ?? 'p1'] ?? {})
+            .flatMap(([key, value]) => [
+              [key, value],
+              [`INPUT_${key}`, value]
+            ])
+        )
       };
     }
   }

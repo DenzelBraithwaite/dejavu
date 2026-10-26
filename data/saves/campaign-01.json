@@ -1,0 +1,1321 @@
+{
+  "version": 1,
+  "campaignId": "4216c448-eeb9-4a70-9f8d-985847bfd2ae",
+  "story": {
+    "schemaVersion": 1,
+    "id": "test-387555df",
+    "title": "Singleplayer Tutorial",
+    "description": "",
+    "author": "me",
+    "status": "playable",
+    "version": 201,
+    "builtIn": false,
+    "initialSceneIds": {
+      "p1": "test-387555df.p1.start",
+      "p2": "test-387555df.p2.start"
+    },
+    "singleplayerInitialSceneId": "test-387555df.solo.start",
+    "playModes": {
+      "singleplayer": true,
+      "multiplayer": false
+    },
+    "mainCharacterIds": {
+      "singleplayer": "goblin-7cda092a",
+      "multiplayer": {
+        "p1": "goblin-7cda092a",
+        "p2": "nova"
+      }
+    },
+    "characterIds": [
+      "goblin-7cda092a",
+      "nova",
+      "kaz-123404a3"
+    ],
+    "nodes": [
+      {
+        "id": "test-387555df.solo.start",
+        "type": "dialogue",
+        "audience": "p1",
+        "map": "singleplayer",
+        "speaker": "SYSTEM",
+        "text": "Hey there, welcome to the single player story tutorial. This is the start of a story. It is a dialogue node, used for displaying text. When you are ready to continue, press 'Continue'.",
+        "next": "test-387555df.dialogue.5",
+        "characterId": "",
+        "continueLabel": "Continue"
+      },
+      {
+        "id": "test-387555df.dialogue.5",
+        "type": "dialogue",
+        "audience": "p1",
+        "map": "singleplayer",
+        "speaker": "Baba Booey",
+        "text": "This simple dialogue node doesn't have much to it. You can decide who is talking and what the button says, that's about it.",
+        "next": "test-387555df.dialogue.6",
+        "characterId": "",
+        "continueLabel": "Right on"
+      },
+      {
+        "id": "test-387555df.dialogue.6",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You can look at these nodes in the node editor, top-right of your terminal, press 'Edit Mode'. Then to come back here, press 'Play' in the top right of the editor. You can also 'Reset story', feel free to do that now.",
+        "next": "test-387555df.dialogue.7",
+        "speaker": "SYSTEM",
+        "characterId": "",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "-",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.7",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "I hope you didn't get stuck in a loop back there. Dialogue nodes can also use actual characters and display their image.",
+        "next": "test-387555df.dialogue.8",
+        "speaker": "SYSTEM",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Cool",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.8",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "yep. pretty neat. Oh and by the way when you press 'Play' from the editor, your story saves. It also autosaves every minute or so.",
+        "next": "test-387555df.input.9",
+        "speaker": "SYSTEM",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Next",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.input.9",
+        "type": "input",
+        "audience": "p1",
+        "text": "",
+        "next": "test-387555df.dialogue.10",
+        "prompt": "The input node allows players to interact with the story or the other player. Go ahead and say something to me and I'll respond.",
+        "placeholder": "Say something already!",
+        "maxLength": 200,
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.10",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Yeah I have no idea what you said, I mean how could I? This editor is cool but it does have limits. But let's say you wanted to give the player a choice and actually do something based on what decision they made.",
+        "next": "test-387555df.choice.11",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.choice.11",
+        "type": "choice",
+        "audience": "p1",
+        "text": "We have a few ways. First, let's start with the choice node. You can have 2-5 buttons as choices. Go ahead and pick one, this time I'll comment on what you pick.",
+        "next": "",
+        "choices": [
+          {
+            "id": "apples",
+            "label": "Apple",
+            "next": "test-387555df.dialogue.12",
+            "disabled": false
+          },
+          {
+            "id": "oranges",
+            "label": "Orange",
+            "next": "test-387555df.dialogue.13",
+            "disabled": false
+          },
+          {
+            "id": "corn",
+            "label": "Corn",
+            "next": "",
+            "disabled": true
+          },
+          {
+            "id": "olives",
+            "label": "Corn",
+            "next": "test-387555df.dialogue.17",
+            "disabled": false
+          },
+          {
+            "id": "corn",
+            "label": "Olives",
+            "next": "test-387555df.dialogue.16",
+            "disabled": false
+          }
+        ],
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.17",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You picked olives, right? Press 'Continue' so we can merge back to the main branch and I'll explain what just happened.",
+        "next": "test-387555df.dialogue.15",
+        "speaker": "",
+        "characterId": "",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.16",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You picked corn, right? Press 'Continue' so we can merge back to the main branch and I'll explain what just happened.",
+        "next": "test-387555df.dialogue.15",
+        "speaker": "",
+        "characterId": "",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.13",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You picked oranges, right? Press 'Continue' so we can merge back to the main branch and I'll explain what just happened.",
+        "next": "test-387555df.dialogue.15",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.12",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You picked apples, right? Press 'Continue' so we can merge back to the main branch and I'll explain what just happened.",
+        "next": "test-387555df.dialogue.15",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.15",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "So maybe you were confused, or maybe you weren't? It depends on what you picked. First of all you noticed that you can control if a button is disabled. Go to 'Edit mode' and examine the nodes here that branched, particularly their ID.",
+        "next": "test-387555df.dialogue.18",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.18",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Did you see the olives / corn mix-up? Your IDs should clearly identify their text and be unique. Otherwise, players can experience weird things. In this case, not only did corn refer to olives and vice versa, but 2 options had the same 'corn' ID, and since one 'corn' option was disabled, both were!",
+        "next": "test-387555df.clear-terminal.18",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.clear-terminal.18",
+        "type": "clear-terminal",
+        "audience": "p1",
+        "next": "test-387555df.timed-choice.19",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.timed-choice.19",
+        "type": "timed-choice",
+        "audience": "p1",
+        "text": "If you want to stress your players, you can use a timed choice node instead. Good luck! Oh and did you notice the terminal cleared? That's a 'Companion node' which are like helper nodes. In this case I used one to clear the terminal.",
+        "next": "",
+        "choices": [
+          {
+            "id": "blue-pill",
+            "label": "Blue pill",
+            "next": "test-387555df.dialogue.20"
+          },
+          {
+            "id": "red-pill",
+            "label": "Red pill",
+            "next": "test-387555df.dialogue.21"
+          }
+        ],
+        "durationMs": 6000,
+        "fallbackChoiceId": "red-pill",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.21",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "--Red pill--\nDid that add some stress? Other than choice nodes, we can use 'Dice check' nodes. Those are fun, instead of talking about it let's just roll one.",
+        "next": "test-387555df.dice-check.25",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.20",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "--Blue pill--\nDid that add some stress? Other than choice nodes, we can use 'Dice check' nodes. Those are fun, instead of talking about it let's just roll one.",
+        "next": "test-387555df.dice-check.25",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dice-check.25",
+        "type": "dice-check",
+        "audience": "p1",
+        "text": "There are several dice to choose from, for now let's use a standard D6 die. Dice rolls check your player stats and determine if you succeed or fail. Let's test your 'Luck' stat, you can see your character stats at the top of the sidebar on the left (or below on mobile). In the editor you determine which character the players play as. Btw you have a 50% chance at passing this roll.",
+        "next": "",
+        "die": 6,
+        "stat": "luck",
+        "threshold": 10,
+        "success": "test-387555df.dialogue.23",
+        "failure": "test-387555df.dialogue.24",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.24",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "That's unfortunate, dice rolls add danger and excitement to games, they are at the heart of all decisions. This was just for fun but what if this roll just cost you your partner's life?",
+        "next": "test-387555df.condition.25",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.23",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Lucky you, dice rolls add danger and excitement to games, they are at the heart of all decisions. This was just for fun but what if this roll just saved your partner's life?",
+        "next": "test-387555df.condition.25",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.condition.25",
+        "type": "condition",
+        "audience": "p1",
+        "condition": {
+          "type": "last-dice-success",
+          "key": "new-item"
+        },
+        "trueNext": "test-387555df.dialogue.26",
+        "falseNext": "test-387555df.dialogue.27",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.27",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You are seeing this text because you failed the previous dice check. Take a moment to return to the 'Editor mode'. You will notice a few things.\n\n1. Your dice roll determined the next node (dialogue).\n2. A `Condition` node follows that checks your last dice roll and routes you accordingly.\n\nSo that's why you landed here, because you have failed. Just a big ol' failure. Faily faily fail fail fail. Oh well, let's move on!\n\n\n\n\n\n\nfailure...",
+        "next": "test-387555df.image.28",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.image.28",
+        "type": "image",
+        "audience": "p1",
+        "next": "test-387555df.dialogue.29",
+        "src": "/uploads/stories/08ff4fa3-86ee-4df6-ab6e-1054a8e1f719.png",
+        "logText": "",
+        "imagePositionX": 50,
+        "imagePositionY": 50,
+        "imageBorderColor": "#1472bf",
+        "map": "singleplayer",
+        "text": "I am text tied to the image yay"
+      },
+      {
+        "id": "test-387555df.dialogue.29",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Not only can you show images but there's a really cool surprise I've been excited to show you! The `Minigame` node, which let's you add existing minigames to your story.",
+        "next": "test-387555df.minigame.30",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.minigame.30",
+        "type": "minigame",
+        "audience": "p1",
+        "text": "This is a little something called 'Billywig'. Go ahead and give it a try, I'll see you when you're finished. Oh, and if you quit the game early I'll know.",
+        "next": "",
+        "minigameId": "billywig",
+        "resultNext": {
+          "cancelled": "test-387555df.dialogue.32",
+          "won": "test-387555df.dialogue.38",
+          "lost": "test-387555df.dialogue.39",
+          "draw": "test-387555df.dialogue.31"
+        },
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.32",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "I TOLD YOU I WOULD KNOW!",
+        "next": "test-387555df.dialogue.33",
+        "speaker": "",
+        "characterId": "goblin-7cda092a",
+        "expression": "angry",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "you dun goofed now",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.33",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "If you inspect the 'Minigame' node properties in the 'Editor mode', you'll notice that it too is a condition check that checks if the player completed the game or just exited early.",
+        "next": "test-387555df.dialogue.36",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.31",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Thank you for seeing the game through and not just closing it early and good job on the draw. You may not have beat Tilda but you didn't lose!",
+        "next": "test-387555df.dialogue.33",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.38",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Thank you for seeing the game through and not just closing it early and congrats on the win! Beating Tilda is no easy feat.",
+        "next": "test-387555df.dialogue.33",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.39",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Thank you for seeing the game through and not just closing it early and don't worry about the loss. Beating Tilda is no easy task.",
+        "next": "test-387555df.dialogue.33",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.26",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You are seeing this text because you passed the previous dice check. Take a moment to return to the 'Editor mode'. You will notice a few things.\n\n1. Your dice roll determined the next node (dialogue).\n2. A `Condition` node follows that checks your last dice roll and routes you accordingly.\n\nSo that's why you landed here, because you have succeeded. Let's move on!",
+        "next": "test-387555df.image.28",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.36",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "What's left..?\n\nHmm...\n\n.\n.\n.\n\nI guess we can move on to 'Companion' nodes. Those were the main ones who directly affect the flow of the game. We also saw the `Clear terminal` node which is a type of companion node as it does not affect the actual game.\n",
+        "next": "test-387555df.dialogue.37",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.37",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Since companion nodes aren't visible in the story, the next part of the tutorial will take place in 'Edit mode'.\n\nDon't worry I'm not abandoning you, earlier we used the 'Clear terminal' node, now we are using its buddy: the 'Label' node.\n\nLabels are just for you, they don't serve any purpose other than for quick notes or organization (e.g. Chapter 1, Fight scene, etc). Follow the labels!",
+        "next": "test-387555df.clear-terminal.41",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Do not press continue until a label in editor tells you to!",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.label.38",
+        "type": "label",
+        "audience": "p1",
+        "text": "🟢 LOOK HERE!\nHey there, told you I wouldn't leave you.",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.label.40",
+        "type": "label",
+        "audience": "p1",
+        "text": "READ ME NEXT\nRead the noete below me!",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.clear-terminal.41",
+        "type": "clear-terminal",
+        "audience": "p1",
+        "next": "test-387555df.dialogue.42",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.42",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "You may have noticed the 'Clear' node is actually part of the game flow, that's special for a companion node but it makes sense in this case so we can control exactly when the terminal is cleared.\n\nNow, let's take a look at some 'Companion' nodes that can seriously enhance the story experience for you players.",
+        "next": "test-387555df.dialogue.43",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.note.61",
+        "type": "note",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.42",
+        "text": "Ok so my notes got erased and I forgot what I put here...\n\nBut yeah these companion nodes are useful helpers. Labels are quick text to read at a glance, notes are for... well... notes.\n\n1. Press '+' at the bottom of the editor (or anywhere you find a '+' node) and you can see a window with all the available nodes.\n\n2.Look for nodes with the 'companion' badge. These nodes aren't part of the main flow and don't have a node that comes after them, they are usually beside other nodes, with some exceptions.\n\n3. Return to the story now and continue to see some different types of companion nodes.",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.43",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Ok so this text is shaking but don't panic, everything is under control. Take a quick look at the editor and then come right back. I want you to find the companion node tied to this node.\n\nDid you see it?\n\nYou can add a companion node by simply adding a new node via a '+' button, or by clicking directly on an existing node and pressing the '+' button on it. ",
+        "next": "test-387555df.dialogue.45",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.45",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "There are multiple terminal effects so have fun experimenting with them!",
+        "next": "test-387555df.dialogue.47",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.47",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "The 'Terminal effect' companion node can also change the terminal color. Or... colour, if you prefer that spelling.",
+        "next": "test-387555df.dialogue.49",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.49",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Some companion nodes are for audio instead of visuals. You should be hearing music playing now, you can adjust your sound settings in the sidebar menu > 'Settings'.\n\nThis node has properties for looping music, fading, and also 'layers'. Layers are simple, they let you play multiple sounds at once. But by default, music won't stop until you explicitly stop it via the 'Stop Music` companion node. I add one to the next dialogue.",
+        "next": "test-387555df.dialogue.51",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.51",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Open editor and look at the 'Stop Music' companion node attached to this 'Dialogue' node. You can see in the properties that you can control what layer you are stopping, in case you want other sounds or music to persist.",
+        "next": "test-387555df.dialogue.53",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.53",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "The last thing I want to show you is the 'Item Effect' companion node. It lets you manage the player's state.\n\nImagine they pick something up, this is how you add it to their inventory. If they level up, this is how you change their stats.\n\nTake a look at the node attached to thi dialogue node in the editor, you will see it changes a story flag.",
+        "next": "test-387555df.condition.55",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.condition.55",
+        "type": "condition",
+        "audience": "p1",
+        "condition": {
+          "type": "flag-equals",
+          "key": "completed-tutorial",
+          "value": "true"
+        },
+        "trueNext": "test-387555df.dialogue.56",
+        "falseNext": "test-387555df.dialogue.58",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.56",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Back there we set a flag 'completed-tutorial' to be true. Then we put a 'Condition' node to see if that flag is true or not, and if it is, you get to complete the tutorial! If not... well you must restart all over again.",
+        "next": "test-387555df.dialogue.57",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.58",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Back there we set a flag 'completed-tutorial' to be true. Then we put a 'Condition' node to see if that flag is true or not, and if it is, you get to complete the tutorial! If not... well you must restart all over again.",
+        "next": "test-387555df.dialogue.59",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.57",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Congratulations, you have completed the tutorial!\n\nThere are also some nodes that are multiplayer-only. For instance the 'Checkpoint' node stops one user from progressing until another catches up! Multiplayer stories also require 2 players to be connected while playing, so making a multiplayer story editor tutorial would be annoying. You can read up on the remaining nodes via the editor guide located top-right.\n\nThat's all for now, congrats on completing the singleplayer tutorial.",
+        "next": "test-387555df.ending.60",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.dialogue.59",
+        "type": "dialogue",
+        "audience": "p1",
+        "text": "Oh... it seems the flag did not work since it says here you did not complete the tutorial... BACK TO THE BEGINNING YOU GO!\n\nThis is probably a bug if you got here.",
+        "next": "test-387555df.solo.start",
+        "speaker": "",
+        "characterId": "kaz-123404a3",
+        "expression": "normal",
+        "portrait": "",
+        "portraitAlt": "",
+        "continueLabel": "Continue",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.effect.54",
+        "type": "effect",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.53",
+        "text": "You acquired a new item.",
+        "effects": [
+          {
+            "type": "set-flag",
+            "key": "completed-tutorial",
+            "value": "true"
+          }
+        ],
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.stop-music.52",
+        "type": "stop-music",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.51",
+        "stopMusic": true,
+        "stopMusicIds": [],
+        "stopMusicLayers": [
+          1
+        ],
+        "stopSounds": true,
+        "fadeOutSeconds": 0,
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.music.50",
+        "type": "music",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.49",
+        "music": "/audio/music/Cyberpunk_menu_music.mp3",
+        "audioId": "test-387555df.music.50.audio",
+        "audioLayer": 1,
+        "audioLoop": true,
+        "audioVolume": 1,
+        "fadeInSeconds": 0,
+        "fadeOutSeconds": 0,
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.background.48",
+        "type": "screen-effect",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.47",
+        "backgroundTheme": "pink",
+        "map": "singleplayer",
+        "screenEffect": "color",
+        "effectLoop": false,
+        "effectDurationSeconds": 0.6,
+        "effectIterations": 1,
+        "mirrorAxis": "horizontal",
+        "spinDirection": "clockwise",
+        "effectColor": "#39ff88",
+        "scanDirection": "left-to-right"
+      },
+      {
+        "id": "test-387555df.screen-effect.46",
+        "type": "screen-effect",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.45",
+        "screenEffect": "glow",
+        "effectDurationSeconds": 0.6,
+        "effectIterations": 2,
+        "effectLoop": true,
+        "mirrorAxis": "horizontal",
+        "spinDirection": "clockwise",
+        "effectColor": "#39ff88",
+        "scanDirection": "left-to-right",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.screen-effect.44",
+        "type": "screen-effect",
+        "audience": "p1",
+        "attachedTo": "test-387555df.dialogue.43",
+        "screenEffect": "shake",
+        "effectDurationSeconds": 0.6,
+        "effectIterations": 1,
+        "effectLoop": true,
+        "mirrorAxis": "horizontal",
+        "spinDirection": "clockwise",
+        "effectColor": "#39ff88",
+        "scanDirection": "left-to-right",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.ending.60",
+        "type": "ending",
+        "audience": "p1",
+        "text": "End of story.",
+        "map": "singleplayer"
+      },
+      {
+        "id": "test-387555df.p1.start",
+        "type": "dialogue",
+        "audience": "p1",
+        "map": "multiplayer",
+        "speaker": "SYSTEM",
+        "text": "Player 1 story begins here.",
+        "next": "test-387555df.ending",
+        "continueLabel": "Continue",
+        "characterId": ""
+      },
+      {
+        "id": "test-387555df.p2.start",
+        "type": "dialogue",
+        "audience": "p2",
+        "map": "multiplayer",
+        "speaker": "SYSTEM",
+        "text": "Player 2 story begins here.",
+        "next": "test-387555df.ending",
+        "continueLabel": "Continue"
+      },
+      {
+        "id": "test-387555df.ending",
+        "type": "ending",
+        "audience": "both",
+        "map": "multiplayer",
+        "text": "End of story."
+      }
+    ],
+    "theme": {
+      "id": "default-terminal",
+      "name": "Default Terminal"
+    },
+    "supportedMinigames": []
+  },
+  "sessionMode": "singleplayer",
+  "soloPlayerId": "p1",
+  "currentScene": {
+    "p1": "test-387555df.dialogue.49",
+    "p2": ""
+  },
+  "lastScene": {
+    "p1": "test-387555df.dialogue.49",
+    "p2": ""
+  },
+  "players": {
+    "p1": {
+      "characterId": "goblin-7cda092a",
+      "name": "'",
+      "wallet": 1000,
+      "stats": {
+        "muscles": 10,
+        "toughness": 10,
+        "speed": 10,
+        "stealth": 10,
+        "smarts": 10,
+        "ocuware": 10,
+        "cred": 10,
+        "luck": 6,
+        "hacking": 10
+      },
+      "inventory": [],
+      "knownCharacters": [],
+      "statusEffects": [],
+      "relationships": {}
+    },
+    "p2": {
+      "characterId": null,
+      "name": "Avona",
+      "wallet": 0,
+      "stats": {
+        "muscles": 8,
+        "toughness": 9,
+        "speed": 10,
+        "stealth": 12,
+        "smarts": 11,
+        "ocuware": 20,
+        "cred": 13,
+        "luck": 4,
+        "hacking": 6
+      },
+      "inventory": [],
+      "knownCharacters": [],
+      "statusEffects": [],
+      "relationships": {}
+    }
+  },
+  "characters": [
+    {
+      "id": "goblin-7cda092a",
+      "name": "GOBLIN",
+      "wallet": 1000,
+      "stats": {
+        "muscles": 10,
+        "toughness": 10,
+        "speed": 10,
+        "stealth": 10,
+        "smarts": 10,
+        "ocuware": 10,
+        "cred": 10,
+        "luck": 6,
+        "hacking": 10
+      },
+      "images": {
+        "normal": "/uploads/characters/7ff04630-b794-4edd-9ae5-26abd4037e7c.png",
+        "shocked": "/uploads/characters/8708f464-1151-40e4-89b9-394020d56657.png",
+        "angry": "/uploads/characters/d8e803f1-886b-4ae4-aea0-dda8ca1b4968.png",
+        "sad": "/uploads/characters/8e42e8e8-23d1-4865-9343-5900f9df0c9e.png",
+        "happy": "/uploads/characters/cb5c36d8-32f8-4748-8249-fd66eeb20cb7.png"
+      },
+      "imagePositions": {
+        "normal": {
+          "x": 100,
+          "y": 100
+        },
+        "shocked": {
+          "x": 50,
+          "y": 50
+        },
+        "angry": {
+          "x": 50,
+          "y": 50
+        },
+        "sad": {
+          "x": 50,
+          "y": 50
+        },
+        "happy": {
+          "x": 50,
+          "y": 50
+        }
+      },
+      "notes": "For tutorial story.",
+      "builtIn": false,
+      "createdAt": "2026-10-25T10:47:51.751Z",
+      "updatedAt": "2026-10-25T10:47:51.751Z"
+    },
+    {
+      "id": "nova",
+      "name": "Nova",
+      "wallet": 10000,
+      "stats": {
+        "muscles": 11,
+        "toughness": 10,
+        "speed": 9,
+        "stealth": 8,
+        "smarts": 12,
+        "ocuware": 10,
+        "cred": 15,
+        "luck": 2,
+        "hacking": 17
+      },
+      "images": {
+        "normal": "",
+        "shocked": "",
+        "angry": "",
+        "sad": "",
+        "happy": ""
+      },
+      "imagePositions": {
+        "normal": {
+          "x": 50,
+          "y": 50
+        },
+        "shocked": {
+          "x": 50,
+          "y": 50
+        },
+        "angry": {
+          "x": 50,
+          "y": 50
+        },
+        "sad": {
+          "x": 50,
+          "y": 50
+        },
+        "happy": {
+          "x": 50,
+          "y": 50
+        }
+      },
+      "notes": "",
+      "builtIn": true,
+      "createdAt": "2026-10-21T10:21:18.867Z",
+      "updatedAt": "2026-10-21T10:21:18.867Z"
+    },
+    {
+      "id": "kaz-123404a3",
+      "name": "Kaz",
+      "wallet": 100032100,
+      "stats": {
+        "muscles": 30,
+        "toughness": 20,
+        "speed": 20,
+        "stealth": 20,
+        "smarts": 20,
+        "ocuware": 20,
+        "cred": 20,
+        "luck": 20,
+        "hacking": 20
+      },
+      "images": {
+        "normal": "/uploads/characters/12fca979-dc04-487d-aed1-84fc1e6777b8.webp",
+        "shocked": "",
+        "angry": "",
+        "sad": "",
+        "happy": ""
+      },
+      "imagePositions": {
+        "normal": {
+          "x": 48,
+          "y": 90
+        },
+        "shocked": {
+          "x": 50,
+          "y": 50
+        },
+        "angry": {
+          "x": 50,
+          "y": 50
+        },
+        "sad": {
+          "x": 50,
+          "y": 50
+        },
+        "happy": {
+          "x": 50,
+          "y": 50
+        }
+      },
+      "notes": "",
+      "builtIn": false,
+      "createdAt": "2026-10-22T21:11:37.173Z",
+      "updatedAt": "2026-10-26T00:25:14.879Z"
+    }
+  ],
+  "installedMods": [],
+  "flags": {},
+  "checkpoints": {},
+  "conversations": {},
+  "votes": {},
+  "minigames": {},
+  "activeMinigame": null,
+  "pendingDice": {},
+  "appliedCompanions": {
+    "p1": [],
+    "p2": []
+  },
+  "terminalOutput": {
+    "p1": [
+      {
+        "sceneId": "test-387555df.dialogue.42",
+        "speaker": "Kaz",
+        "text": "You may have noticed the 'Clear' node is actually part of the game flow, that's special for a companion node but it makes sense in this case so we can control exactly when the terminal is cleared.\n\nNow, let's take a look at some 'Companion' nodes that can seriously enhance the story experience for you players.",
+        "portrait": "/uploads/characters/12fca979-dc04-487d-aed1-84fc1e6777b8.webp",
+        "portraitPosition": {
+          "x": 48,
+          "y": 90
+        },
+        "portraitAlt": "Kaz, normal expression",
+        "createdAt": "2026-10-26T00:35:36.859Z"
+      },
+      {
+        "sceneId": "test-387555df.dialogue.43",
+        "speaker": "Kaz",
+        "text": "Ok so this text is shaking but don't panic, everything is under control. Take a quick look at the editor and then come right back. I want you to find the companion node tied to this node.\n\nDid you see it?\n\nYou can add a companion node by simply adding a new node via a '+' button, or by clicking directly on an existing node and pressing the '+' button on it. ",
+        "portrait": "/uploads/characters/12fca979-dc04-487d-aed1-84fc1e6777b8.webp",
+        "portraitPosition": {
+          "x": 48,
+          "y": 90
+        },
+        "portraitAlt": "Kaz, normal expression",
+        "createdAt": "2026-10-26T00:35:37.270Z"
+      },
+      {
+        "sceneId": "test-387555df.dialogue.45",
+        "speaker": "Kaz",
+        "text": "There are multiple terminal effects so have fun experimenting with them!",
+        "portrait": "/uploads/characters/12fca979-dc04-487d-aed1-84fc1e6777b8.webp",
+        "portraitPosition": {
+          "x": 48,
+          "y": 90
+        },
+        "portraitAlt": "Kaz, normal expression",
+        "createdAt": "2026-10-26T00:36:16.562Z"
+      },
+      {
+        "sceneId": "test-387555df.dialogue.47",
+        "speaker": "Kaz",
+        "text": "The 'Terminal effect' companion node can also change the terminal color. Or... colour, if you prefer that spelling.",
+        "portrait": "/uploads/characters/12fca979-dc04-487d-aed1-84fc1e6777b8.webp",
+        "portraitPosition": {
+          "x": 48,
+          "y": 90
+        },
+        "portraitAlt": "Kaz, normal expression",
+        "createdAt": "2026-10-26T00:36:21.814Z"
+      }
+    ],
+    "p2": []
+  },
+  "endedPlayers": [],
+  "deadlines": {},
+  "transcript": [
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.solo.start",
+      "speaker": "SYSTEM",
+      "text": "Hey there, welcome to the single player story tutorial. This is the start of a story. It is a dialogue node, used for displaying text. When you are ready to continue, press 'Continue'.",
+      "createdAt": "2026-10-26T00:33:10.517Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.5",
+      "speaker": "Baba Booey",
+      "text": "This simple dialogue node doesn't have much to it. You can decide who is talking and what the button says, that's about it.",
+      "createdAt": "2026-10-26T00:33:11.962Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.6",
+      "speaker": "SYSTEM",
+      "text": "You can look at these nodes in the node editor, top-right of your terminal, press 'Edit Mode'. Then to come back here, press 'Play' in the top right of the editor. You can also 'Reset story', feel free to do that now.",
+      "createdAt": "2026-10-26T00:33:12.042Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.7",
+      "speaker": "SYSTEM",
+      "text": "I hope you didn't get stuck in a loop back there. Dialogue nodes can also use actual characters and display their image.",
+      "createdAt": "2026-10-26T00:33:12.179Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.8",
+      "speaker": "SYSTEM",
+      "text": "yep. pretty neat. Oh and by the way when you press 'Play' from the editor, your story saves. It also autosaves every minute or so.",
+      "createdAt": "2026-10-26T00:33:12.320Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.10",
+      "speaker": "",
+      "text": "Yeah I have no idea what you said, I mean how could I? This editor is cool but it does have limits. But let's say you wanted to give the player a choice and actually do something based on what decision they made.",
+      "createdAt": "2026-10-26T00:33:15.539Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.17",
+      "speaker": "",
+      "text": "You picked olives, right? Press 'Continue' so we can merge back to the main branch and I'll explain what just happened.",
+      "createdAt": "2026-10-26T00:33:17.184Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.15",
+      "speaker": "",
+      "text": "So maybe you were confused, or maybe you weren't? It depends on what you picked. First of all you noticed that you can control if a button is disabled. Go to 'Edit mode' and examine the nodes here that branched, particularly their ID.",
+      "createdAt": "2026-10-26T00:33:17.529Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.18",
+      "speaker": "",
+      "text": "Did you see the olives / corn mix-up? Your IDs should clearly identify their text and be unique. Otherwise, players can experience weird things. In this case, not only did corn refer to olives and vice versa, but 2 options had the same 'corn' ID, and since one 'corn' option was disabled, both were!",
+      "createdAt": "2026-10-26T00:33:17.893Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.20",
+      "speaker": "",
+      "text": "--Blue pill--\nDid that add some stress? Other than choice nodes, we can use 'Dice check' nodes. Those are fun, instead of talking about it let's just roll one.",
+      "createdAt": "2026-10-26T00:33:19.432Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.24",
+      "speaker": "",
+      "text": "That's unfortunate, dice rolls add danger and excitement to games, they are at the heart of all decisions. This was just for fun but what if this roll just cost you your partner's life?",
+      "createdAt": "2026-10-26T00:33:32.647Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.27",
+      "speaker": "",
+      "text": "You are seeing this text because you failed the previous dice check. Take a moment to return to the 'Editor mode'. You will notice a few things.\n\n1. Your dice roll determined the next node (dialogue).\n2. A `Condition` node follows that checks your last dice roll and routes you accordingly.\n\nSo that's why you landed here, because you have failed. Just a big ol' failure. Faily faily fail fail fail. Oh well, let's move on!\n\n\n\n\n\n\nfailure...",
+      "createdAt": "2026-10-26T00:33:33.170Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.29",
+      "speaker": "",
+      "text": "Not only can you show images but there's a really cool surprise I've been excited to show you! The `Minigame` node, which let's you add existing minigames to your story.",
+      "createdAt": "2026-10-26T00:33:33.971Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.39",
+      "speaker": "",
+      "text": "Thank you for seeing the game through and not just closing it early and don't worry about the loss. Beating Tilda is no easy task.",
+      "createdAt": "2026-10-26T00:34:56.044Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.33",
+      "speaker": "",
+      "text": "If you inspect the 'Minigame' node properties in the 'Editor mode', you'll notice that it too is a condition check that checks if the player completed the game or just exited early.",
+      "createdAt": "2026-10-26T00:34:56.481Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.36",
+      "speaker": "",
+      "text": "What's left..?\n\nHmm...\n\n.\n.\n.\n\nI guess we can move on to 'Companion' nodes. Those were the main ones who directly affect the flow of the game. We also saw the `Clear terminal` node which is a type of companion node as it does not affect the actual game.\n",
+      "createdAt": "2026-10-26T00:35:36.097Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.37",
+      "speaker": "",
+      "text": "Since companion nodes aren't visible in the story, the next part of the tutorial will take place in 'Edit mode'.\n\nDon't worry I'm not abandoning you, earlier we used the 'Clear terminal' node, now we are using its buddy: the 'Label' node.\n\nLabels are just for you, they don't serve any purpose other than for quick notes or organization (e.g. Chapter 1, Fight scene, etc). Follow the labels!",
+      "createdAt": "2026-10-26T00:35:36.305Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.42",
+      "speaker": "",
+      "text": "You may have noticed the 'Clear' node is actually part of the game flow, that's special for a companion node but it makes sense in this case so we can control exactly when the terminal is cleared.\n\nNow, let's take a look at some 'Companion' nodes that can seriously enhance the story experience for you players.",
+      "createdAt": "2026-10-26T00:35:36.859Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.43",
+      "speaker": "",
+      "text": "Ok so this text is shaking but don't panic, everything is under control. Take a quick look at the editor and then come right back. I want you to find the companion node tied to this node.\n\nDid you see it?\n\nYou can add a companion node by simply adding a new node via a '+' button, or by clicking directly on an existing node and pressing the '+' button on it. ",
+      "createdAt": "2026-10-26T00:35:37.270Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.45",
+      "speaker": "",
+      "text": "There are multiple terminal effects so have fun experimenting with them!",
+      "createdAt": "2026-10-26T00:36:16.562Z"
+    },
+    {
+      "playerId": "p1",
+      "sceneId": "test-387555df.dialogue.47",
+      "speaker": "",
+      "text": "The 'Terminal effect' companion node can also change the terminal color. Or... colour, if you prefer that spelling.",
+      "createdAt": "2026-10-26T00:36:21.814Z"
+    }
+  ],
+  "decisions": [
+    {
+      "type": "choice",
+      "playerId": "p1",
+      "sceneId": "test-387555df.input.9",
+      "choiceId": "input",
+      "label": "'",
+      "randomized": false,
+      "createdAt": "2026-10-26T00:33:14.935Z"
+    },
+    {
+      "type": "choice",
+      "playerId": "p1",
+      "sceneId": "test-387555df.choice.11",
+      "choiceId": "olives",
+      "label": "Corn",
+      "randomized": false,
+      "createdAt": "2026-10-26T00:33:16.571Z"
+    },
+    {
+      "type": "choice",
+      "playerId": "p1",
+      "sceneId": "test-387555df.timed-choice.19",
+      "choiceId": "blue-pill",
+      "label": "Blue pill",
+      "randomized": false,
+      "createdAt": "2026-10-26T00:33:19.061Z"
+    },
+    {
+      "type": "dice-check",
+      "sceneId": "test-387555df.dice-check.25",
+      "playerId": "p1",
+      "die": 6,
+      "roll": 1,
+      "stat": "luck",
+      "base": 6,
+      "luck": 0,
+      "total": 7,
+      "threshold": 10,
+      "successful": false,
+      "createdAt": "2026-10-26T00:33:28.484Z"
+    },
+    {
+      "type": "minigame",
+      "sceneId": "test-387555df.minigame.30",
+      "minigameId": "billywig",
+      "resultId": "lost",
+      "createdAt": "2026-10-26T00:34:55.050Z"
+    }
+  ],
+  "updatedAt": "2026-10-26T00:36:21.814Z"
+}

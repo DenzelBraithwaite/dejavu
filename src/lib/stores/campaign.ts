@@ -59,6 +59,7 @@ export type CampaignState = {
   characters: CharacterRecord[];
   installedMods: string[];
   flags: Record<string, string | number | boolean>;
+  inputs: Record<PlayerId, Record<string, string>>;
   checkpoints: Record<string, PlayerId[]>;
   conversations: Record<string, {
     activePlayer: PlayerId;
@@ -78,6 +79,7 @@ export type CampaignState = {
   activeMinigame: {
     id: string;
     sceneId: string;
+    ownerPlayerId?: PlayerId;
     perspectivePlayerId?: PlayerId;
     startedAt: string;
   } | null;

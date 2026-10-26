@@ -7,8 +7,23 @@ const SUIT_NAMES = {
   blue: 'Blue Eagle'
 };
 
-const DRONE_WALLS = ['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4'];
-const DRONE_EXIT = '0-3';
+const DRONE_MAPS = [
+  {
+    id: 'crossfire',
+    exit: '0-3',
+    walls: ['0-2', '1-2', '3-1', '3-2', '3-4', '3-5', '5-4', '6-4']
+  },
+  {
+    id: 'switchback',
+    exit: '0-6',
+    walls: ['1-1', '1-2', '2-4', '3-2', '3-4', '4-2', '5-4', '5-5']
+  },
+  {
+    id: 'the-channel',
+    exit: '3-3',
+    walls: ['0-3', '1-1', '1-5', '2-3', '4-1', '4-5', '5-3', '6-3']
+  }
+];
 const DRONE_DIRECTIONS = ['N', 'E', 'S', 'W'];
 const DRONE_COMMANDS = ['forward', 'left', 'right', 'wait', 'shoot', 'long-shot', 'pulse', 'jump', 'shield'];
 const DRONE_LIMITED_ABILITIES = ['long-shot', 'pulse', 'jump', 'shield'];
@@ -251,16 +266,21 @@ function createFirewallAuctionState() {
 }
 
 function createDroneRelayState() {
+  const map = selectDroneMap();
+
   return {
     ...createBaseState('drone-relay'),
     round: 1,
     maximumRounds: 10,
+    mapId: map.id,
+    walls: [...map.walls],
+    exit: map.exit,
     drones: {
       p1: { row: 6, column: 1, direction: 'N', health: 3, shieldTicks: 0 },
       p2: { row: 6, column: 5, direction: 'N', health: 3, shieldTicks: 0 }
     },
     abilities: createDroneAbilities(),
-    healthPack: createDroneHealthPack(),
+    healthPack: createDroneHealthPack(null, map.walls, map.exit),
     pendingQueues: { p1: null, p2: null },
     executionStart: null,
     lastExecution: [],
@@ -316,13 +336,18 @@ function resetGame(state) {
   }
 
   if (state.game === 'drone-relay') {
+    const map = selectDroneMap(state.mapId);
+
     state.round = 1;
+    state.mapId = map.id;
+    state.walls = [...map.walls];
+    state.exit = map.exit;
     state.drones = {
       p1: { row: 6, column: 1, direction: 'N', health: 3, shieldTicks: 0 },
       p2: { row: 6, column: 5, direction: 'N', health: 3, shieldTicks: 0 }
     };
     state.abilities = createDroneAbilities();
-    state.healthPack = createDroneHealthPack();
+    state.healthPack = createDroneHealthPack(null, state.walls, state.exit);
     state.pendingQueues = { p1: null, p2: null };
     state.executionStart = null;
     state.lastExecution = [];
@@ -850,7 +875,7 @@ function resolveDroneMovement(state, intents, movingPlayers, events, cellEffects
       continue;
     }
 
-    if (isDroneCellBlocked(intents[id])) {
+    if (isDroneCellBlocked(state, intents[id])) {
       applyDroneDamage(state, id, events, cellEffects, 'wall impact');
       continue;
     }
@@ -904,7 +929,7 @@ function resolveDroneHealthPack(state, events, cellEffects) {
     drone.health = Math.min(3, drone.health + 1);
     events.push(`${state.players[id].name} collected the health pack.`);
     cellEffects.push({ row: drone.row, column: drone.column, type: 'heal' });
-    state.healthPack = createDroneHealthPack(state.drones);
+    state.healthPack = createDroneHealthPack(state.drones, state.walls, state.exit);
     return;
   }
 }
@@ -919,7 +944,9 @@ function settleDroneWinner(state, events, cellEffects) {
     return;
   }
 
-  const extracted = ['p1', 'p2'].find((id) => `${state.drones[id].row}-${state.drones[id].column}` === DRONE_EXIT);
+  const extracted = ['p1', 'p2'].find(
+    (id) => `${state.drones[id].row}-${state.drones[id].column}` === state.exit
+  );
 
   if (extracted) {
     state.winner = extracted;
@@ -955,7 +982,7 @@ function droneHasLineOfFire(state, attackerId, targetId, range) {
   for (let distance = 1; distance <= range; distance += 1) {
     const cell = nextDronePosition(attacker, distance);
 
-    if (isDroneCellBlocked(cell)) {
+    if (isDroneCellBlocked(state, cell)) {
       return false;
     }
 
@@ -984,11 +1011,11 @@ function createCpuDroneQueue(state, cpuId) {
 
     // Movement commands are only offered when their destination is safe. The CPU may still
     // collide with the player, but it will not repeatedly drive into a known wall or boundary.
-    if (!isDroneCellBlocked(forwardCell)) {
+    if (!isDroneCellBlocked(state, forwardCell)) {
       available.push('forward');
     }
 
-    if (remainingAbilities.jump > 0 && !isDroneCellBlocked(jumpCell)) {
+    if (remainingAbilities.jump > 0 && !isDroneCellBlocked(state, jumpCell)) {
       available.push('jump');
     }
 
@@ -1027,7 +1054,7 @@ function createDroneAbilities() {
   };
 }
 
-function createDroneHealthPack(drones = null) {
+function createDroneHealthPack(drones = null, walls = DRONE_MAPS[0].walls, exit = DRONE_MAPS[0].exit) {
   const occupiedCells = drones
     ? Object.values(drones).map((drone) => `${drone.row}-${drone.column}`)
     : ['6-1', '6-5'];
@@ -1037,7 +1064,7 @@ function createDroneHealthPack(drones = null) {
     for (let column = 0; column < 7; column += 1) {
       const cell = `${row}-${column}`;
 
-      if (!DRONE_WALLS.includes(cell) && cell !== DRONE_EXIT && !occupiedCells.includes(cell)) {
+      if (!walls.includes(cell) && cell !== exit && !occupiedCells.includes(cell)) {
         availableCells.push({ row, column });
       }
     }
@@ -1068,12 +1095,19 @@ function nextDronePosition(drone, distance = 1) {
   };
 }
 
-function isDroneCellBlocked(cell) {
+function isDroneCellBlocked(state, cell) {
   return cell.row < 0
     || cell.row > 6
     || cell.column < 0
     || cell.column > 6
-    || DRONE_WALLS.includes(`${cell.row}-${cell.column}`);
+    || state.walls.includes(`${cell.row}-${cell.column}`);
+}
+
+function selectDroneMap(previousMapId = '') {
+  const candidates = DRONE_MAPS.filter((map) => map.id !== previousMapId);
+  const maps = candidates.length > 0 ? candidates : DRONE_MAPS;
+
+  return maps[Math.floor(Math.random() * maps.length)];
 }
 
 function sameCell(first, second) {
