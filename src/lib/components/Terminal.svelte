@@ -2,7 +2,12 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
-  import { applySceneAudio, stopMusic, stopSounds } from '../audio/audioManager';
+  import {
+    applySceneAudio,
+    stopMusic,
+    stopSounds,
+    unlockAudioPlayback
+  } from '../audio/audioManager';
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import { editorHandoff, libraryState } from '../stores/library';
@@ -232,6 +237,7 @@
 
   function sendAction(action: Record<string, unknown>): void {
     errorMessage = '';
+    unlockAudioPlayback();
 
     socket.emit('campaign:action', action, (result: {
       ok: boolean;

@@ -30,9 +30,14 @@
     </svg>
   </button>
 
+  <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
+    <span slot="title">Story Mode</span>
+    <span slot="description">Play the inserted story</span>
+  </Item>
+
   {#if storyModeActive}
     <div class="story-tools" aria-label="Current story tools">
-      <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue'} iconType={'player'} label="Story character">
+      <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'player'} label="Story character">
         <span slot="title">Character</span>
         <span slot="description">View this player’s story stats</span>
       </Item>
@@ -41,7 +46,7 @@
         <Item
           on:click={() => createEvent('toggle-chat')}
           collapsed={!sidebarExpanded}
-          color={'blue'}
+          color={'blue-deep'}
           iconType={'chat'}
           badge={chatUnreadCount}
           label="Messages"
@@ -53,11 +58,6 @@
     </div>
     <div class="story-tools-divider" aria-hidden="true"></div>
   {/if}
-  
-  <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
-    <span slot="title">Story Mode</span>
-    <span slot="description">Play the inserted story</span>
-  </Item>
 
   <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
     <span slot="title">Library</span>

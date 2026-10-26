@@ -106,8 +106,8 @@
         {
           name: 'Player input',
           type: 'input',
-          description: 'Pauses for a player to enter free-form text, such as a name or answer.',
-          usage: 'Write the prompt and placeholder, set a length limit, and connect the response to Next.'
+          description: 'Saves a free-form response in the current story session without changing the character.',
+          usage: 'Choose a saved key, then reuse the response in text or effects with a token such as {INPUT_FAVORITE_COLOR}.'
         },
         {
           name: 'Open floor',
@@ -837,6 +837,7 @@
 
     const playerId = $sessionState.playerId ?? 'p1';
     const resumeSceneId = $campaignState?.story?.id === editingStory.id
+      && $campaignState.sessionMode === activeStoryMap
       ? $campaignState.currentScene[playerId]
       : activeStoryMap === 'singleplayer'
         ? editingStory.singleplayerInitialSceneId

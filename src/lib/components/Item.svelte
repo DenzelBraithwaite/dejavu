@@ -177,6 +177,14 @@
     background-color: #215798;
   }
 
+  .item-color__blue-soft {
+    background-color: #3975ad;
+  }
+
+  .item-color__blue-deep {
+    background-color: #163f76;
+  }
+
   .item-color__mint {
     background-color: #5ee6c4;
   }
