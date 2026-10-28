@@ -337,6 +337,8 @@
   let isResizingInspector = false;
   let mapZoom = 1;
   let mobileToolbarCollapsed = false;
+  let playableCharacters: CharacterRecord[] = [];
+  let speakerCharacters: CharacterRecord[] = [];
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -429,6 +431,12 @@
   });
 
   $: playerId = $sessionState.playerId;
+  $: playableCharacters = $characterLibraryState.characters.filter(
+    (character) => character.type === 'playable'
+  );
+  $: speakerCharacters = $characterLibraryState.characters.filter(
+    (character) => character.type !== 'account'
+  );
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
   $: localSelection = playerId
     ? $libraryState.selections[playerId]
@@ -2774,6 +2782,10 @@
     }
   }
 
+  function canDeleteStoryImage(path: string): boolean {
+    return path.startsWith('/uploads/stories/');
+  }
+
   function handleSimpleResult(successMessage: string) {
     return (result: { ok: boolean; error?: string }): void => {
       if (result.ok) {
@@ -3213,7 +3225,7 @@
             <label for="new-solo-character">Singleplayer character</label>
             <select id="new-solo-character" bind:value={newMainCharacterIds.singleplayer}>
               <option value="">Choose a character</option>
-              {#each $characterLibraryState.characters as character}
+              {#each playableCharacters as character}
                 <option value={character.id}>{character.name}</option>
               {/each}
             </select>
@@ -3223,7 +3235,7 @@
             <label for="new-p1-character">Player 1 character</label>
             <select id="new-p1-character" bind:value={newMainCharacterIds.multiplayer.p1}>
               <option value="">Choose a character</option>
-              {#each $characterLibraryState.characters as character}
+              {#each playableCharacters as character}
                 <option value={character.id}>{character.name}</option>
               {/each}
             </select>
@@ -3231,7 +3243,7 @@
             <label for="new-p2-character">Player 2 character</label>
             <select id="new-p2-character" bind:value={newMainCharacterIds.multiplayer.p2}>
               <option value="">Choose a different character</option>
-              {#each $characterLibraryState.characters as character}
+              {#each playableCharacters as character}
                 <option
                   value={character.id}
                   disabled={character.id === newMainCharacterIds.multiplayer.p1}
@@ -3331,7 +3343,7 @@
               <span>Main character</span>
               <select bind:value={editingStory.mainCharacterIds.singleplayer}>
                 <option value="">Choose a character</option>
-                {#each $characterLibraryState.characters as character}
+                {#each playableCharacters as character}
                   <option value={character.id}>{character.name}</option>
                 {/each}
               </select>
@@ -3341,7 +3353,7 @@
               <span>Player 1</span>
               <select bind:value={editingStory.mainCharacterIds.multiplayer.p1}>
                 <option value="">Choose a character</option>
-                {#each $characterLibraryState.characters as character}
+                {#each playableCharacters as character}
                   <option value={character.id}>{character.name}</option>
                 {/each}
               </select>
@@ -3350,7 +3362,7 @@
               <span>Player 2</span>
               <select bind:value={editingStory.mainCharacterIds.multiplayer.p2}>
                 <option value="">Choose a different character</option>
-                {#each $characterLibraryState.characters as character}
+                {#each playableCharacters as character}
                   <option
                     value={character.id}
                     disabled={character.id === editingStory.mainCharacterIds.multiplayer.p1}
@@ -3754,7 +3766,7 @@
               <label for="node-speaker">Speaker</label>
               <select id="node-speaker" bind:value={selectedNode.characterId}>
                 <option value="">Custom speaker</option>
-                {#each $characterLibraryState.characters as character}
+                {#each speakerCharacters as character}
                   <option value={character.id}>{character.name}</option>
                 {/each}
               </select>
@@ -4016,7 +4028,7 @@
                 <label for="changed-character-id">Assume character identity</label>
                 <select id="changed-character-id" bind:value={selectedNode.characterId}>
                   <option value="">Choose a character</option>
-                  {#each $characterLibraryState.characters as character}
+                  {#each playableCharacters as character}
                     <option value={character.id}>{character.name}</option>
                   {/each}
                 </select>
@@ -4693,9 +4705,13 @@
                   <img src={imagePath} alt="">
                   <span>{imagePath.split('/').at(-1)}</span>
                 </button>
-                <button class="asset-delete" type="button" on:click={() => deleteStoryImage(imagePath)}>
-                  DELETE
-                </button>
+                {#if canDeleteStoryImage(imagePath)}
+                  <button class="asset-delete" type="button" on:click={() => deleteStoryImage(imagePath)}>
+                    DELETE
+                  </button>
+                {:else}
+                  <span class="asset-built-in">BUILT-IN PORTRAIT</span>
+                {/if}
               </article>
             {/each}
           </div>
@@ -6602,6 +6618,14 @@
       background: #2a0d0a;
       border-color: #cb381f;
       font-size: 0.62rem;
+    }
+
+    .asset-built-in {
+      padding: 8px;
+      color: #67e8f9;
+      background: #082f49;
+      border: 1px solid #0e7490;
+      text-align: center;
     }
 
     img {

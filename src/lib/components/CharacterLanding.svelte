@@ -9,6 +9,11 @@
   let creatingCharacter = false;
   let newCharacterName = '';
   let errorMessage = '';
+  let accountCharacters: CharacterRecord[] = [];
+
+  $: accountCharacters = $characterLibraryState.characters.filter(
+    (character) => character.type === 'account'
+  );
 
   function openCreator(): void {
     creatingCharacter = true;
@@ -37,7 +42,8 @@
 
     socket.emit('characters:create', {
       name: newCharacterName,
-      wallet: 1_000
+      wallet: 1_000,
+      type: 'account'
     }, (result: {
       ok: boolean;
       character?: CharacterRecord;
@@ -63,10 +69,10 @@
     </header>
 
     <div class="landing-content">
-      <p class="eyebrow">CHOOSE YOUR IDENTITY</p>
+      <p class="eyebrow">CHOOSE YOUR ACCOUNT</p>
       <h1 id="landing-title">Who is playing?</h1>
       <p class="introduction">
-        Choose the identity whose name and ₭rypto wallet follow you through main-menu minigames. Stories use the reusable cast assigned by their creator.
+        Choose the account whose name, stats, and ₭rypto wallet follow you through main-menu minigames. Story characters stay inside their own cartridges.
       </p>
 
       {#if errorMessage}
@@ -74,7 +80,7 @@
       {/if}
 
       <div class="character-grid">
-        {#each $characterLibraryState.characters as character}
+        {#each accountCharacters as character}
           <button type="button" class="character-card" on:click={() => {
             selectCharacter(character);
           }}>
@@ -102,7 +108,7 @@
 
       {#if creatingCharacter}
         <form class="quick-create" on:submit|preventDefault={createCharacter}>
-          <label for="new-character-name">New character name</label>
+          <label for="new-character-name">New account name</label>
           <div>
             <input
               id="new-character-name"
@@ -116,7 +122,7 @@
         </form>
       {:else}
         <button class="create-button" type="button" on:click={openCreator}>
-          ＋ Create a new character
+          ＋ Create a new account
         </button>
       {/if}
     </div>

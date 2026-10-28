@@ -31,10 +31,53 @@ const DEFAULT_IMAGE_POSITIONS = {
   happy: { x: 50, y: 50 }
 };
 
+const CHARACTER_TYPES = new Set(['account', 'playable', 'npc']);
+
+const NPC_STATS = Object.fromEntries(
+  Object.keys(DEFAULT_STATS).map((stat) => [stat, 5])
+);
+
+const NPC_NAMES = [
+  'Ajax',
+  'Axel',
+  'Benny',
+  'Dahlia',
+  'David',
+  'Desmond',
+  'Drift',
+  'Female Player',
+  'Grade',
+  'Gritt',
+  'Kat',
+  'Link',
+  'Male Player',
+  'Milton',
+  'Neuro',
+  'Riot',
+  'Strix',
+  'Switch',
+  'Toad',
+  'Trinity',
+  'Vex',
+  'Vex No Mask',
+  'Watts',
+  'Zara',
+  'Zee'
+];
+
 const SEEDED_CHARACTERS = [
+  {
+    id: 'kaz-account',
+    name: 'Kaz',
+    type: 'account',
+    wallet: 10_000,
+    stats: DEFAULT_STATS,
+    notes: 'Starter account for main-menu minigames.'
+  },
   {
     id: 'nova',
     name: 'Nova',
+    type: 'playable',
     wallet: 10_000,
     stats: {
       muscles: 11,
@@ -51,6 +94,7 @@ const SEEDED_CHARACTERS = [
   {
     id: 'avona',
     name: 'Avona',
+    type: 'playable',
     wallet: 10_000,
     stats: {
       muscles: 8,
@@ -63,7 +107,8 @@ const SEEDED_CHARACTERS = [
       luck: 4,
       hacking: 6
     }
-  }
+  },
+  ...NPC_NAMES.map(createNpcSeed)
 ];
 
 export function createCharacterRepository(databasePath) {
@@ -81,12 +126,14 @@ export function createCharacterRepository(databasePath) {
       stats_json TEXT NOT NULL,
       images_json TEXT NOT NULL,
       notes TEXT NOT NULL DEFAULT '',
+      character_type TEXT NOT NULL DEFAULT 'playable',
       built_in INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
   `);
 
+  migrateCharacterTypes(database);
   seedCharacters(database);
 
   return {
@@ -99,6 +146,7 @@ export function createCharacterRepository(databasePath) {
           stats_json AS statsJson,
           images_json AS imagesJson,
           notes,
+          character_type AS type,
           built_in AS builtIn,
           created_at AS createdAt,
           updated_at AS updatedAt
@@ -116,6 +164,7 @@ export function createCharacterRepository(databasePath) {
           stats_json AS statsJson,
           images_json AS imagesJson,
           notes,
+          character_type AS type,
           built_in AS builtIn,
           created_at AS createdAt,
           updated_at AS updatedAt
@@ -142,10 +191,11 @@ export function createCharacterRepository(databasePath) {
           stats_json,
           images_json,
           notes,
+          character_type,
           built_in,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         character.id,
         character.name,
@@ -153,6 +203,7 @@ export function createCharacterRepository(databasePath) {
         JSON.stringify(character.stats),
         serializeCharacterImages(character),
         character.notes,
+        character.type,
         0,
         now,
         now
@@ -184,6 +235,7 @@ export function createCharacterRepository(databasePath) {
           stats_json = ?,
           images_json = ?,
           notes = ?,
+          character_type = ?,
           updated_at = ?
         WHERE id = ?
       `).run(
@@ -192,6 +244,7 @@ export function createCharacterRepository(databasePath) {
         JSON.stringify(character.stats),
         serializeCharacterImages(character),
         character.notes,
+        character.type,
         now,
         id
       );
@@ -260,22 +313,43 @@ function seedCharacters(database) {
       stats_json,
       images_json,
       notes,
+      character_type,
       built_in,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const character of SEEDED_CHARACTERS) {
     const now = new Date().toISOString();
+
+    // Preserve an existing Kaz profile and promote it instead of replacing its progress.
+    if (character.type === 'account') {
+      const existingKaz = database.prepare(`
+        SELECT id
+        FROM characters
+        WHERE name = ? COLLATE NOCASE
+        LIMIT 1
+      `).get(character.name);
+
+      if (existingKaz) {
+        database.prepare(`
+          UPDATE characters
+          SET character_type = 'account'
+          WHERE id = ?
+        `).run(existingKaz.id);
+        continue;
+      }
+    }
 
     insert.run(
       character.id,
       character.name,
       character.wallet,
       JSON.stringify(character.stats),
-      JSON.stringify(DEFAULT_IMAGES),
-      '',
+      JSON.stringify(character.images ?? DEFAULT_IMAGES),
+      character.notes ?? '',
+      character.type,
       1,
       now,
       now
@@ -315,6 +389,7 @@ function normalizeCharacter(input) {
     },
     imagePositions,
     notes: String(input.notes ?? '').trim().slice(0, 500),
+    type: normalizeCharacterType(input.type),
     builtIn: Boolean(input.builtIn)
   };
 }
@@ -339,6 +414,7 @@ function normalizeCharacterRow(row) {
       ...(storedImages._positions ?? {})
     },
     notes: row.notes,
+    type: normalizeCharacterType(row.type),
     builtIn: Boolean(row.builtIn),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
@@ -374,4 +450,49 @@ function createCharacterId(name) {
     .slice(0, 40) || 'unnamed-character';
 
   return `${slug}-${randomUUID().slice(0, 8)}`;
+}
+
+function migrateCharacterTypes(database) {
+  const columns = database.prepare('PRAGMA table_info(characters)').all();
+  const hasCharacterType = columns.some((column) => column.name === 'character_type');
+
+  if (!hasCharacterType) {
+    database.exec(`
+      ALTER TABLE characters
+      ADD COLUMN character_type TEXT NOT NULL DEFAULT 'playable'
+    `);
+  }
+
+  // Kaz was the original app-wide identity, so retain its wallet and stats as an account.
+  database.prepare(`
+    UPDATE characters
+    SET character_type = 'account'
+    WHERE name = 'Kaz' COLLATE NOCASE
+  `).run();
+}
+
+function normalizeCharacterType(value) {
+  const type = String(value ?? 'playable').toLowerCase();
+
+  return CHARACTER_TYPES.has(type) ? type : 'playable';
+}
+
+function createNpcSeed(name) {
+  const fileStem = name.toLowerCase().replaceAll(' ', '_');
+
+  return {
+    id: `npc-${fileStem.replaceAll('_', '-')}`,
+    name,
+    type: 'npc',
+    wallet: 0,
+    stats: NPC_STATS,
+    notes: 'Built-in dialogue NPC.',
+    images: {
+      normal: `/character_imgs/${fileStem}_normal.png`,
+      shocked: `/character_imgs/${fileStem}_shocked.png`,
+      angry: `/character_imgs/${fileStem}_angry.png`,
+      sad: `/character_imgs/${fileStem}_sad.png`,
+      happy: `/character_imgs/${fileStem}_happy.png`
+    }
+  };
 }

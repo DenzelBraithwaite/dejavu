@@ -2,6 +2,7 @@ import { derived, writable } from 'svelte/store';
 import { sessionState, type PlayerId } from './session';
 
 export type CharacterExpression = 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
+export type CharacterType = 'account' | 'playable' | 'npc';
 
 export type CharacterRecord = {
   id: string;
@@ -14,6 +15,7 @@ export type CharacterRecord = {
     y: number;
   }>;
   notes: string;
+  type: CharacterType;
   builtIn: boolean;
   createdAt: string;
   updatedAt: string;

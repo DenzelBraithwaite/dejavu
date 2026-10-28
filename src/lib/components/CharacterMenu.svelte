@@ -6,7 +6,8 @@
     activeCharacter,
     characterLibraryState,
     type CharacterExpression,
-    type CharacterRecord
+    type CharacterRecord,
+    type CharacterType
   } from '../stores/characters';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
@@ -25,25 +26,39 @@
   let uploadingExpression: CharacterExpression | null = null;
   let deleteArmed = false;
   let screenElement: HTMLElement;
+  let accountCharacters: CharacterRecord[] = [];
+  let playableCharacters: CharacterRecord[] = [];
+  let npcCharacters: CharacterRecord[] = [];
+
+  $: accountCharacters = $characterLibraryState.characters.filter(
+    (character) => character.type === 'account'
+  );
+  $: playableCharacters = $characterLibraryState.characters.filter(
+    (character) => character.type === 'playable'
+  );
+  $: npcCharacters = $characterLibraryState.characters.filter(
+    (character) => character.type === 'npc'
+  );
 
   // New records begin with the same complete stat shape used by the runtime.
-  function createDraft(): CharacterRecord {
+  function createDraft(type: CharacterType): CharacterRecord {
     const now = new Date().toISOString();
+    const defaultStat = type === 'npc' ? 5 : 10;
 
     return {
       id: '',
       name: '',
-      wallet: 1_000,
+      wallet: type === 'npc' ? 0 : 1_000,
       stats: {
-        muscles: 10,
-        toughness: 10,
-        speed: 10,
-        stealth: 10,
-        smarts: 10,
-        ocuware: 10,
-        cred: 10,
-        luck: 2,
-        hacking: 10
+        muscles: defaultStat,
+        toughness: defaultStat,
+        speed: defaultStat,
+        stealth: defaultStat,
+        smarts: defaultStat,
+        ocuware: defaultStat,
+        cred: defaultStat,
+        luck: type === 'npc' ? 5 : 2,
+        hacking: defaultStat
       },
       images: {
         normal: '',
@@ -60,6 +75,7 @@
         happy: { x: 50, y: 50 }
       },
       notes: '',
+      type,
       builtIn: false,
       createdAt: now,
       updatedAt: now
@@ -72,8 +88,8 @@
     clearMessages();
   }
 
-  function startCharacter(): void {
-    editingCharacter = createDraft();
+  function startCharacter(type: CharacterType): void {
+    editingCharacter = createDraft(type);
     deleteArmed = false;
     clearMessages();
   }
@@ -131,6 +147,10 @@
   }
 
   function selectCharacter(character: CharacterRecord): void {
+    if (character.type !== 'account') {
+      return;
+    }
+
     clearMessages();
 
     socket.emit('characters:select', character.id, (result: {
@@ -138,7 +158,7 @@
       error?: string;
     }) => {
       if (result.ok) {
-        statusMessage = `${character.name} is now your active character.`;
+        statusMessage = `${character.name} is now your active account.`;
       } else {
         errorMessage = result.error ?? 'The character could not be selected.';
       }
@@ -243,11 +263,13 @@
       <div>
         <p class="eyebrow">CENTRAL CAST DATABASE</p>
         <h1 id="character-title">Characters</h1>
-        <p>Create reusable players and NPCs. Their stats, wallet, and expression set follow them into games and stories.</p>
+        <p>Manage app accounts, playable story characters, and NPCs in one cast database.</p>
       </div>
-      <button class="primary-button" type="button" on:click={startCharacter}>
-        New character
-      </button>
+      <div class="create-actions">
+        <button type="button" on:click={() => startCharacter('account')}>New account</button>
+        <button class="primary-button" type="button" on:click={() => startCharacter('playable')}>New playable</button>
+        <button type="button" on:click={() => startCharacter('npc')}>New NPC</button>
+      </div>
     </div>
 
     {#if statusMessage}
@@ -269,6 +291,15 @@
         </div>
 
         <div class="field-grid">
+          <label>
+            <span>Character type</span>
+            <select bind:value={editingCharacter.type} disabled={editingCharacter.builtIn}>
+              <option value="account">Account</option>
+              <option value="playable">Story playable</option>
+              <option value="npc">NPC</option>
+            </select>
+          </label>
+
           <label>
             <span>Name</span>
             <input bind:value={editingCharacter.name} maxlength="48">
@@ -366,46 +397,84 @@
       </form>
     {:else}
       {#if $activeCharacter}
-        <section class="active-profile" aria-label="Active character">
+        <section class="active-profile" aria-label="Active account">
           <div>
-            <p class="eyebrow">ACTIVE CHARACTER</p>
+            <p class="eyebrow">ACTIVE ACCOUNT</p>
             <h2>{$activeCharacter.name}</h2>
           </div>
           <strong>{$activeCharacter.wallet.toLocaleString()}₭</strong>
         </section>
       {/if}
 
-      <div class="character-grid">
-        {#each $characterLibraryState.characters as character}
-          <article class:active={character.id === $activeCharacter?.id}>
-            {#if character.images.normal}
-              <img
-                src={character.images.normal}
-                alt=""
-                style:object-position={`${character.imagePositions.normal.x}% ${character.imagePositions.normal.y}%`}
-              >
-            {:else}
-              <div class="portrait-placeholder">{character.name.slice(0, 1).toUpperCase()}</div>
-            {/if}
+      {#each [
+        {
+          id: 'account',
+          title: 'Accounts',
+          description: 'App identities used for main-menu minigames, wallets, and stats.',
+          characters: accountCharacters
+        },
+        {
+          id: 'playable',
+          title: 'Story playable characters',
+          description: 'Available as Player 1, Player 2, and Change Character identities.',
+          characters: playableCharacters
+        },
+        {
+          id: 'npc',
+          title: 'NPCs',
+          description: 'Supporting cast available to nodes with speaker controls.',
+          characters: npcCharacters
+        }
+      ] as section}
+        <section class={`character-section character-section--${section.id}`}>
+          <header>
             <div>
-              <span>{character.builtIn ? 'BUILT-IN' : 'CUSTOM'}</span>
-              <h2>{character.name}</h2>
-              <p>{character.notes || 'No character notes yet.'}</p>
-              <strong>{character.wallet.toLocaleString()}₭</strong>
+              <p class="eyebrow">{section.id.toUpperCase()}</p>
+              <h2>{section.title}</h2>
+              <p>{section.description}</p>
             </div>
-            <div class="card-actions">
-              <button type="button" on:click={() => {
-                selectCharacter(character);
-              }}>
-                {character.id === $activeCharacter?.id ? 'Selected' : 'Play as'}
-              </button>
-              <button type="button" on:click={() => {
-                openCharacter(character);
-              }}>Edit</button>
+            <span>{section.characters.length}</span>
+          </header>
+
+          {#if section.characters.length === 0}
+            <p class="empty-section">No {section.title.toLowerCase()} have been created yet.</p>
+          {:else}
+            <div class="character-grid">
+              {#each section.characters as character}
+                <article class:active={character.id === $activeCharacter?.id}>
+                  {#if character.images.normal}
+                    <img
+                      src={character.images.normal}
+                      alt=""
+                      style:object-position={`${character.imagePositions.normal.x}% ${character.imagePositions.normal.y}%`}
+                    >
+                  {:else}
+                    <div class="portrait-placeholder">{character.name.slice(0, 1).toUpperCase()}</div>
+                  {/if}
+                  <div>
+                    <span>{character.builtIn ? 'BUILT-IN' : 'CUSTOM'}</span>
+                    <h2>{character.name}</h2>
+                    <p>{character.notes || 'No character notes yet.'}</p>
+                    <strong>{character.wallet.toLocaleString()}₭</strong>
+                  </div>
+                  <div class="card-actions">
+                    {#if character.type === 'account'}
+                      <button type="button" on:click={() => {
+                        selectCharacter(character);
+                      }}>
+                        {character.id === $activeCharacter?.id ? 'Selected' : 'Use account'}
+                      </button>
+                    {/if}
+                    <button type="button" on:click={() => {
+                      openCharacter(character);
+                    }}>Edit</button>
+                  </div>
+                </article>
+              {/each}
             </div>
-          </article>
-        {/each}
-      </div>
+          {/if}
+        </section>
+      {/each}
     {/if}
   </div>
 </section>
@@ -468,6 +537,13 @@
       color: #9ca8bb;
       line-height: 1.6;
     }
+  }
+
+  .create-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .eyebrow {
@@ -534,6 +610,70 @@
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 1.4rem;
     }
+  }
+
+  .character-section {
+    margin-top: 26px;
+    padding: 18px;
+    background: #150d19;
+    border: 1px solid #54314d;
+
+    > header {
+      margin-bottom: 16px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+
+      h2 {
+        color: #ffffff;
+        font-family: "Orbitron", "Space Mono", sans-serif;
+      }
+
+      p:last-child {
+        margin-top: 5px;
+        color: #9ba7b9;
+      }
+
+      > span {
+        min-width: 38px;
+        padding: 8px;
+        color: #ffffff;
+        border: 1px solid currentColor;
+        text-align: center;
+      }
+    }
+  }
+
+  .character-section--account {
+    border-color: #28bddd;
+
+    > header > span {
+      color: #67e8f9;
+    }
+  }
+
+  .character-section--playable {
+    border-color: #a855f7;
+
+    > header > span {
+      color: #d8b4fe;
+    }
+  }
+
+  .character-section--npc {
+    border-color: #d97706;
+
+    > header > span {
+      color: #fbbf24;
+    }
+  }
+
+  .empty-section {
+    padding: 18px;
+    color: #9ba7b9;
+    border: 1px dashed #4b3047;
   }
 
   .character-grid {
@@ -633,6 +773,7 @@
     }
 
     input,
+    select,
     textarea {
       width: 100%;
       padding: 10px 12px;
@@ -752,6 +893,19 @@
     .active-profile {
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .create-actions {
+      width: 100%;
+      justify-content: stretch;
+
+      button {
+        flex: 1 1 130px;
+      }
+    }
+
+    .character-section {
+      padding: 13px;
     }
 
     .character-grid {

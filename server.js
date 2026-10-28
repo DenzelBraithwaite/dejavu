@@ -74,6 +74,7 @@ const savesDirectory = join(__dirname, 'data', 'saves');
 const storyDatabasePath = join(__dirname, 'data', 'dejavu.sqlite');
 const storyImageDirectory = join(__dirname, 'public', 'uploads', 'stories');
 const characterImageDirectory = join(__dirname, 'public', 'uploads', 'characters');
+const builtInCharacterImageDirectory = join(__dirname, 'public', 'character_imgs');
 const musicDirectory = join(__dirname, 'public', 'audio', 'music');
 const soundDirectory = join(__dirname, 'public', 'audio', 'sounds');
 const reconnectGraceMs = 60_000;
@@ -187,13 +188,19 @@ app.post(
 app.get('/api/story-assets/images', async (_request, response) => {
   try {
     await mkdir(storyImageDirectory, { recursive: true });
-    const entries = await readdir(storyImageDirectory, {
-      withFileTypes: true
-    });
-    const images = entries
+    const [storyEntries, characterEntries] = await Promise.all([
+      readdir(storyImageDirectory, { withFileTypes: true }),
+      readdir(builtInCharacterImageDirectory, { withFileTypes: true })
+    ]);
+    const storyImages = storyEntries
       .filter((entry) => entry.isFile())
       .filter((entry) => /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(entry.name))
-      .map((entry) => `/uploads/stories/${entry.name}`)
+      .map((entry) => `/uploads/stories/${entry.name}`);
+    const characterImages = characterEntries
+      .filter((entry) => entry.isFile())
+      .filter((entry) => /_(normal|angry|shocked|happy|sad)\.png$/i.test(entry.name))
+      .map((entry) => `/character_imgs/${entry.name}`);
+    const images = [...storyImages, ...characterImages]
       .sort((left, right) => left.localeCompare(right));
 
     response.json({
@@ -447,6 +454,14 @@ io.on('connection', (socket) => {
       acknowledge({
         ok: false,
         error: 'Character not found.'
+      });
+      return;
+    }
+
+    if (character.type !== 'account') {
+      acknowledge({
+        ok: false,
+        error: 'Only account characters can be selected as an app identity.'
       });
       return;
     }
@@ -1648,8 +1663,26 @@ function validateStoryCharacterReferences(story) {
   }
 
   for (const characterId of requiredIds) {
-    if (!characterId || !characterRepository.getCharacter(characterId)) {
+    const character = characterRepository.getCharacter(characterId);
+
+    if (!characterId || character?.type !== 'playable') {
       throw new Error('Every playable role must reference an existing character.');
+    }
+  }
+
+  for (const node of story.nodes ?? []) {
+    if (!node.characterId) {
+      continue;
+    }
+
+    const character = characterRepository.getCharacter(node.characterId);
+
+    if (!character || character.type === 'account') {
+      throw new Error('Story nodes can only reference playable characters or NPCs.');
+    }
+
+    if (node.type === 'change-character' && character.type !== 'playable') {
+      throw new Error('Change Character nodes can only use story-playable characters.');
     }
   }
 }
