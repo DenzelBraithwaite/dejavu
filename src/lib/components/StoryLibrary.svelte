@@ -280,8 +280,8 @@
   let newDescription = '';
   let newAuthor = '';
   let newPlayModes = {
-    singleplayer: false,
-    multiplayer: true
+    singleplayer: true,
+    multiplayer: false
   };
   let newMainCharacterIds = {
     singleplayer: '',
@@ -517,6 +517,18 @@
     }
   }
 
+  function newStoryStarterDescription(): string {
+    if (newPlayModes.singleplayer && newPlayModes.multiplayer) {
+      return 'A singleplayer opening and separate Player 1 and Player 2 multiplayer openings will be created automatically.';
+    }
+
+    if (newPlayModes.singleplayer) {
+      return 'A singleplayer opening and starter graph will be created automatically.';
+    }
+
+    return 'Separate Player 1 and Player 2 multiplayer openings will be created automatically.';
+  }
+
   function clearMessages(): void {
     statusMessage = '';
     errorMessage = '';
@@ -636,8 +648,8 @@
       newDescription = '';
       newAuthor = '';
       newPlayModes = {
-        singleplayer: false,
-        multiplayer: true
+        singleplayer: true,
+        multiplayer: false
       };
       newMainCharacterIds = {
         singleplayer: '',
@@ -3152,7 +3164,7 @@
       <p class="eyebrow">NEW CARTRIDGE</p>
       <h1>Create a story</h1>
       <p class="introduction">
-        A starter graph with separate Player 1 and Player 2 openings will be created automatically.
+        {newStoryStarterDescription()}
       </p>
 
       <div class="story-form">
