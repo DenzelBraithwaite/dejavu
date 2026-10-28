@@ -30,34 +30,39 @@
     </svg>
   </button>
 
-  <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
-    <span slot="title">Story Mode</span>
-    <span slot="description">Play the inserted story</span>
-  </Item>
-
-  {#if storyModeActive}
-    <div class="story-tools" aria-label="Current story tools">
-      <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'player'} label="Story character">
-        <span slot="title">Character</span>
-        <span slot="description">View this player’s story stats</span>
-      </Item>
-
-      {#if chatAvailable}
-        <Item
-          on:click={() => createEvent('toggle-chat')}
-          collapsed={!sidebarExpanded}
-          color={'blue-deep'}
-          iconType={'chat'}
-          badge={chatUnreadCount}
-          label="Messages"
-        >
-          <span slot="title">Messages</span>
-          <span slot="description">Open your unlocked Neuro-Link</span>
+  <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
+    {#if storyModeActive}
+      <div class="story-tools" aria-label="Current story tools">
+        <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'player'} label="Story character">
+          <span slot="title">Character</span>
+          <span slot="description">View this player’s story stats</span>
         </Item>
-      {/if}
-    </div>
-    <div class="story-tools-divider" aria-hidden="true"></div>
-  {/if}
+
+        {#if chatAvailable}
+          <Item
+            on:click={() => createEvent('toggle-chat')}
+            collapsed={!sidebarExpanded}
+            color={'blue-deep'}
+            iconType={'chat'}
+            badge={chatUnreadCount}
+            label="Messages"
+          >
+            <span slot="title">Messages</span>
+            <span slot="description">Open your unlocked Neuro-Link</span>
+          </Item>
+        {/if}
+      </div>
+    {/if}
+
+    <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
+      <span slot="title">Story Mode</span>
+      <span slot="description">Play the inserted story</span>
+    </Item>
+
+    {#if storyModeActive}
+      <div class="story-tools-divider" aria-hidden="true"></div>
+    {/if}
+  </div>
 
   <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
     <span slot="title">Library</span>
@@ -147,6 +152,18 @@
     display: contents;
   }
 
+  .story-navigation-group {
+    width: 100%;
+  }
+
+  .story-navigation-group--active {
+    margin-bottom: 8px;
+    padding: 7px;
+    background: #10243b;
+    border: 1px solid #31577c;
+    border-radius: 7px;
+  }
+
   .story-tools-divider {
     height: 1px;
     margin: 10px 4px;
@@ -192,6 +209,20 @@
     .story-tools {
       display: flex;
       gap: 7px;
+    }
+
+    .story-navigation-group {
+      width: auto;
+
+      display: flex;
+      gap: 7px;
+    }
+
+    .story-navigation-group--active {
+      height: 56px;
+      margin: 0;
+      padding: 0 7px;
+      border-radius: 5px;
     }
 
     .story-tools-divider {

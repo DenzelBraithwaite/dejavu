@@ -16,6 +16,10 @@ export type StoryNode = {
   };
   text?: string;
   continueLabel?: string;
+  hoverEffectsEnabled?: boolean;
+  hoverBackgroundColor?: string;
+  hoverTextColor?: string;
+  hoverText?: string;
   prompt?: string;
   placeholder?: string;
   inputKey?: string;
@@ -23,9 +27,9 @@ export type StoryNode = {
   choices?: Array<{
     id: string;
     label: string;
+    hoverText?: string;
     next: string;
     disabled?: boolean;
-    playerMode?: 'singleplayer' | 'multiplayer';
     condition?: {
       type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'relationship-at-least';
       key: string;
@@ -54,6 +58,7 @@ export type StoryNode = {
   backgroundTheme?: 'blue' | 'red' | 'purple' | 'green' | 'amber' | 'pink' | 'cyan' | 'white';
   music?: string | null;
   sound?: string;
+  audioKind?: 'music' | 'sound';
   stopMusic?: boolean;
   audioId?: string;
   audioLayer?: number;
@@ -61,6 +66,10 @@ export type StoryNode = {
   audioVolume?: number;
   fadeInSeconds?: number;
   fadeOutSeconds?: number;
+  audioRangeMode?: 'full' | 'partial';
+  audioStartSeconds?: number;
+  audioStopSeconds?: number;
+  audioDurationSeconds?: number;
   stopMusicIds?: string[];
   stopMusicLayers?: number[];
   stopSounds?: boolean;

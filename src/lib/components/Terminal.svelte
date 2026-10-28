@@ -4,6 +4,8 @@
   import { typewriter, typewriterProfiles } from '../actions/typewriter';
   import {
     applySceneAudio,
+    pauseStoryAudio,
+    resumeStoryAudio,
     stopMusic,
     stopSounds,
     unlockAudioPlayback
@@ -14,6 +16,7 @@
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
+  import { storyMinigameView } from '../stores/minigameSessions';
   import { interpolateSceneText } from '../story/sceneTypes.js';
   import DiceTerminal from './DiceTerminal.svelte';
 
@@ -41,6 +44,9 @@
   let scenePortrait = '';
   let scenePortraitAlt = '';
   let scenePortraitPosition = { x: 50, y: 50 };
+  let hoveredButtonId = '';
+  let storyAudioVisible = false;
+  let lastStoryAudioVisible = false;
 
   $: playerId = $sessionState.playerId;
   $: sceneId = playerId && $campaignState
@@ -182,6 +188,17 @@
     && $libraryState.activeSoloPlayerId !== playerId;
   $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
   $: audioCampaignId = $campaignState?.campaignId ?? '';
+  $: storyAudioVisible = $location === 'terminal' || $storyMinigameView;
+
+  $: if (storyAudioVisible !== lastStoryAudioVisible) {
+    lastStoryAudioVisible = storyAudioVisible;
+
+    if (storyAudioVisible) {
+      resumeStoryAudio();
+    } else {
+      pauseStoryAudio();
+    }
+  }
 
   $: if (terminalScreenElement && scrollKey !== lastScrollKey) {
     lastScrollKey = scrollKey;
@@ -261,11 +278,41 @@
       cue.audioLoop ?? '',
       cue.fadeInSeconds ?? '',
       cue.fadeOutSeconds ?? '',
+      cue.audioRangeMode ?? '',
+      cue.audioStartSeconds ?? '',
+      cue.audioStopSeconds ?? '',
       cue.stopMusic ?? '',
       (cue.stopMusicIds ?? []).join(','),
       (cue.stopMusicLayers ?? []).join(','),
       cue.stopSounds ?? ''
     ].join(':');
+  }
+
+  function buttonHoverStyle(node: StoryNode): string {
+    if (!node.hoverEffectsEnabled) {
+      return '';
+    }
+
+    return [
+      `--button-hover-background: ${node.hoverBackgroundColor ?? '#02fbfb'}`,
+      `--button-hover-color: ${node.hoverTextColor ?? '#07111d'}`
+    ].join('; ');
+  }
+
+  function showButtonHoverText(event: MouseEvent | FocusEvent): void {
+    hoveredButtonId = (event.currentTarget as HTMLButtonElement).dataset.hoverId ?? '';
+  }
+
+  function hideButtonHoverText(): void {
+    hoveredButtonId = '';
+  }
+
+  function buttonLabel(normalText: string, hoverId: string, hoverText = ''): string {
+    if (!scene?.hoverEffectsEnabled || hoveredButtonId !== hoverId || !hoverText.trim()) {
+      return normalText;
+    }
+
+    return hoverText.trim();
   }
 
   function createTerminalAnimations(
@@ -591,7 +638,16 @@
                   style:object-position={`${entry.imagePositionX ?? 50}% ${entry.imagePositionY ?? 50}%`}
                 >
               </figure>
-              <div>
+              <div class:terminal-image-caption--portrait={Boolean(entry.portrait)}>
+                {#if entry.portrait}
+                  <img
+                    class="history-portrait"
+                    src={entry.portrait}
+                    alt={entry.portraitAlt ?? ''}
+                    style:object-position={`${entry.portraitPosition?.x ?? 50}% ${entry.portraitPosition?.y ?? 50}%`}
+                  >
+                {/if}
+                <div>
                 {#if entry.text}
                   {#if entry.speaker}
                     <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
@@ -599,6 +655,7 @@
                   <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
                 {/if}
                 <p class="history-scene-id terminal-image-scene-id">{entry.sceneId}</p>
+                </div>
               </div>
             </article>
           {:else}
@@ -624,8 +681,8 @@
       {#if scene.type !== 'image'}
         <p class="scene-id">{scene.id}</p>
 
-        <div class="scene-copy" class:scene-copy--portrait={scene.type === 'dialogue' && Boolean(scenePortrait)}>
-          {#if scene.type === 'dialogue' && scenePortrait}
+        <div class="scene-copy" class:scene-copy--portrait={Boolean(scenePortrait)}>
+          {#if scenePortrait}
             <figure class="dialogue-portrait">
               <img
                 src={scenePortrait}
@@ -684,8 +741,18 @@
   {#if $campaignState && scene}
     <div class="terminal-controls">
       {#if ['dialogue', 'image', 'effect', 'ambience'].includes(scene.type)}
-        <button type="button" on:click={advance}>
-          {scene.continueLabel?.trim() || 'Continue'}
+        <button
+          class:hover-effects={scene.hoverEffectsEnabled}
+          type="button"
+          data-hover-id="primary"
+          style={buttonHoverStyle(scene)}
+          on:mouseenter={showButtonHoverText}
+          on:mouseleave={hideButtonHoverText}
+          on:focus={showButtonHoverText}
+          on:blur={hideButtonHoverText}
+          on:click={advance}
+        >
+          {buttonLabel(scene.continueLabel?.trim() || 'Continue', 'primary', scene.hoverText)}
         </button>
       {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
         {#if scene.type === 'timed-choice' && typingComplete && remainingMs}
@@ -696,11 +763,18 @@
 
         {#each scene.choices ?? [] as choice}
           <button
+            class:hover-effects={scene.hoverEffectsEnabled}
             type="button"
+            data-hover-id={choice.id}
+            style={buttonHoverStyle(scene)}
             disabled={!choiceIsAvailable(choice)}
+            on:mouseenter={showButtonHoverText}
+            on:mouseleave={hideButtonHoverText}
+            on:focus={showButtonHoverText}
+            on:blur={hideButtonHoverText}
             on:click={() => choose(choice.id)}
           >
-            {choice.label}
+            {buttonLabel(choice.label, choice.id, choice.hoverText)}
           </button>
         {/each}
       {:else if scene.type === 'input'}
@@ -714,11 +788,18 @@
             on:keydown={(event) => handleInputKeydown(event, submitInput)}
           >
           <button
+            class:hover-effects={scene.hoverEffectsEnabled}
             type="button"
+            data-hover-id="primary"
+            style={buttonHoverStyle(scene)}
             disabled={!inputValue.trim()}
+            on:mouseenter={showButtonHoverText}
+            on:mouseleave={hideButtonHoverText}
+            on:focus={showButtonHoverText}
+            on:blur={hideButtonHoverText}
             on:click={submitInput}
           >
-            Submit
+            {buttonLabel('Submit', 'primary', scene.hoverText)}
           </button>
         </div>
       {:else if scene.type === 'checkpoint'}
@@ -736,11 +817,18 @@
               on:keydown={(event) => handleInputKeydown(event, sendMessage)}
             >
             <button
+              class:hover-effects={scene.hoverEffectsEnabled}
               type="button"
+              data-hover-id="primary"
+              style={buttonHoverStyle(scene)}
               disabled={!inputValue.trim()}
+              on:mouseenter={showButtonHoverText}
+              on:mouseleave={hideButtonHoverText}
+              on:focus={showButtonHoverText}
+              on:blur={hideButtonHoverText}
               on:click={sendMessage}
             >
-              Send
+              {buttonLabel('Send', 'primary', scene.hoverText)}
             </button>
           </div>
         {:else}
@@ -754,8 +842,18 @@
           <span>{scene.stat?.toUpperCase()}</span>
           <span>TARGET {scene.threshold}</span>
         </div>
-        <button type="button" on:click={openDiceTerminal}>
-          Prepare D{scene.die} roll
+        <button
+          class:hover-effects={scene.hoverEffectsEnabled}
+          type="button"
+          data-hover-id="primary"
+          style={buttonHoverStyle(scene)}
+          on:mouseenter={showButtonHoverText}
+          on:mouseleave={hideButtonHoverText}
+          on:focus={showButtonHoverText}
+          on:blur={hideButtonHoverText}
+          on:click={openDiceTerminal}
+        >
+          {buttonLabel(`Prepare D${scene.die} roll`, 'primary', scene.hoverText)}
         </button>
       {:else if scene.type === 'vote'}
         {#if playerId && vote?.[playerId]}
@@ -765,11 +863,18 @@
         {:else}
           {#each scene.choices ?? [] as choice}
             <button
+              class:hover-effects={scene.hoverEffectsEnabled}
               type="button"
+              data-hover-id={choice.id}
+              style={buttonHoverStyle(scene)}
               disabled={!choiceIsAvailable(choice)}
+              on:mouseenter={showButtonHoverText}
+              on:mouseleave={hideButtonHoverText}
+              on:focus={showButtonHoverText}
+              on:blur={hideButtonHoverText}
               on:click={() => choose(choice.id)}
             >
-              Vote: {choice.label}
+              {buttonLabel(`Vote: ${choice.label}`, choice.id, choice.hoverText)}
             </button>
           {/each}
         {/if}
@@ -779,8 +884,18 @@
             Waiting for partner to launch {scene.minigameId}
           </button>
         {:else}
-          <button type="button" on:click={launchMinigame}>
-            Launch {scene.minigameId}
+          <button
+            class:hover-effects={scene.hoverEffectsEnabled}
+            type="button"
+            data-hover-id="primary"
+            style={buttonHoverStyle(scene)}
+            on:mouseenter={showButtonHoverText}
+            on:mouseleave={hideButtonHoverText}
+            on:focus={showButtonHoverText}
+            on:blur={hideButtonHoverText}
+            on:click={launchMinigame}
+          >
+            {buttonLabel(`Launch ${scene.minigameId}`, 'primary', scene.hoverText)}
           </button>
         {/if}
       {:else if scene.type === 'ending'}
@@ -960,6 +1075,13 @@
     .scene-image-wrapper {
       margin-bottom: 18px;
     }
+  }
+
+  .terminal-image-caption--portrait {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 13px;
+    align-items: start;
   }
 
   .terminal-image-scene-id {
@@ -1166,6 +1288,12 @@
         box-shadow: 0 0 18px #02fbfb55;
         outline: 2px solid #ffffff;
         outline-offset: 2px;
+      }
+
+      &.hover-effects:hover:not(:disabled),
+      &.hover-effects:focus-visible {
+        color: var(--button-hover-color, #07111d);
+        background: var(--button-hover-background, var(--terminal-accent));
       }
 
       &:disabled {

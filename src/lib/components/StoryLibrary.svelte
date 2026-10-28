@@ -74,6 +74,7 @@
     { type: 'timed-choice', label: 'Timed choice' },
     { type: 'condition', label: 'Condition' },
     { type: 'clear-terminal', label: 'Clear terminal' },
+    { type: 'change-character', label: 'Change character' },
     { type: 'image', label: 'Image' },
     { type: 'minigame', label: 'Minigame' },
     { type: 'label', label: 'Visual label' },
@@ -83,9 +84,8 @@
   const companionNodeTypes = [
     { type: 'effect', label: 'Item / effect' },
     { type: 'note', label: 'Note' },
-    { type: 'music', label: 'Play music' },
-    { type: 'sound-effect', label: 'Sound effect' },
-    { type: 'stop-music', label: 'Stop music' },
+    { type: 'audio', label: 'Audio' },
+    { type: 'stop-audio', label: 'Stop audio' },
     { type: 'screen-effect', label: 'Terminal effect' }
   ];
 
@@ -124,8 +124,8 @@
         {
           name: 'Choice',
           type: 'choice',
-          description: 'Shows two to five labelled buttons with static or campaign-state locks and optional player-mode changes.',
-          usage: 'Set labels, item/flag/stat/relationship requirements, and destinations. A mode-changing option starts the matching map.'
+          description: 'Shows two to five labelled buttons with static or campaign-state locks.',
+          usage: 'Set labels, optional item/flag/stat/relationship requirements, and a destination for every enabled option.'
         },
         {
           name: 'Timed choice',
@@ -158,16 +158,10 @@
       description: 'Change the atmosphere, show visual content, or launch a coded game.',
       nodes: [
         {
-          name: 'Play music',
-          type: 'music',
-          description: 'Starts layered music without stopping tracks already playing.',
-          usage: 'Choose a library track, ID, layer, volume, loop behavior, and fades, then attach it to its starting scene.'
-        },
-        {
-          name: 'Sound effect',
-          type: 'sound-effect',
-          description: 'Plays a one-shot or looping sound while existing music continues.',
-          usage: 'Choose a library sound, volume, loop behavior, and fades, then attach it to the triggering scene.'
+          name: 'Audio',
+          type: 'audio',
+          description: 'Plays layered music or a sound effect without stopping existing audio.',
+          usage: 'Choose Music or Sound, select a library file, then configure volume, looping, fades, and an optional playback segment.'
         },
         {
           name: 'Image',
@@ -218,10 +212,16 @@
           usage: 'Place it in the route exactly where the old terminal history should disappear, then connect Next.'
         },
         {
-          name: 'Stop music',
-          type: 'stop-music',
-          description: 'Stops every track or selected music IDs/layers without adding another story step.',
-          usage: 'Choose optional track IDs, layers, fade-out time, and whether looping sounds also stop, then attach it.'
+          name: 'Stop audio',
+          type: 'stop-audio',
+          description: 'Stops music, sound effects, or both without adding another story step.',
+          usage: 'Choose the audio categories, optional music IDs/layers, and fade-out time, then attach it.'
+        },
+        {
+          name: 'Change character',
+          type: 'change-character',
+          description: 'Changes the character identity and stats used by the current player for the rest of the session.',
+          usage: 'Choose another story character or reset to the player’s default main character, then connect Next.'
         },
         {
           name: 'Visual label',
@@ -855,7 +855,8 @@
       Boolean(candidate.music)
       || Boolean(candidate.sound)
       || Boolean(candidate.stopMusic)
-      || candidate.type === 'stop-music'
+      || Boolean(candidate.stopSounds)
+      || ['stop-music', 'stop-audio'].includes(candidate.type)
     ));
 
     // Start the real scene track inside the Play-button gesture. The terminal
@@ -948,6 +949,21 @@
           : 'blue';
       }
 
+      if (node.type === 'music') {
+        node.type = 'audio';
+        node.audioKind = 'music';
+      }
+
+      if (node.type === 'sound-effect') {
+        node.type = 'audio';
+        node.audioKind = 'sound';
+      }
+
+      if (node.type === 'stop-music') {
+        node.type = 'stop-audio';
+        node.stopMusic = true;
+      }
+
       if (node.type === 'image') {
         node.text ??= '';
         node.imagePositionX ??= 50;
@@ -971,6 +987,10 @@
             label: `Option ${optionNumber}`,
             next: ''
           });
+        }
+
+        for (const choice of node.choices) {
+          delete (choice as typeof choice & { playerMode?: string }).playerMode;
         }
 
         const enabledFallback = node.choices.find((choice) => !choice.disabled);
@@ -1001,6 +1021,13 @@
         node.text = String(node.text ?? '').slice(0, 5000);
       }
 
+      if (nodeHasButtons(node)) {
+        node.hoverEffectsEnabled ??= false;
+        node.hoverBackgroundColor ??= '#02fbfb';
+        node.hoverTextColor ??= '#07111d';
+        node.hoverText ??= '';
+      }
+
       if (node.type === 'minigame') {
         const legacyDestination = node.resultNext?.completed ?? '';
         node.resultNext ??= {};
@@ -1015,16 +1042,21 @@
         delete node.resultNext.completed;
       }
 
-      if (node.type === 'music' || node.type === 'sound-effect') {
+      if (node.type === 'audio') {
+        node.audioKind ??= node.sound ? 'sound' : 'music';
         node.audioId ??= `${node.id}.audio`;
         node.audioLayer ??= 1;
-        node.audioLoop ??= node.type === 'music';
+        node.audioLoop ??= node.audioKind === 'music';
         node.audioVolume ??= 1;
         node.fadeInSeconds ??= 0;
         node.fadeOutSeconds ??= 0;
+        node.audioRangeMode ??= 'full';
+        node.audioStartSeconds ??= 0;
+        node.audioStopSeconds ??= 0;
       }
 
-      if (node.type === 'stop-music') {
+      if (node.type === 'stop-audio') {
+        node.stopMusic ??= true;
         node.stopMusicIds ??= [];
         node.stopMusicLayers ??= [];
         node.stopSounds ??= false;
@@ -1151,11 +1183,11 @@
       shapeClass = 'node-shape-dialogue';
     } else if (type === 'checkpoint') {
       shapeClass = 'node-shape-checkpoint';
-    } else if (['clear-terminal', 'stop-music'].includes(type)) {
+    } else if (['clear-terminal', 'stop-audio', 'change-character'].includes(type)) {
       shapeClass = 'node-shape-clear';
     } else if (['label', 'note'].includes(type)) {
       shapeClass = 'node-shape-label';
-    } else if (['ambience', 'music', 'sound-effect'].includes(type)) {
+    } else if (['ambience', 'audio'].includes(type)) {
       shapeClass = 'node-shape-audio';
     } else if (type === 'image') {
       shapeClass = 'node-shape-image';
@@ -1180,14 +1212,15 @@
   }
 
   function isCompactSpecialNode(node: StoryNode): boolean {
-    return ['checkpoint', 'clear-terminal', 'stop-music', 'label', 'note', 'ending'].includes(node.type);
+    return ['checkpoint', 'clear-terminal', 'stop-audio', 'change-character', 'label', 'note', 'ending'].includes(node.type);
   }
 
   function compactNodeTitle(node: StoryNode): string {
     const titles: Record<string, string> = {
       checkpoint: 'CHECKPOINT',
       'clear-terminal': 'CLEAR',
-      'stop-music': 'STOP MUSIC',
+      'stop-audio': 'STOP AUDIO',
+      'change-character': 'CHANGE CHARACTER',
       ending: 'END'
     };
 
@@ -1635,6 +1668,25 @@
     selectedNode.choices[index].disabled = disabled;
     ensureTimedChoiceFallback();
     refreshStory();
+  }
+
+  function setHoverEffectsEnabled(enabled: boolean): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    rememberForUndo();
+    selectedNode.hoverEffectsEnabled = enabled;
+    selectedNode.hoverBackgroundColor ??= '#02fbfb';
+    selectedNode.hoverTextColor ??= '#07111d';
+    selectedNode.hoverText ??= '';
+    refreshStory();
+  }
+
+  function toggleHoverEffects(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+
+    setHoverEffectsEnabled(input.checked);
   }
 
   function ensureTimedChoiceFallback(): void {
@@ -2268,7 +2320,6 @@
     if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
       return (node.choices ?? []).flatMap((choice, index) => (
         choice.disabled
-          || (choice.playerMode && choice.playerMode !== nodeMap(node))
           ? []
           : [`choices.${index}.next`]
       ));
@@ -2316,8 +2367,39 @@
   }
 
   function supportsSimpleNext(node: StoryNode): boolean {
-    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'clear-terminal']
+    return ['dialogue', 'input', 'checkpoint', 'conversation', 'image', 'clear-terminal', 'change-character']
       .includes(node.type);
+  }
+
+  function supportsSpeakerProperties(node: StoryNode): boolean {
+    return [
+      'dialogue',
+      'input',
+      'choice',
+      'timed-choice',
+      'vote',
+      'dice-check',
+      'image',
+      'minigame',
+      'ending'
+    ].includes(node.type)
+      || (node.type === 'effect' && node.attachedTo === undefined);
+  }
+
+  function nodeHasButtons(node: StoryNode): boolean {
+    return [
+      'dialogue',
+      'image',
+      'choice',
+      'timed-choice',
+      'vote',
+      'input',
+      'conversation',
+      'dice-check',
+      'minigame'
+    ].includes(node.type)
+      || (node.type === 'effect' && node.attachedTo === undefined)
+      || (node.type === 'ambience' && node.attachedTo === undefined);
   }
 
   function isCompanionNode(node: StoryNode): boolean {
@@ -2468,6 +2550,17 @@
     refreshStory();
   }
 
+  function removeCustomSpeakerPortrait(): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    rememberForUndo();
+    selectedNode.portrait = '';
+    selectedNode.portraitAlt = '';
+    refreshStory();
+  }
+
   async function openAudioLibrary(target: 'music' | 'sound'): Promise<void> {
     audioLibraryTarget = target;
     clearMessages();
@@ -2489,6 +2582,16 @@
     }
   }
 
+  function openSelectedAudioLibrary(): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    const target = selectedNode.audioKind === 'sound' ? 'sound' : 'music';
+
+    void openAudioLibrary(target);
+  }
+
   function selectStoryAudio(asset: AudioAsset): void {
     if (!selectedNode) {
       return;
@@ -2498,12 +2601,67 @@
 
     if (audioLibraryTarget === 'music') {
       selectedNode.music = asset.path;
+      selectedNode.sound = '';
     } else {
       selectedNode.sound = asset.path;
+      selectedNode.music = '';
+    }
+
+    const preview = [...document.querySelectorAll<HTMLAudioElement>('.audio-library-list audio')]
+      .find((audio) => audio.getAttribute('src') === asset.path);
+
+    if (preview && Number.isFinite(preview.duration)) {
+      selectedNode.audioDurationSeconds = Math.round(preview.duration * 10) / 10;
     }
 
     audioLibraryOpen = false;
     refreshStory();
+  }
+
+  function setAudioKind(event: Event): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    rememberForUndo();
+    selectedNode.audioKind = (event.currentTarget as HTMLSelectElement).value as 'music' | 'sound';
+    selectedNode.music = '';
+    selectedNode.sound = '';
+    selectedNode.audioLoop = selectedNode.audioKind === 'music';
+    selectedNode.audioDurationSeconds = 0;
+    selectedNode.audioStartSeconds = 0;
+    selectedNode.audioStopSeconds = 0;
+    refreshStory();
+  }
+
+  function setAudioRangeMode(event: Event): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    selectedNode.audioRangeMode = (event.currentTarget as HTMLSelectElement).value as 'full' | 'partial';
+
+    if (selectedNode.audioRangeMode === 'partial'
+      && Number(selectedNode.audioStopSeconds ?? 0) <= Number(selectedNode.audioStartSeconds ?? 0)) {
+      selectedNode.audioStopSeconds = Number(selectedNode.audioDurationSeconds ?? 0);
+    }
+
+    refreshStory();
+  }
+
+  function recordAudioDuration(event: Event): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    const audio = event.currentTarget as HTMLAudioElement;
+    const selectedPath = selectedNode.audioKind === 'sound'
+      ? selectedNode.sound
+      : selectedNode.music;
+
+    if (audio.getAttribute('src') === selectedPath && Number.isFinite(audio.duration)) {
+      selectedNode.audioDurationSeconds = Math.round(audio.duration * 10) / 10;
+    }
   }
 
   function stopOtherAudioPreviews(event: Event): void {
@@ -2791,6 +2949,13 @@
           ...baseNode,
           text: undefined
         };
+      case 'change-character':
+        return {
+          ...baseNode,
+          text: undefined,
+          characterId: '',
+          resetToDefault: false
+        };
       case 'ambience':
         return {
           id,
@@ -2810,35 +2975,26 @@
           attachedTo: '',
           text: 'Add an author note here.'
         };
-      case 'music':
+      case 'audio':
         return {
           id,
           type,
           audience: 'both',
           attachedTo: '',
+          audioKind: 'music',
           music: '',
+          sound: '',
           audioId: `${id}.audio`,
           audioLayer: 1,
           audioLoop: true,
           audioVolume: 1,
           fadeInSeconds: 0,
-          fadeOutSeconds: 0
+          fadeOutSeconds: 0,
+          audioRangeMode: 'full',
+          audioStartSeconds: 0,
+          audioStopSeconds: 0
         };
-      case 'sound-effect':
-        return {
-          id,
-          type,
-          audience: 'both',
-          attachedTo: '',
-          sound: '',
-          audioId: `${id}.audio`,
-          audioLayer: 1,
-          audioLoop: false,
-          audioVolume: 1,
-          fadeInSeconds: 0,
-          fadeOutSeconds: 0
-        };
-      case 'stop-music':
+      case 'stop-audio':
         return {
           id,
           type,
@@ -3582,25 +3738,18 @@
               >
             {/if}
 
-            {#if selectedNode.type === 'dialogue'
-              || (selectedNode.type === 'effect' && selectedNode.attachedTo === undefined)}
+            {#if supportsSpeakerProperties(selectedNode)}
               <label for="node-speaker">Speaker</label>
-              {#if selectedNode.type === 'dialogue'}
-                <select id="node-speaker" bind:value={selectedNode.characterId}>
-                  <option value="">Custom speaker</option>
-                  {#each $characterLibraryState.characters as character}
-                    <option value={character.id}>{character.name}</option>
-                  {/each}
-                </select>
-              {:else}
-                <input id="node-speaker" bind:value={selectedNode.speaker}>
-              {/if}
-            {/if}
+              <select id="node-speaker" bind:value={selectedNode.characterId}>
+                <option value="">Custom speaker</option>
+                {#each $characterLibraryState.characters as character}
+                  <option value={character.id}>{character.name}</option>
+                {/each}
+              </select>
 
-            {#if selectedNode.type === 'dialogue'}
               {#if selectedNode.characterId}
-                <label for="dialogue-expression">Expression</label>
-                <select id="dialogue-expression" bind:value={selectedNode.expression}>
+                <label for="speaker-expression">Expression</label>
+                <select id="speaker-expression" bind:value={selectedNode.expression}>
                   <option value="normal">Normal</option>
                   <option value="shocked">Shocked</option>
                   <option value="angry">Angry</option>
@@ -3625,8 +3774,23 @@
               {:else}
                 <label for="custom-speaker-name">Custom speaker name</label>
                 <input id="custom-speaker-name" bind:value={selectedNode.speaker}>
-                <p class="inspector-help">Custom speakers remain supported for system messages and unnamed extras.</p>
+                <span class="inspector-label">Custom speaker image</span>
+                {#if selectedNode.portrait}
+                  <div class="image-preview image-preview--portrait">
+                    <img src={selectedNode.portrait} alt={selectedNode.portraitAlt ?? ''}>
+                    <span>{selectedNode.portrait.split('/').at(-1)}</span>
+                  </div>
+                {/if}
+                <button type="button" on:click={() => openImageLibrary('portrait')}>Select speaker image</button>
+                {#if selectedNode.portrait}
+                  <button type="button" on:click={removeCustomSpeakerPortrait}>Remove speaker image</button>
+                {/if}
+                <label for="custom-speaker-image-alt">Speaker image description</label>
+                <input id="custom-speaker-image-alt" bind:value={selectedNode.portraitAlt} placeholder="Describe the speaker portrait">
               {/if}
+            {/if}
+
+            {#if selectedNode.type === 'dialogue'}
               <label for="dialogue-continue-label">Continue button text</label>
               <input
                 id="dialogue-continue-label"
@@ -3791,17 +3955,6 @@
                       >
                       Disabled
                     </label>
-                    <label>
-                      <span>Player mode</span>
-                      <select bind:value={choice.playerMode}>
-                        <option value="">Keep current mode</option>
-                        <option value="singleplayer">Set 1 player</option>
-                        <option value="multiplayer">Set 2 players</option>
-                      </select>
-                    </label>
-                    <p class="choice-field-help">
-                      Keep current mode follows this option normally. The other values switch the active session to that player count and open its map.
-                    </p>
                     <label class="choice-disabled-toggle">
                       <input
                         type="checkbox"
@@ -3832,20 +3985,33 @@
                         {/if}
                       </div>
                     {/if}
-                    {#if choice.playerMode && choice.playerMode !== nodeMap(selectedNode)}
-                      <p class="inspector-help">
-                        Starts at the configured {choice.playerMode === 'multiplayer' ? 'Player 1 and Player 2' : 'single-player'} opening node.
-                      </p>
-                    {:else}
-                      <div class="choice-route">
-                        <span>Destination</span>
-                        <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
-                        <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
-                      </div>
-                    {/if}
+                    <div class="choice-route">
+                      <span>Destination</span>
+                      <button class="route-node-link" type="button" disabled={!choice.next} on:click={() => selectConnectedNode(choice.next)}>{routeLabel(selectedNode, `choices.${index}.next`)}</button>
+                      <button type="button" on:click={() => startLinkSelection(`choices.${index}.next`, `Option ${index + 1}`)}>Select</button>
+                    </div>
                   </div>
                 {/each}
               </div>
+            {/if}
+
+            {#if selectedNode.type === 'change-character'}
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.resetToDefault}>
+                Reset to the player’s default main character
+              </label>
+              {#if !selectedNode.resetToDefault}
+                <label for="changed-character-id">Assume character identity</label>
+                <select id="changed-character-id" bind:value={selectedNode.characterId}>
+                  <option value="">Choose a character</option>
+                  {#each $characterLibraryState.characters as character}
+                    <option value={character.id}>{character.name}</option>
+                  {/each}
+                </select>
+              {/if}
+              <p class="inspector-help">
+                The current player uses this character’s name, wallet, and stats until another Change Character node or a story restart.
+              </p>
             {/if}
 
             {#if selectedNode.type === 'screen-effect'}
@@ -4067,19 +4233,21 @@
               <p class="inspector-warning">Legacy atmosphere node. New stories should use separate Music and Sound effect companions.</p>
             {/if}
 
-            {#if selectedNode.type === 'music'}
-              <span class="inspector-label">Selected music</span>
-              <p class="inspector-help">{selectedNode.music || 'No track selected.'}</p>
-              <button type="button" on:click={() => openAudioLibrary('music')}>Select from audio library</button>
-            {/if}
-
-            {#if selectedNode.type === 'sound-effect'}
-              <label for="sound-source">Sound effect path</label>
-              <input id="sound-source" bind:value={selectedNode.sound} placeholder="/audio/sounds/door.wav">
-              <button type="button" on:click={() => openAudioLibrary('sound')}>Select from audio library</button>
-            {/if}
-
-            {#if ['music', 'sound-effect'].includes(selectedNode.type)}
+            {#if selectedNode.type === 'audio'}
+              <label for="audio-kind">Audio type</label>
+              <select id="audio-kind" value={selectedNode.audioKind} on:change={setAudioKind}>
+                <option value="music">Music</option>
+                <option value="sound">Sound effect</option>
+              </select>
+              <span class="inspector-label">Selected audio</span>
+              <p class="inspector-help">
+                {selectedNode.audioKind === 'sound'
+                  ? selectedNode.sound || 'No sound selected.'
+                  : selectedNode.music || 'No music selected.'}
+              </p>
+              <button type="button" on:click={openSelectedAudioLibrary}>
+                Select from audio library
+              </button>
               <div class="field-grid">
                 <div>
                   <label for="audio-id">Track ID</label>
@@ -4107,12 +4275,64 @@
                 <input type="checkbox" bind:checked={selectedNode.audioLoop}>
                 Loop until stopped
               </label>
+              <label for="audio-range-mode">Playback duration</label>
+              <select id="audio-range-mode" value={selectedNode.audioRangeMode} on:change={setAudioRangeMode}>
+                <option value="full">Full song / sound</option>
+                <option value="partial">Partial segment</option>
+              </select>
+              {#if selectedNode.audioRangeMode === 'partial'}
+                <div class="audio-segment-editor">
+                  <label>
+                    <span>Start second</span>
+                    <div>
+                      <input
+                        type="range"
+                        min="0"
+                        max={Math.max(1, Number(selectedNode.audioDurationSeconds ?? 300))}
+                        step="0.1"
+                        bind:value={selectedNode.audioStartSeconds}
+                      >
+                      <input type="number" min="0" step="0.1" bind:value={selectedNode.audioStartSeconds}>
+                    </div>
+                  </label>
+                  <label>
+                    <span>Stop second</span>
+                    <div>
+                      <input
+                        type="range"
+                        min="0"
+                        max={Math.max(1, Number(selectedNode.audioDurationSeconds ?? 300))}
+                        step="0.1"
+                        bind:value={selectedNode.audioStopSeconds}
+                      >
+                      <input type="number" min="0" step="0.1" bind:value={selectedNode.audioStopSeconds}>
+                    </div>
+                  </label>
+                  <small>
+                    {selectedNode.audioDurationSeconds
+                      ? `Detected duration: ${selectedNode.audioDurationSeconds}s`
+                      : 'Preview the selected file in the library once to detect its duration.'}
+                  </small>
+                </div>
+              {/if}
               <p class="inspector-help">
-                Tracks overlap by default. IDs target one track; layers let a Stop music node control a group.
+                Audio overlaps by default. IDs target one track; layers let a Stop Audio node control a music group.
               </p>
             {/if}
 
-            {#if selectedNode.type === 'stop-music'}
+            {#if selectedNode.type === 'stop-audio'}
+              <fieldset>
+                <legend>Audio to stop</legend>
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.stopMusic}>
+                  Music
+                </label>
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.stopSounds}>
+                  Sound effects
+                </label>
+              </fieldset>
+              {#if selectedNode.stopMusic}
               <label for="stop-music-ids">Track IDs to stop</label>
               <input
                 id="stop-music-ids"
@@ -4135,10 +4355,7 @@
                   {/each}
                 </div>
               </fieldset>
-              <label class="choice-disabled-toggle">
-                <input type="checkbox" bind:checked={selectedNode.stopSounds}>
-                Stop sound effects too
-              </label>
+              {/if}
               <label for="audio-fade-out">Fade out seconds</label>
               <input id="audio-fade-out" type="number" min="0" max="30" step="0.1" bind:value={selectedNode.fadeOutSeconds}>
               <p class="inspector-help">
@@ -4180,6 +4397,44 @@
                   {/if}
                 </div>
               {/each}
+            {/if}
+
+            {#if nodeHasButtons(selectedNode)}
+              <section class="button-hover-editor">
+                <label class="choice-disabled-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedNode.hoverEffectsEnabled)}
+                    on:change={toggleHoverEffects}
+                  >
+                  Enable hover effects
+                </label>
+                {#if selectedNode.hoverEffectsEnabled}
+                  <div class="field-grid">
+                    <label>
+                      <span>Background color</span>
+                      <input type="color" bind:value={selectedNode.hoverBackgroundColor}>
+                    </label>
+                    <label>
+                      <span>Text color</span>
+                      <input type="color" bind:value={selectedNode.hoverTextColor}>
+                    </label>
+                  </div>
+                  {#if ['choice', 'timed-choice', 'vote'].includes(selectedNode.type)}
+                    {#each selectedNode.choices ?? [] as choice, index}
+                      <label>
+                        <span>Option {index + 1} hover text</span>
+                        <input bind:value={choice.hoverText} placeholder={choice.label || `Option ${index + 1}`}>
+                      </label>
+                    {/each}
+                  {:else}
+                    <label>
+                      <span>Hover button text</span>
+                      <input bind:value={selectedNode.hoverText} placeholder="Leave blank to keep the normal text">
+                    </label>
+                  {/if}
+                {/if}
+              </section>
             {/if}
 
             <div class="inspector-delete-zone">
@@ -4452,7 +4707,7 @@
           Preview files here, then select one. The player shows duration after the browser reads its metadata.
         </p>
 
-        {#if selectedNode && ['music', 'sound-effect'].includes(selectedNode.type)}
+        {#if selectedNode?.type === 'audio'}
           <div class="audio-library-settings">
             <label>
               <span>Volume · {Math.round(Number(selectedNode.audioVolume ?? 1) * 100)}%</span>
@@ -4490,6 +4745,7 @@
                   controls
                   preload="metadata"
                   src={asset.path}
+                  on:loadedmetadata={recordAudioDuration}
                   on:play={stopOtherAudioPreviews}
                 ></audio>
                 <button class="primary-button" type="button" on:click={() => selectStoryAudio(asset)}>
@@ -5772,6 +6028,45 @@
 
     button {
       width: 100%;
+    }
+  }
+
+  .button-hover-editor,
+  .audio-segment-editor {
+    margin-top: 24px;
+    padding: 14px;
+    background: #07111d;
+    border: 1px solid #294668;
+
+    display: grid;
+    gap: 10px;
+
+    label {
+      color: #6dc2fb;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+
+      display: grid;
+      gap: 6px;
+    }
+  }
+
+  .audio-segment-editor {
+    margin-top: 10px;
+
+    label > div {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 86px;
+      gap: 8px;
+    }
+
+    input {
+      width: 100%;
+    }
+
+    small {
+      color: #94a3b8;
+      line-height: 1.45;
     }
   }
 

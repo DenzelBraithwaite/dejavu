@@ -63,6 +63,10 @@ export function createCampaignState(story = null, options = {}) {
       p1: createPlayerState(playerCharacters.p1, 'Nova', DEFAULT_STATS.p1),
       p2: createPlayerState(playerCharacters.p2, 'Avona', DEFAULT_STATS.p2)
     },
+    defaultCharacterIds: {
+      p1: playerCharacters.p1?.id ?? null,
+      p2: playerCharacters.p2?.id ?? null
+    },
     characters,
     installedMods: [],
     flags: {},
@@ -179,6 +183,14 @@ export function restoreCampaignState(candidate) {
     characters: candidate.characters ?? [],
     minigames: candidate.minigames ?? {},
     activeMinigame: candidate.activeMinigame ?? null,
+    defaultCharacterIds: candidate.defaultCharacterIds ?? {
+      p1: candidate.sessionMode === 'singleplayer'
+        ? candidate.story.mainCharacterIds?.singleplayer ?? null
+        : candidate.story.mainCharacterIds?.multiplayer?.p1 ?? null,
+      p2: candidate.sessionMode === 'singleplayer'
+        ? candidate.story.mainCharacterIds?.singleplayer ?? null
+        : candidate.story.mainCharacterIds?.multiplayer?.p2 ?? null
+    },
     inputs: candidate.inputs ?? {
       p1: {},
       p2: {}
@@ -408,15 +420,6 @@ function handleChoice(state, playerId, scene, action) {
   applyEffects(state, playerId, choice.effects ?? []);
   recordDecision(state, playerId, scene.id, choice.id, choice.label);
   archiveSceneForPlayer(state, playerId, scene, `> ${choice.label}`);
-
-  if (choice.playerMode && choice.playerMode !== state.sessionMode) {
-    switchCampaignMode(state, choice.playerMode, playerId, choice.next);
-
-    return {
-      ok: true,
-      sessionMode: choice.playerMode
-    };
-  }
 
   setPlayerScene(state, playerId, choice.next);
 
@@ -752,11 +755,23 @@ function appendSceneImages(state, playerId, scene) {
   }
 
   for (const image of imageNodes) {
+    const character = state.characters.find(
+      (candidate) => candidate.id === image.characterId
+    );
+    const expression = image.expression ?? 'normal';
+
     appendTerminalEntry(state, playerId, {
       kind: 'image',
       sceneId: image.id,
-      speaker: image.speaker ?? '',
+      speaker: character?.name ?? image.speaker ?? '',
       text: image.text ?? '',
+      portrait: character?.images?.[expression] ?? image.portrait ?? '',
+      portraitPosition: character?.imagePositions?.[expression]
+        ?? image.portraitPosition
+        ?? { x: 50, y: 50 },
+      portraitAlt: character
+        ? `${character.name}, ${expression} expression`
+        : image.portraitAlt ?? '',
       src: image.src,
       alt: image.alt ?? '',
       logText: image.logText ?? image.alt ?? '',
@@ -835,6 +850,7 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
   while (
     scene?.type === 'condition'
     || scene?.type === 'clear-terminal'
+    || scene?.type === 'change-character'
     || scene?.type === 'label'
   ) {
     traversedNodes += 1;
@@ -845,6 +861,12 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
 
     if (scene.type === 'clear-terminal') {
       state.terminalOutput[playerId] = [];
+      scene = getScene(state, scene.next);
+      continue;
+    }
+
+    if (scene.type === 'change-character') {
+      applyCharacterChange(state, playerId, scene);
       scene = getScene(state, scene.next);
       continue;
     }
@@ -864,6 +886,27 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
   }
 
   return scene;
+}
+
+function applyCharacterChange(state, playerId, scene) {
+  const characterId = scene.resetToDefault
+    ? state.defaultCharacterIds?.[playerId]
+    : scene.characterId;
+  const character = state.characters.find((candidate) => candidate.id === characterId);
+
+  if (!character) {
+    return;
+  }
+
+  state.players[playerId] = {
+    ...state.players[playerId],
+    characterId: character.id,
+    name: character.name,
+    wallet: Number(character.wallet ?? 0),
+    stats: {
+      ...character.stats
+    }
+  };
 }
 
 function evaluateCondition(state, playerId, condition = {}) {
@@ -907,49 +950,6 @@ function markPlayerEnded(state, playerId) {
   addUnique(state.endedPlayers, playerId);
   state.currentScene[playerId] = '';
   delete state.deadlines[playerId];
-}
-
-function switchCampaignMode(state, mode, playerId, nextSceneId) {
-  if (!state.story?.playModes?.[mode]) {
-    throw new Error(`This cartridge does not support ${mode}.`);
-  }
-
-  state.sessionMode = mode;
-  state.soloPlayerId = mode === 'singleplayer' ? playerId : null;
-
-  const assignedCharacters = resolvePlayerCharacters(
-    state.story,
-    mode,
-    state.soloPlayerId,
-    state.characters
-  );
-
-  for (const participantId of PLAYER_IDS) {
-    const assignedCharacter = assignedCharacters[participantId];
-
-    if (!assignedCharacter) {
-      continue;
-    }
-
-    state.players[participantId] = {
-      ...state.players[participantId],
-      characterId: assignedCharacter.id,
-      name: assignedCharacter.name,
-      wallet: Number(assignedCharacter.wallet ?? 0),
-      stats: {
-        ...assignedCharacter.stats
-      }
-    };
-  }
-
-  if (mode === 'singleplayer') {
-    setPlayerScene(state, playerId, nextSceneId);
-    return;
-  }
-
-  for (const participantId of PLAYER_IDS) {
-    setPlayerScene(state, participantId, state.story.initialSceneIds[participantId]);
-  }
 }
 
 function archiveSceneForPlayer(state, playerId, scene, response = '') {

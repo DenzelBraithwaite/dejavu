@@ -1,7 +1,7 @@
 /**
  * @typedef {'p1' | 'p2'} PlayerId
  * @typedef {'both' | PlayerId} Audience
- * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'background' | 'music' | 'sound-effect' | 'stop-music' | 'screen-effect' | 'condition' | 'clear-terminal' | 'label' | 'ending'} SceneType
+ * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'audio' | 'stop-audio' | 'screen-effect' | 'condition' | 'clear-terminal' | 'change-character' | 'label' | 'ending'} SceneType
  *
  * @typedef SceneEffect
  * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat' | 'install-mod' | 'remove-mod'} type

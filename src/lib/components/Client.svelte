@@ -493,7 +493,7 @@
       {sidebarExpanded}
       chatAvailable={neuroChatInstalled}
       chatUnreadCount={unreadChatCount}
-      storyModeActive={$location === 'terminal'}
+      storyModeActive={$location === 'terminal' || $storyMinigameView}
       on:select={changePage}
       on:show-story-character={() => storyCharacterOpen = true}
       on:toggle-chat={toggleChat}

@@ -56,6 +56,7 @@ export type CampaignState = {
   currentScene: Record<PlayerId, string>;
   lastScene: Record<PlayerId, string>;
   players: Record<PlayerId, CampaignPlayer>;
+  defaultCharacterIds: Record<PlayerId, string | null>;
   characters: CharacterRecord[];
   installedMods: string[];
   flags: Record<string, string | number | boolean>;

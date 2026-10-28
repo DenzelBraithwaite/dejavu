@@ -26,7 +26,7 @@ export function createStoryRepository(databasePath) {
   `);
 
   seedBuiltInStory(database, dejaVuStoryDocument);
-  migrateLegacyTerminalColorNodes(database);
+  migrateLegacyStoryNodes(database);
 
   return {
     listStories() {
@@ -301,7 +301,7 @@ function createStoryDocument(input) {
 
 function normalizeStoryDocument(document) {
   const title = String(document.title ?? '').trim().slice(0, 80);
-  const nodes = normalizeTerminalColorNodes(document.nodes);
+  const nodes = normalizeLegacyStoryNodes(document.nodes);
 
   if (!title) {
     throw new Error('Enter a story title.');
@@ -340,31 +340,48 @@ function normalizeStoryDocument(document) {
   };
 }
 
-function normalizeTerminalColorNodes(nodes) {
+function normalizeLegacyStoryNodes(nodes) {
   if (!Array.isArray(nodes)) {
     return nodes;
   }
 
   return nodes.map((node) => {
-    if (node?.type !== 'background') {
-      return node;
+    const migratedNode = structuredClone(node);
+
+    if (migratedNode?.type === 'background') {
+      migratedNode.type = 'screen-effect';
+      migratedNode.screenEffect = 'color';
+      migratedNode.backgroundTheme = migratedNode.backgroundTheme
+        ?? migratedNode.background
+        ?? 'blue';
+      migratedNode.effectLoop = false;
+      delete migratedNode.background;
     }
 
-    const backgroundTheme = node.backgroundTheme ?? node.background ?? 'blue';
-    const migratedNode = {
-      ...node,
-      type: 'screen-effect',
-      screenEffect: 'color',
-      backgroundTheme,
-      effectLoop: false
-    };
+    if (migratedNode?.type === 'music') {
+      migratedNode.type = 'audio';
+      migratedNode.audioKind = 'music';
+    }
 
-    delete migratedNode.background;
+    if (migratedNode?.type === 'sound-effect') {
+      migratedNode.type = 'audio';
+      migratedNode.audioKind = 'sound';
+    }
+
+    if (migratedNode?.type === 'stop-music') {
+      migratedNode.type = 'stop-audio';
+      migratedNode.stopMusic = true;
+    }
+
+    for (const choice of migratedNode?.choices ?? []) {
+      delete choice.playerMode;
+    }
+
     return migratedNode;
   });
 }
 
-function migrateLegacyTerminalColorNodes(database) {
+function migrateLegacyStoryNodes(database) {
   const stories = database.prepare(`
     SELECT
       id,
@@ -375,7 +392,10 @@ function migrateLegacyTerminalColorNodes(database) {
 
   for (const storedStory of stories) {
     const document = JSON.parse(storedStory.documentJson);
-    const hasLegacyNode = document.nodes?.some((node) => node.type === 'background');
+    const hasLegacyNode = document.nodes?.some((node) => (
+      ['background', 'music', 'sound-effect', 'stop-music'].includes(node.type)
+      || node.choices?.some((choice) => choice.playerMode)
+    ));
 
     if (!hasLegacyNode) {
       continue;
@@ -385,7 +405,7 @@ function migrateLegacyTerminalColorNodes(database) {
     const migratedDocument = {
       ...document,
       version,
-      nodes: normalizeTerminalColorNodes(document.nodes)
+      nodes: normalizeLegacyStoryNodes(document.nodes)
     };
 
     database.prepare(`
