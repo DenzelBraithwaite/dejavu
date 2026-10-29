@@ -12,6 +12,7 @@
     MinigameLibrary,
     NetRunners,
     PacketWar,
+    PlayerMenu,
     Pigz,
     SaveMenu,
     SettingsMenu,
@@ -23,6 +24,7 @@
 
 <div class="page-stack">
   <Terminal />
+  <PlayerMenu />
   <BagMenu />
   <CharacterMenu />
   <Journal />

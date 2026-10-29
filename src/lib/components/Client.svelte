@@ -48,7 +48,6 @@
   let chatOpen = false;
   let unreadChatCount = 0;
   let showChatToast = false;
-  let storyCharacterOpen = false;
   let accountSelectorOpen = false;
   let chatToastTimer: number;
   let pendingPage: string | null = null;
@@ -62,10 +61,7 @@
         ([, connectionId]) => connectionId === $sessionState.playerId
       )?.[0] as PlayerId | undefined) ?? $sessionState.playerId
     : $sessionState.playerId;
-  $: storyPlayer = storyPlayerId
-    ? $campaignState?.players[storyPlayerId]
-    : null;
-  $: storyToolsVisible = ['terminal', 'bag', 'journal', 'saves'].includes($location)
+  $: storyToolsVisible = ['terminal', 'player', 'bag', 'journal', 'saves'].includes($location)
     || $storyMinigameView;
 
   $: if (!neuroChatInstalled && chatOpen) {
@@ -505,10 +501,9 @@
       {sidebarExpanded}
       chatAvailable={neuroChatInstalled}
       chatUnreadCount={unreadChatCount}
-      storyModeActive={$location === 'terminal' || $storyMinigameView}
+      storyModeActive={storyToolsVisible}
       {storyToolsVisible}
       on:select={changePage}
-      on:show-story-character={() => storyCharacterOpen = true}
       on:show-account-selector={() => accountSelectorOpen = true}
       on:toggle-chat={toggleChat}
       on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}
@@ -539,31 +534,6 @@
         </div>
       {/if}
 
-      {#if storyCharacterOpen && storyPlayer}
-        <div class="story-character-backdrop" role="presentation" on:click|self={() => storyCharacterOpen = false}>
-          <section class="story-character-panel" role="dialog" aria-modal="true" aria-labelledby="story-character-title">
-            <header>
-              <div>
-                <p>ACTIVE STORY CHARACTER</p>
-                <h2 id="story-character-title">{storyPlayer.name}</h2>
-              </div>
-              <button type="button" aria-label="Close character panel" on:click={() => storyCharacterOpen = false}>×</button>
-            </header>
-            <dl>
-              <div>
-                <dt>Wallet</dt>
-                <dd>${storyPlayer.wallet}</dd>
-              </div>
-              {#each Object.entries(storyPlayer.stats) as [stat, value]}
-                <div>
-                  <dt>{stat}</dt>
-                  <dd>{value}</dd>
-                </div>
-              {/each}
-            </dl>
-          </section>
-        </div>
-      {/if}
 
       {#if !$sessionState.bothPlayersConnected}
         <div class="partner-status" role="status">
@@ -635,85 +605,6 @@
     position: fixed;
     z-index: 1200;
     inset: 0;
-  }
-
-  .story-character-backdrop {
-    position: fixed;
-    z-index: 900;
-    inset: 0;
-    padding: 24px;
-    background: #020617d9;
-    backdrop-filter: blur(4px);
-
-    display: grid;
-    place-items: center;
-  }
-
-  .story-character-panel {
-    width: min(560px, 100%);
-    max-height: min(720px, calc(100vh - 40px));
-    padding: 24px;
-    overflow-y: auto;
-    color: #dbeafe;
-    background: #09111e;
-    border: 1px solid #6aaee8;
-    box-shadow: 0 0 42px #6aaee844;
-
-    header {
-      padding-bottom: 14px;
-      border-bottom: 1px solid #3e6d94;
-
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-    }
-
-    p {
-      color: #9dcdf4;
-      font-size: 0.66rem;
-      letter-spacing: 1.4px;
-    }
-
-    h2 {
-      margin-top: 6px;
-      font-family: "Orbitron", "Space Mono", sans-serif;
-    }
-
-    button {
-      min-width: 38px;
-      min-height: 38px;
-      color: #e8edf6;
-      background: #111a2c;
-      border: 1px solid #6aaee8;
-      cursor: pointer;
-    }
-
-    dl {
-      margin-top: 16px;
-
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    dl > div {
-      padding: 10px 12px;
-      background: #07111d;
-      border: 1px solid #365d7f;
-    }
-
-    dt {
-      color: #8893a2;
-      font-size: 0.65rem;
-      text-transform: uppercase;
-    }
-
-    dd {
-      margin-top: 5px;
-      color: #9dcdf4;
-      font-weight: 800;
-    }
   }
 
   .exit-confirmation {

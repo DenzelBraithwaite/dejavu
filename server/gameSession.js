@@ -859,7 +859,8 @@ function applyAttachedCompanions(state, playerId, scene) {
   ) ?? [];
 
   for (const companion of companions) {
-    if (companion.type !== 'effect' || applied.has(companion.id)) {
+    if (!['effect', 'item-effect', 'story-flag', 'player-state'].includes(companion.type)
+      || applied.has(companion.id)) {
       continue;
     }
 
@@ -871,7 +872,11 @@ function applyAttachedCompanions(state, playerId, scene) {
     applyEffects(state, playerId, allowedEffects);
 
     for (const effect of allowedEffects) {
-      const announcement = effectAnnouncement(effect, companion.text);
+      const announcement = effectAnnouncement(
+        effect,
+        companion.announcementTemplate,
+        companion.text
+      );
 
       if (announcement) {
         appendTerminalEntry(state, playerId, {
@@ -892,8 +897,15 @@ function applyAttachedCompanions(state, playerId, scene) {
   state.appliedCompanions[playerId] = [...applied];
 }
 
-function effectAnnouncement(effect, authoredText) {
-  const customText = String(authoredText ?? '').trim();
+function effectAnnouncement(effect, announcementTemplate, legacyText) {
+  const customTemplate = String(announcementTemplate ?? '').trim();
+  const customText = String(legacyText ?? '').trim();
+
+  if (customTemplate) {
+    return customTemplate.includes('<ITEM>')
+      ? customTemplate.replaceAll('<ITEM>', effect.key)
+      : `${customTemplate}${effect.key}`;
+  }
 
   if (customText && customText !== 'You acquired a new item.') {
     return customText;

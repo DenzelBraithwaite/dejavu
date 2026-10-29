@@ -373,6 +373,25 @@ function normalizeLegacyStoryNodes(nodes) {
       migratedNode.stopMusic = true;
     }
 
+    if (migratedNode?.type === 'effect') {
+      const effectType = String(migratedNode.effects?.[0]?.type ?? 'add-item');
+
+      if (['add-item', 'remove-item'].includes(effectType)) {
+        const legacyText = String(migratedNode.text ?? '').trim();
+        migratedNode.type = 'item-effect';
+        migratedNode.announcementTemplate = legacyText && legacyText !== 'You acquired a new item.'
+          ? legacyText
+          : effectType === 'remove-item'
+            ? 'Removed item: <ITEM>.'
+            : 'Acquired item: <ITEM>.';
+        delete migratedNode.text;
+      } else if (effectType === 'set-flag') {
+        migratedNode.type = 'story-flag';
+      } else {
+        migratedNode.type = 'player-state';
+      }
+    }
+
     for (const choice of migratedNode?.choices ?? []) {
       delete choice.playerMode;
     }
@@ -393,7 +412,7 @@ function migrateLegacyStoryNodes(database) {
   for (const storedStory of stories) {
     const document = JSON.parse(storedStory.documentJson);
     const hasLegacyNode = document.nodes?.some((node) => (
-      ['background', 'music', 'sound-effect', 'stop-music'].includes(node.type)
+      ['background', 'music', 'sound-effect', 'stop-music', 'effect'].includes(node.type)
       || node.choices?.some((choice) => choice.playerMode)
     ));
 

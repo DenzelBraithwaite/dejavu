@@ -82,7 +82,9 @@
   ];
 
   const companionNodeTypes = [
-    { type: 'effect', label: 'Item / effect' },
+    { type: 'item-effect', label: 'Item' },
+    { type: 'story-flag', label: 'Story flag' },
+    { type: 'player-state', label: 'Player state' },
     { type: 'note', label: 'Note' },
     { type: 'audio', label: 'Audio' },
     { type: 'stop-audio', label: 'Stop audio' },
@@ -176,10 +178,22 @@
       description: 'Attach state changes or terminal presentation effects to another story node.',
       nodes: [
         {
-          name: 'Item / effect',
-          type: 'effect',
-          description: 'Changes campaign state by giving items, setting flags, adjusting stats, or managing mods.',
-          usage: 'Select the operation and value, then attach it to the flow node where the change occurs.'
+          name: 'Item',
+          type: 'item-effect',
+          description: 'Gives a named item to the player or removes one from their Bag.',
+          usage: 'Choose Give or Remove, enter the player-facing item name, optionally add artwork, and customize the terminal announcement.'
+        },
+        {
+          name: 'Story flag',
+          type: 'story-flag',
+          description: 'Stores a named value that conditions can check later in the cartridge.',
+          usage: 'Use a stable Flag ID such as has_gone_to_shop and set its value. A later Condition can compare that flag.'
+        },
+        {
+          name: 'Player state',
+          type: 'player-state',
+          description: 'Changes the active player’s name, stats, relationships, known characters, or multiplayer mods.',
+          usage: 'Choose one focused operation. Stat changes use a positive amount to add or a negative amount to subtract.'
         },
         {
           name: 'Terminal effect',
@@ -345,11 +359,13 @@
   let playableCharacters: CharacterRecord[] = [];
   let speakerCharacters: CharacterRecord[] = [];
   let seatPickerStoryId = '';
+  let partnerSeatPickerOpen = false;
   let storedInputNodes: StoryNode[] = [];
   let rememberedChoiceOptions: Array<{
     key: string;
     label: string;
   }> = [];
+  let knownStoryItems: string[] = [];
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -459,6 +475,12 @@
         }))
       : []
   )) ?? [];
+  $: knownStoryItems = [...new Set(
+    editingStory?.nodes
+      .filter((node) => node.type === 'item-effect')
+      .map((node) => String(node.effects?.[0]?.key ?? '').trim())
+      .filter(Boolean) ?? []
+  )].sort((left, right) => left.localeCompare(right));
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
   $: localSelection = playerId
     ? $libraryState.selections[playerId]
@@ -650,6 +672,7 @@
           ? 'Cartridge inserted and ready to play.'
           : 'Cartridge and multiplayer seat deselected.';
         seatPickerStoryId = '';
+        partnerSeatPickerOpen = false;
       } else {
         errorMessage = result.error ?? 'The cartridge could not be selected.';
       }
@@ -677,7 +700,8 @@
 
     if (partnerMode) {
       if (partnerMode === 'multiplayer') {
-        openSeatPicker(partnerSelection);
+        partnerSeatPickerOpen = !partnerSeatPickerOpen;
+        seatPickerStoryId = '';
       } else {
         selectStory(partnerSelection, partnerMode);
       }
@@ -1045,6 +1069,32 @@
         node.stopMusic = true;
       }
 
+      // Older cartridges stored every state mutation in one generic effect node.
+      // Keep their data intact while presenting each responsibility separately.
+      if (node.type === 'effect') {
+        const legacyEffectType = String(node.effects?.[0]?.type ?? 'add-item');
+
+        if (['add-item', 'remove-item'].includes(legacyEffectType)) {
+          node.type = 'item-effect';
+        } else if (legacyEffectType === 'set-flag') {
+          node.type = 'story-flag';
+        } else {
+          node.type = 'player-state';
+        }
+      }
+
+      if (node.type === 'item-effect') {
+        const itemOperation = String(node.effects?.[0]?.type ?? 'add-item');
+        const legacyText = String(node.text ?? '').trim();
+
+        node.announcementTemplate ??= legacyText && legacyText !== 'You acquired a new item.'
+          ? legacyText
+          : itemOperation === 'remove-item'
+            ? 'Removed item: <ITEM>.'
+            : 'Acquired item: <ITEM>.';
+        node.text = undefined;
+      }
+
       if (node.type === 'image') {
         node.text ??= '';
         node.imagePositionX ??= 50;
@@ -1287,7 +1337,7 @@
       shapeClass = 'node-shape-image';
     } else if (type === 'minigame') {
       shapeClass = 'node-shape-minigame';
-    } else if (['effect', 'screen-effect'].includes(type)) {
+    } else if (['item-effect', 'story-flag', 'player-state', 'screen-effect'].includes(type)) {
       shapeClass = 'node-shape-effect';
     }
 
@@ -1974,6 +2024,17 @@
     return 1;
   }
 
+  function centeredVisualLevelColumn(
+    laneColumns: number,
+    nodes: StoryNode[],
+    node: StoryNode
+  ): number {
+    const levelColumns = compactLevelColumnCount(nodes);
+    const leadingColumns = Math.max(0, Math.floor((laneColumns - levelColumns) / 2));
+
+    return leadingColumns + visualLevelColumn(nodes, node);
+  }
+
   function companionStackIndex(nodes: StoryNode[], node: StoryNode): number {
     if (!isCompanionNode(node)) {
       return 0;
@@ -2086,6 +2147,30 @@
   function displayNodeName(node: StoryNode): string {
     if (['label', 'note'].includes(node.type)) {
       return String(node.text || 'Untitled label');
+    }
+
+    if (node.type === 'item-effect') {
+      const verb = node.effects?.[0]?.type === 'remove-item' ? 'Remove' : 'Give';
+
+      return `${verb} ${String(node.effects?.[0]?.key || 'item')}`.slice(0, 52);
+    }
+
+    if (node.type === 'story-flag') {
+      return `${String(node.effects?.[0]?.key || 'flag')} → ${String(node.effects?.[0]?.value ?? 'value')}`.slice(0, 52);
+    }
+
+    if (node.type === 'player-state') {
+      const labels: Record<string, string> = {
+        'adjust-stat': 'Adjust stat',
+        'set-player-name': 'Set player name',
+        'discover-character': 'Discover character',
+        'adjust-relationship': 'Adjust relationship',
+        'install-mod': 'Install mod',
+        'remove-mod': 'Remove mod'
+      };
+      const operation = String(node.effects?.[0]?.type ?? 'adjust-stat');
+
+      return `${labels[operation] ?? 'Player state'} · ${String(node.effects?.[0]?.key || '')}`.slice(0, 52);
     }
 
     return String(
@@ -2517,8 +2602,7 @@
       'image',
       'minigame',
       'ending'
-    ].includes(node.type)
-      || (node.type === 'effect' && node.attachedTo === undefined);
+    ].includes(node.type);
   }
 
   function nodeHasButtons(node: StoryNode): boolean {
@@ -2533,7 +2617,6 @@
       'dice-check',
       'minigame'
     ].includes(node.type)
-      || (node.type === 'effect' && node.attachedTo === undefined)
       || (node.type === 'ambience' && node.attachedTo === undefined);
   }
 
@@ -2911,6 +2994,63 @@
     refreshStory();
   }
 
+  function setItemOperation(event: Event): void {
+    if (!selectedNode?.effects?.[0]) {
+      return;
+    }
+
+    const operation = (event.currentTarget as HTMLSelectElement).value;
+    const currentTemplate = String(selectedNode.announcementTemplate ?? '');
+
+    rememberForUndo();
+    selectedNode.effects[0].type = operation;
+
+    if (operation === 'remove-item') {
+      selectedNode.effects[0].image = '';
+
+      if (!currentTemplate || currentTemplate === 'Acquired item: <ITEM>.') {
+        selectedNode.announcementTemplate = 'Removed item: <ITEM>.';
+      }
+    } else if (!currentTemplate || currentTemplate === 'Removed item: <ITEM>.') {
+      selectedNode.announcementTemplate = 'Acquired item: <ITEM>.';
+    }
+
+    refreshStory();
+  }
+
+  function setPlayerStateOperation(event: Event): void {
+    if (!selectedNode?.effects?.[0]) {
+      return;
+    }
+
+    const operation = (event.currentTarget as HTMLSelectElement).value;
+    const defaults: Record<string, { key: string; value?: string | number }> = {
+      'adjust-stat': { key: 'luck', value: 1 },
+      'set-player-name': { key: '', value: '' },
+      'discover-character': { key: '' },
+      'adjust-relationship': { key: '', value: 1 },
+      'install-mod': { key: 'neuro-link-chat' },
+      'remove-mod': { key: 'neuro-link-chat' }
+    };
+    const nextEffect = defaults[operation] ?? { key: '' };
+
+    rememberForUndo();
+    selectedNode.effects[0] = {
+      type: operation,
+      ...nextEffect
+    };
+    refreshStory();
+  }
+
+  function itemAnnouncementPreview(node: StoryNode): string {
+    const itemName = String(node.effects?.[0]?.key ?? 'Item').trim() || 'Item';
+    const template = String(node.announcementTemplate ?? 'Acquired item: <ITEM>.');
+
+    return template.includes('<ITEM>')
+      ? template.replaceAll('<ITEM>', itemName)
+      : `${template}${itemName}`;
+  }
+
   async function deleteStoryImage(path: string, confirmed = false): Promise<void> {
     const fileName = path.split('/').at(-1);
 
@@ -3098,18 +3238,46 @@
           success: '',
           failure: ''
         };
-      case 'effect':
+      case 'item-effect':
         return {
           id,
           type,
           audience: 'both',
           attachedTo: '',
-          text: 'You acquired a new item.',
+          announcementTemplate: 'Acquired item: <ITEM>.',
           effects: [
             {
               type: 'add-item',
-              key: 'new-item',
+              key: 'New item',
               image: ''
+            }
+          ]
+        };
+      case 'story-flag':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          effects: [
+            {
+              type: 'set-flag',
+              key: 'story_flag',
+              value: 'true'
+            }
+          ]
+        };
+      case 'player-state':
+        return {
+          id,
+          type,
+          audience: 'both',
+          attachedTo: '',
+          effects: [
+            {
+              type: 'adjust-stat',
+              key: 'luck',
+              value: 1
             }
           ]
         };
@@ -3281,15 +3449,35 @@
             <small>{localStorySeat === 'p1' ? 'PLAYER 1' : 'PLAYER 2'}</small>
           {/if}
         </div>
-        <div>
+        <div class="partner-selection">
           <span>PARTNER CARTRIDGE</span>
           <strong>{storyTitle(partnerSelection)}</strong>
+          {#if partnerSelection && partnerSelection !== localSelection}
+            <button type="button" on:click={matchPartnerCartridge}>
+              {partnerSeatPickerOpen ? 'Cancel swap' : 'Swap to partner cartridge'}
+            </button>
+          {/if}
+
+          {#if partnerSeatPickerOpen && partnerSelection}
+            <div class="partner-seat-picker">
+              <p>Choose your role for {storyTitle(partnerSelection)}.</p>
+              <button
+                type="button"
+                disabled={storySeatClaimedByOther('p1')}
+                on:click={() => selectStory(partnerSelection, 'multiplayer', 'p1')}
+              >
+                {storySeatClaimedByOther('p1') ? 'Player 1 · claimed' : 'Play as Player 1'}
+              </button>
+              <button
+                type="button"
+                disabled={storySeatClaimedByOther('p2')}
+                on:click={() => selectStory(partnerSelection, 'multiplayer', 'p2')}
+              >
+                {storySeatClaimedByOther('p2') ? 'Player 2 · claimed' : 'Play as Player 2'}
+              </button>
+            </div>
+          {/if}
         </div>
-        {#if partnerSelection && (
-          partnerSelection !== localSelection
-        )}
-          <button type="button" on:click={matchPartnerCartridge}>Swap to partner cartridge</button>
-        {/if}
         <p>
           {$libraryState.activeStoryId
             ? $libraryState.activeStoryMode === 'singleplayer'
@@ -3648,7 +3836,7 @@
                       class:parallel-level={level.nodes.length > 1}
                       class:merge-level={level.nodes.some(nodeMergesRoutes)}
                       data-depth={level.depth}
-                      style={`--level-columns: ${compactLevelColumnCount(level.nodes)}`}
+                      style={`--level-columns: ${laneGraph.maxColumns}`}
                     >
                       {#each level.nodes as node (`${node.id}:${storyRevision}`)}
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -3666,7 +3854,7 @@
                           class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
                           class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
                           class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
-                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}; --node-column: ${visualLevelColumn(level.nodes, node)}`}
+                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}; --node-column: ${centeredVisualLevelColumn(laneGraph.maxColumns, level.nodes, node)}`}
                         >
                           {#if branchPathLabel(node)}
                             <span class="branch-path-label">{branchPathLabel(node)}</span>
@@ -4368,27 +4556,22 @@
               {/if}
             {/if}
 
-            {#if selectedNode.type === 'effect'}
-              <label for="effect-type">Effect</label>
-              <select id="effect-type" bind:value={selectedNode.effects[0].type}>
+            {#if selectedNode.type === 'item-effect'}
+              <label for="item-operation">Item action</label>
+              <select
+                id="item-operation"
+                value={selectedNode.effects[0].type}
+                on:change={setItemOperation}
+              >
                 <option value="add-item">Give item</option>
                 <option value="remove-item">Remove item</option>
-                <option value="set-flag">Set story flag</option>
-                <option value="set-player-name">Set player name</option>
-                <option value="adjust-stat">Adjust stat</option>
-                <option value="adjust-relationship">Adjust relationship</option>
-                <option value="discover-character">Discover character</option>
-                {#if activeStoryMap === 'multiplayer'}
-                  <option value="install-mod">Install multiplayer neuro mod</option>
-                  <option value="remove-mod">Remove multiplayer neuro mod</option>
-                {/if}
               </select>
-              {#if selectedNode.effects[0].type !== 'set-player-name'}
-                <label for="effect-key">Item, flag, stat, relationship, character, or mod ID</label>
-                <input id="effect-key" bind:value={selectedNode.effects[0].key}>
-              {/if}
+
               {#if selectedNode.effects[0].type === 'add-item'}
-                <span class="inspector-label">Optional item image</span>
+                <label for="item-name">Item name</label>
+                <input id="item-name" bind:value={selectedNode.effects[0].key} placeholder="Map of Vespas">
+
+                <span class="inspector-label">Item image</span>
                 {#if selectedNode.effects[0].image}
                   <div class="image-preview">
                     <img src={selectedNode.effects[0].image} alt="">
@@ -4403,14 +4586,57 @@
                   {selectedNode.effects[0].image ? 'Change item image' : 'Select item image'}
                 </button>
                 <p class="inspector-help">
-                  Players can expand this artwork by selecting the item in their Bag.
+                  Optional. Players can expand this artwork by selecting the item in their Bag.
                 </p>
+              {:else}
+                <label for="item-to-remove">Item to remove</label>
+                <input
+                  id="item-to-remove"
+                  list="known-story-items"
+                  bind:value={selectedNode.effects[0].key}
+                  placeholder="Map of Vespas"
+                >
+                <datalist id="known-story-items">
+                  {#each knownStoryItems as item}
+                    <option value={item}></option>
+                  {/each}
+                </datalist>
+                <p class="inspector-help">Use the exact player-facing item name that was given earlier.</p>
               {/if}
-              <label for="effect-value">Optional value</label>
-              <input id="effect-value" bind:value={selectedNode.effects[0].value}>
+
+              <label for="item-announcement">Terminal announcement</label>
+              <input
+                id="item-announcement"
+                bind:value={selectedNode.announcementTemplate}
+                placeholder="Acquired item: <ITEM>."
+              >
+              <p class="inspector-help">
+                Use &lt;ITEM&gt; wherever the item name should appear. If omitted, the item name is appended.
+              </p>
+              <div class="effect-preview">
+                <span>WHEN TRIGGERED</span>
+                <strong>{itemAnnouncementPreview(selectedNode)}</strong>
+                <p>
+                  {selectedNode.effects[0].type === 'add-item'
+                    ? `You can later check this with Player has item → ${selectedNode.effects[0].key || 'Item name'}.`
+                    : `Remove ${selectedNode.effects[0].key || 'the named item'} from the player’s Bag.`}
+                </p>
+              </div>
+            {/if}
+
+            {#if selectedNode.type === 'story-flag'}
+              <label for="flag-id">Flag ID</label>
+              <input id="flag-id" bind:value={selectedNode.effects[0].key} placeholder="has_gone_to_shop">
+
+              <label for="flag-value">Set value to</label>
+              <input id="flag-value" bind:value={selectedNode.effects[0].value} placeholder="true">
+              <p class="inspector-help">
+                Example: has_gone_to_shop → true. A Condition node can compare this exact ID and value later.
+              </p>
+
               {#if storedInputNodes.length > 0}
-                <label for="effect-input-value">Use a stored input value</label>
-                <select id="effect-input-value" value="" on:change={setEffectStoredInput}>
+                <label for="flag-input-value">Use a stored input value</label>
+                <select id="flag-input-value" value="" on:change={setEffectStoredInput}>
                   <option value="">Choose from this story’s input library…</option>
                   {#each storedInputNodes as inputNode}
                     <option value={storedInputToken(inputNode.inputKey)}>
@@ -4418,6 +4644,75 @@
                     </option>
                   {/each}
                 </select>
+              {/if}
+
+              <div class="effect-preview">
+                <span>WHEN TRIGGERED</span>
+                <strong>{selectedNode.effects[0].key || 'flag_id'} → {selectedNode.effects[0].value || 'value'}</strong>
+              </div>
+            {/if}
+
+            {#if selectedNode.type === 'player-state'}
+              <label for="player-state-operation">Player change</label>
+              <select
+                id="player-state-operation"
+                value={selectedNode.effects[0].type}
+                on:change={setPlayerStateOperation}
+              >
+                <option value="adjust-stat">Adjust stat</option>
+                <option value="set-player-name">Set player name</option>
+                <option value="discover-character">Discover character</option>
+                <option value="adjust-relationship">Adjust relationship</option>
+                {#if activeStoryMap === 'multiplayer'}
+                  <option value="install-mod">Install multiplayer neuro mod</option>
+                  <option value="remove-mod">Remove multiplayer neuro mod</option>
+                {/if}
+              </select>
+
+              {#if selectedNode.effects[0].type === 'adjust-stat'}
+                <label for="player-stat">Stat</label>
+                <select id="player-stat" bind:value={selectedNode.effects[0].key}>
+                  {#each characterStats as stat}
+                    <option value={stat}>{stat}</option>
+                  {/each}
+                </select>
+
+                <label for="player-stat-amount">Amount to add</label>
+                <input id="player-stat-amount" type="number" step="1" bind:value={selectedNode.effects[0].value}>
+                <p class="inspector-help">Use a negative number to subtract from the stat.</p>
+              {:else if selectedNode.effects[0].type === 'set-player-name'}
+                <label for="new-player-name">New player name</label>
+                <input id="new-player-name" bind:value={selectedNode.effects[0].value} placeholder="New name">
+
+                {#if storedInputNodes.length > 0}
+                  <label for="player-name-input">Use a stored input value</label>
+                  <select id="player-name-input" value="" on:change={setEffectStoredInput}>
+                    <option value="">Choose from this story’s input library…</option>
+                    {#each storedInputNodes as inputNode}
+                      <option value={storedInputToken(inputNode.inputKey)}>
+                        {inputNode.inputKey} · {inputNode.prompt || inputNode.id}
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
+              {:else if selectedNode.effects[0].type === 'discover-character'}
+                <label for="discovered-character">Character</label>
+                <select id="discovered-character" bind:value={selectedNode.effects[0].key}>
+                  <option value="">Choose a playable character or NPC</option>
+                  {#each speakerCharacters as character}
+                    <option value={character.id}>{character.name}</option>
+                  {/each}
+                </select>
+              {:else if selectedNode.effects[0].type === 'adjust-relationship'}
+                <label for="relationship-id">Relationship ID</label>
+                <input id="relationship-id" bind:value={selectedNode.effects[0].key} placeholder="ajax_trust">
+
+                <label for="relationship-amount">Amount to add</label>
+                <input id="relationship-amount" type="number" step="1" bind:value={selectedNode.effects[0].value}>
+                <p class="inspector-help">Use a negative number to reduce the relationship value.</p>
+              {:else}
+                <label for="neuro-mod-id">Neuro mod ID</label>
+                <input id="neuro-mod-id" bind:value={selectedNode.effects[0].key} placeholder="neuro-link-chat">
               {/if}
             {/if}
 
@@ -5312,6 +5607,35 @@
     }
   }
 
+  .partner-selection {
+    display: grid;
+    gap: 8px;
+
+    > button {
+      width: 100%;
+      margin-top: 4px;
+      color: #d8eaff;
+      border-color: #5798dc;
+    }
+  }
+
+  .partner-seat-picker {
+    padding: 10px !important;
+    background: #0a1625 !important;
+    border-color: #5798dc !important;
+
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+
+    p {
+      grid-column: 1 / -1;
+      color: #b9dcf8;
+      font-size: 0.72rem;
+      line-height: 1.45;
+    }
+  }
+
   .story-grid {
     margin-top: 22px;
 
@@ -5580,6 +5904,33 @@
       color: #07111d;
       background: #02fbfb;
       border-color: #ffffff;
+    }
+  }
+
+  .effect-preview {
+    margin: 14px 0;
+    padding: 12px;
+    background: #081522;
+    border: 1px solid #315f87;
+
+    display: grid;
+    gap: 7px;
+
+    span {
+      color: #82bced;
+      font-size: 0.58rem;
+      letter-spacing: 1.3px;
+    }
+
+    strong {
+      color: #d2eaff;
+      line-height: 1.45;
+    }
+
+    p {
+      color: #9aafc4;
+      font-size: 0.68rem;
+      line-height: 1.5;
     }
   }
 
@@ -5894,7 +6245,7 @@
     width: calc(
       (var(--lane-columns, 1) * var(--lane-column-width, 258px))
       + ((var(--lane-columns, 1) - 1) * 12px)
-      + 20px
+      + 42px
     );
     min-height: 100%;
     padding: 10px;

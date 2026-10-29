@@ -36,7 +36,7 @@
     <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
       {#if storyToolsVisible}
         <div class="story-tools" aria-label="Cartridge tools">
-          <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-spectrum-1'} iconType={'player'} label="Player">
+          <Item on:click={() => createEvent('select', 'player')} collapsed={!sidebarExpanded} color={'blue-spectrum-1'} iconType={'player'} label="Player">
             <span slot="title">Player</span>
             <span slot="description">View this player’s story stats</span>
           </Item>

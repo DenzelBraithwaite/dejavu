@@ -4,7 +4,7 @@
  * @typedef {'dialogue' | 'choice' | 'input' | 'checkpoint' | 'conversation' | 'dice-check' | 'vote' | 'timed-choice' | 'image' | 'minigame' | 'effect' | 'ambience' | 'audio' | 'stop-audio' | 'screen-effect' | 'condition' | 'clear-terminal' | 'change-character' | 'label' | 'ending'} SceneType
  *
  * @typedef SceneEffect
- * @property {'set-flag' | 'add-item' | 'remove-item' | 'discover-character' | 'adjust-stat' | 'install-mod' | 'remove-mod'} type
+ * @property {'set-flag' | 'add-item' | 'remove-item' | 'set-player-name' | 'discover-character' | 'adjust-stat' | 'adjust-relationship' | 'install-mod' | 'remove-mod'} type
  * @property {string} key
  * @property {string | number | boolean} [value]
  *

@@ -21,6 +21,7 @@ import Pigz from './Pigz.svelte';
 import TraceRace from './TraceRace.svelte';
 import PacketWar from './PacketWar.svelte';
 import PlayerGamblingCard from './PlayerGamblingCard.svelte';
+import PlayerMenu from './PlayerMenu.svelte';
 import Sidebar from './Sidebar.svelte';
 import SaveMenu from './SaveMenu.svelte';
 import SettingsMenu from './SettingsMenu.svelte';
@@ -49,6 +50,7 @@ export {
   TraceRace,
   PacketWar,
   PlayerGamblingCard,
+  PlayerMenu,
   CharacterMenu,
   CharacterLanding,
   ChatPanel,
