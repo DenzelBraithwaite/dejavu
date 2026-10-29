@@ -481,7 +481,7 @@ function validateStoryStructure(document) {
         throw new Error(`${nodeId} must keep at least one choice enabled.`);
       }
 
-      if (node.type === 'timed-choice'
+      if ((node.type === 'timed-choice' || node.timed)
         && !enabledChoices.some((choice) => choice.id === node.fallbackChoiceId)) {
         throw new Error(`${nodeId} requires an enabled fallback choice.`);
       }

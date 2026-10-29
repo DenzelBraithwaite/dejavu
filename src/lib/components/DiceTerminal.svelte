@@ -26,11 +26,16 @@
   let resultTypingComplete = false;
   let rolling = false;
   let rollTimer: number;
+  let lastResultKey = '';
 
   $: dice = new PolyhedralDice(die, `/d${die}-dice.png`);
   $: briefingSegments = createBriefingSegments();
   $: resultSegments = result ? createResultSegments(result) : [];
-  $: if (result) {
+  $: resultKey = result
+    ? `${result.sceneId}:${result.roll}:${result.total}:${result.successful}`
+    : '';
+  $: if (result && resultKey !== lastResultKey) {
+    lastResultKey = resultKey;
     rolling = false;
     resultTypingComplete = false;
   }

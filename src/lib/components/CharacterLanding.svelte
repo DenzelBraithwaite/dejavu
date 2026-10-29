@@ -23,6 +23,12 @@
     creatingCharacter = false;
   }
 
+  function accountIsUsedByOtherPlayer(characterId: string): boolean {
+    const otherPlayerId = $sessionState.playerId === 'p1' ? 'p2' : 'p1';
+
+    return $characterLibraryState.selections[otherPlayerId] === characterId;
+  }
+
   // A selected character becomes this browser slot's persistent minigame identity.
   function selectCharacter(character: CharacterRecord): void {
     errorMessage = '';
@@ -81,9 +87,14 @@
 
       <div class="character-grid">
         {#each accountCharacters as character}
-          <button type="button" class="character-card" on:click={() => {
+          <button
+            type="button"
+            class="character-card"
+            disabled={accountIsUsedByOtherPlayer(character.id)}
+            on:click={() => {
             selectCharacter(character);
-          }}>
+            }}
+          >
             {#if character.images.normal}
               <img
                 src={character.images.normal}
@@ -101,7 +112,9 @@
               <small>{character.wallet.toLocaleString()}₭ · {Object.keys(character.stats).length} STATS</small>
             </span>
 
-            <span class="select-label">SELECT</span>
+            <span class="select-label">
+              {accountIsUsedByOtherPlayer(character.id) ? 'IN USE' : 'SELECT'}
+            </span>
           </button>
         {/each}
       </div>
@@ -225,6 +238,13 @@
       border-color: #02fbfb;
       box-shadow: 0 0 22px #02fbfb2b;
       transform: translateY(-2px);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      filter: grayscale(0.75);
+      opacity: 0.5;
+      transform: none;
     }
 
     img,

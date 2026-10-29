@@ -3,6 +3,7 @@
   import location from '../stores/location';
   import { arcadeStates, storyArcadeStates } from '../stores/arcade';
   import { campaignState } from '../stores/campaign';
+  import { libraryState } from '../stores/library';
   import { sessionState, type PlayerId } from '../stores/session';
   import {
     playerOwnsStoryMinigame,
@@ -49,13 +50,18 @@
   let walls = new Set(defaultWalls);
   let exitCell = '0-3';
 
+  $: storyPlayerId = $libraryState.activeStoryMode === 'multiplayer'
+    ? (Object.entries($libraryState.seatClaims).find(
+        ([, connectionId]) => connectionId === $sessionState.playerId
+      )?.[0] as PlayerId | undefined) ?? $sessionState.playerId
+    : $sessionState.playerId;
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'drone-relay'
-    && playerOwnsStoryMinigame($campaignState, $sessionState.playerId);
+    && playerOwnsStoryMinigame($campaignState, storyPlayerId);
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
   $: state = launchedFromStory
     ? $storyArcadeStates['drone-relay'] ?? null
     : $arcadeStates['drone-relay'] ?? null;
-  $: playerId = ($sessionState.playerId ?? 'p1') as PlayerId;
+  $: playerId = (launchedFromStory ? storyPlayerId : $sessionState.playerId) ?? 'p1';
   $: opponentId = playerId === 'p1' ? 'p2' : 'p1';
   $: submitted = Boolean(state?.submitted?.[playerId]);
   $: displayDrones = activeFrame?.drones

@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     Billywig,
+    BagMenu,
     Chopsticks,
     CharacterMenu,
     DroneRelay,
@@ -12,6 +13,7 @@
     NetRunners,
     PacketWar,
     Pigz,
+    SaveMenu,
     SettingsMenu,
     StoryLibrary,
     Terminal,
@@ -21,6 +23,7 @@
 
 <div class="page-stack">
   <Terminal />
+  <BagMenu />
   <CharacterMenu />
   <Journal />
   <MinigameLibrary />
@@ -35,6 +38,7 @@
   <TraceRace />
   <PacketWar />
   <SettingsMenu />
+  <SaveMenu />
   <StoryLibrary />
 </div>
 

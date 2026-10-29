@@ -8,6 +8,15 @@ from PIL import Image
 
 EMOTIONS = ("normal", "angry", "shocked", "happy", "sad")
 SINGLE_PORTRAITS = {"Judik.png", "Judik_turned.png"}
+SHEET_EXPRESSION_OVERRIDES = {
+    "female_player": {
+        "normal": "shocked",
+        "angry": "angry",
+        "shocked": "normal",
+        "happy": "sad",
+        "sad": "happy",
+    }
+}
 
 
 def is_character_sheet(path: Path) -> bool:
@@ -26,13 +35,26 @@ def crop_rectangles(width: int, height: int) -> dict[str, tuple[int, int, int, i
     first_third = round(width / 3)
     second_third = round((width * 2) / 3)
     halfway_across = width // 2
+    bottom_portrait_width = first_third
+    happy_left = (halfway_across - bottom_portrait_width) // 2
+    sad_left = halfway_across + happy_left
 
     return {
         "normal": (0, 0, first_third, halfway_down),
         "angry": (first_third, 0, second_third, halfway_down),
         "shocked": (second_third, 0, width, halfway_down),
-        "happy": (0, halfway_down, halfway_across, height),
-        "sad": (halfway_across, halfway_down, width, height),
+        "happy": (
+            happy_left,
+            halfway_down,
+            happy_left + bottom_portrait_width,
+            height,
+        ),
+        "sad": (
+            sad_left,
+            halfway_down,
+            sad_left + bottom_portrait_width,
+            height,
+        ),
     }
 
 
@@ -48,8 +70,11 @@ def split_sheet(source_path: Path, output_directory: Path) -> int:
 
         rectangles = crop_rectangles(source_image.width, source_image.height)
         character_name = source_path.stem.lower()
+        expression_layout = SHEET_EXPRESSION_OVERRIDES.get(character_name, {})
 
-        for emotion, rectangle in rectangles.items():
+        for emotion in EMOTIONS:
+            source_position = expression_layout.get(emotion, emotion)
+            rectangle = rectangles[source_position]
             output_path = output_directory / f"{character_name}_{emotion}.png"
 
             if output_path.exists():

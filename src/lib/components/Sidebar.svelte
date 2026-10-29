@@ -4,6 +4,7 @@
 
   // Components
   import { Item } from './index';
+  import { activeCharacter } from '../stores/characters';
 
   // props
   export let sidebarExpanded = true;
@@ -31,37 +32,48 @@
   </button>
 
   <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
-    {#if storyModeActive}
-      <div class="story-tools" aria-label="Current story tools">
-        <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'player'} label="Story character">
-          <span slot="title">Character</span>
-          <span slot="description">View this player’s story stats</span>
-        </Item>
+    <div class="story-tools" aria-label="Story tools">
+      <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'player'} label="Player">
+        <span slot="title">Player</span>
+        <span slot="description">View this player’s story stats</span>
+      </Item>
 
-        {#if chatAvailable}
-          <Item
-            on:click={() => createEvent('toggle-chat')}
-            collapsed={!sidebarExpanded}
-            color={'blue-deep'}
-            iconType={'chat'}
-            badge={chatUnreadCount}
-            label="Messages"
-          >
-            <span slot="title">Messages</span>
-            <span slot="description">Open your unlocked Neuro-Link</span>
-          </Item>
-        {/if}
-      </div>
-    {/if}
+      <Item on:click={() => createEvent('select', 'bag')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'bag'} label="Bag">
+        <span slot="title">Bag</span>
+        <span slot="description">View story items and effects</span>
+      </Item>
+
+      <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'blue-deep'} iconType={'journal'} label="Logs">
+        <span slot="title">Logs</span>
+        <span slot="description">Review this cartridge’s history</span>
+      </Item>
+
+      <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'blue-deep'} iconType={'save'} label="Saves">
+        <span slot="title">Saves</span>
+        <span slot="description">Save or restore this story</span>
+      </Item>
+
+      {#if chatAvailable}
+        <Item
+          on:click={() => createEvent('toggle-chat')}
+          collapsed={!sidebarExpanded}
+          color={'blue-deep'}
+          iconType={'chat'}
+          badge={chatUnreadCount}
+          label="Messages"
+        >
+          <span slot="title">Messages</span>
+          <span slot="description">Open your unlocked Neuro-Link</span>
+        </Item>
+      {/if}
+    </div>
 
     <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
       <span slot="title">Story Mode</span>
       <span slot="description">Play the inserted story</span>
     </Item>
 
-    {#if storyModeActive}
-      <div class="story-tools-divider" aria-hidden="true"></div>
-    {/if}
+    <div class="story-tools-divider" aria-hidden="true"></div>
   </div>
 
   <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
@@ -86,8 +98,35 @@
 
   <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'} label="Settings">
     <span slot="title">Settings</span>
-    <span slot="description">Audio, saves, and preferences</span>
+    <span slot="description">Audio and local preferences</span>
   </Item>
+
+  {#if $activeCharacter}
+    <button
+      class="account-summary"
+      class:account-summary--collapsed={!sidebarExpanded}
+      type="button"
+      aria-label={`View or change account: ${$activeCharacter.name}`}
+      on:click={() => createEvent('select', 'character')}
+    >
+      {#if $activeCharacter.images.normal}
+        <img
+          src={$activeCharacter.images.normal}
+          alt=""
+          style:object-position={`${$activeCharacter.imagePositions.normal.x}% ${$activeCharacter.imagePositions.normal.y}%`}
+        >
+      {:else}
+        <span class="account-placeholder">{$activeCharacter.name.slice(0, 1).toUpperCase()}</span>
+      {/if}
+      {#if sidebarExpanded}
+        <span>
+          <small>ACCOUNT</small>
+          <strong>{$activeCharacter.name}</strong>
+          <em>View or change</em>
+        </span>
+      {/if}
+    </button>
+  {/if}
 </div>
 
 <style lang="scss">
@@ -154,14 +193,77 @@
 
   .story-navigation-group {
     width: 100%;
+    margin-bottom: 8px;
+    padding: 7px;
+    background: #0c1b2d;
+    border: 1px solid #233f5c;
+    border-radius: 7px;
   }
 
   .story-navigation-group--active {
-    margin-bottom: 8px;
-    padding: 7px;
     background: #10243b;
-    border: 1px solid #31577c;
+    border-color: #31577c;
+  }
+
+  .account-summary {
+    width: 100%;
+    min-height: 62px;
+    margin-top: auto;
+    padding: 8px;
+    color: #e8edf6;
+    background: #101827;
+    border: 1px solid #475569;
     border-radius: 7px;
+    cursor: pointer;
+    text-align: left;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    img,
+    .account-placeholder {
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      border: 1px solid #ff75c8;
+      border-radius: 50%;
+
+      flex: 0 0 44px;
+    }
+
+    > span:last-child {
+      min-width: 0;
+
+      display: grid;
+    }
+
+    small,
+    em {
+      color: #94a3b8;
+      font-size: 0.62rem;
+      font-style: normal;
+      letter-spacing: 1px;
+    }
+
+    strong {
+      overflow: hidden;
+      color: #ffffff;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .account-summary--collapsed {
+    justify-content: center;
+  }
+
+  .account-placeholder {
+    color: #ff75c8;
+    background: #2a0c22;
+
+    display: grid;
+    place-items: center;
   }
 
   .story-tools-divider {
@@ -213,16 +315,17 @@
 
     .story-navigation-group {
       width: auto;
+      height: 56px;
+      margin: 0;
+      padding: 0 7px;
+      border-radius: 5px;
 
       display: flex;
       gap: 7px;
     }
 
     .story-navigation-group--active {
-      height: 56px;
-      margin: 0;
-      padding: 0 7px;
-      border-radius: 5px;
+      background: #10243b;
     }
 
     .story-tools-divider {
@@ -231,6 +334,24 @@
       margin: 4px 2px;
 
       flex: 0 0 1px;
+    }
+
+    .account-summary {
+      width: 56px;
+      height: 56px;
+      min-height: 56px;
+      margin: 0;
+      padding: 6px;
+
+      flex: 0 0 56px;
+
+      img,
+      .account-placeholder {
+        width: 42px;
+        height: 42px;
+
+        flex-basis: 42px;
+      }
     }
 
     .sidebar :global(.item) {

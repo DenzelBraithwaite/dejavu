@@ -71,7 +71,6 @@
     { type: 'conversation', label: 'Open floor' },
     { type: 'dice-check', label: 'Dice' },
     { type: 'vote', label: 'Shared vote' },
-    { type: 'timed-choice', label: 'Timed choice' },
     { type: 'condition', label: 'Condition' },
     { type: 'clear-terminal', label: 'Clear terminal' },
     { type: 'change-character', label: 'Change character' },
@@ -101,13 +100,13 @@
           name: 'Dialogue',
           type: 'dialogue',
           description: 'Displays typed story text with an optional character, expression, or custom speaker.',
-          usage: 'Choose the audience, write the dialogue, select its speaker and expression, then connect Next.'
+          usage: 'Write the dialogue, select its speaker and expression, then connect Next. Enable Timed to force a scene-length wait before it advances.'
         },
         {
           name: 'Player input',
           type: 'input',
-          description: 'Saves a free-form response in the current story session without changing the character.',
-          usage: 'Choose a saved key, then reuse the response in text or effects with a token such as {INPUT_FAVORITE_COLOR}.'
+          description: 'Collects a free-form response without changing the player character.',
+          usage: 'Enable Store response when the answer matters later. Give it a key, then insert that stored value from the dropdowns in future text or effects.'
         },
         {
           name: 'Open floor',
@@ -124,14 +123,8 @@
         {
           name: 'Choice',
           type: 'choice',
-          description: 'Shows two to five labelled buttons with static or campaign-state locks.',
-          usage: 'Set labels, optional item/flag/stat/relationship requirements, and a destination for every enabled option.'
-        },
-        {
-          name: 'Timed choice',
-          type: 'timed-choice',
-          description: 'Works like Choice but automatically selects a fallback when its timer expires.',
-          usage: 'Set the duration, buttons, fallback option, and a destination for every option.'
+          description: 'Shows two to five labelled buttons with optional timing, locks, and remembered decisions.',
+          usage: 'Set labels and destinations, optionally enable a timer, and mark the decision Minor or Major when future conditions should remember it.'
         },
         {
           name: 'Dice',
@@ -142,8 +135,8 @@
         {
           name: 'Condition',
           type: 'condition',
-          description: 'Immediately routes by an item, flag, stat threshold, or previous dice result.',
-          usage: 'Select the rule and connect both True and False. Conditions do not display a prompt.'
+          description: 'Immediately routes by campaign state, a remembered decision, or which multiplayer role is playing.',
+          usage: 'Select the rule and connect both True and False. A Playing as condition can split a Shared route back into Player 1 and Player 2 lanes.'
         },
         {
           name: 'Shared vote',
@@ -268,6 +261,17 @@
   const minimumInspectorWidth = 280;
   const maximumInspectorWidth = 720;
   const terminalThemes = ['blue', 'red', 'purple', 'green', 'amber', 'pink', 'cyan', 'white'];
+  const characterStats = [
+    'muscles',
+    'toughness',
+    'speed',
+    'stealth',
+    'smarts',
+    'ocuware',
+    'cred',
+    'luck',
+    'hacking'
+  ];
   const minigamesWithDraws = new Set([
     'billywig',
     'lo-hi',
@@ -339,6 +343,12 @@
   let mobileToolbarCollapsed = false;
   let playableCharacters: CharacterRecord[] = [];
   let speakerCharacters: CharacterRecord[] = [];
+  let seatPickerStoryId = '';
+  let storedInputNodes: StoryNode[] = [];
+  let rememberedChoiceOptions: Array<{
+    key: string;
+    label: string;
+  }> = [];
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -437,6 +447,17 @@
   $: speakerCharacters = $characterLibraryState.characters.filter(
     (character) => character.type !== 'account'
   );
+  $: storedInputNodes = editingStory?.nodes.filter(
+    (node) => node.type === 'input' && node.saveInput !== false && node.inputKey
+  ) ?? [];
+  $: rememberedChoiceOptions = editingStory?.nodes.flatMap((node) => (
+    node.type === 'choice' && ['minor', 'major'].includes(node.decisionSeverity ?? 'none')
+      ? (node.choices ?? []).map((choice) => ({
+          key: `${node.id}:${choice.id}`,
+          label: `${displayNodeName(node)} → ${choice.label}`
+        }))
+      : []
+  )) ?? [];
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
   $: localSelection = playerId
     ? $libraryState.selections[playerId]
@@ -446,6 +467,11 @@
     : null;
   $: partnerSelection = partnerId
     ? $libraryState.selections[partnerId]
+    : null;
+  $: localStorySeat = playerId
+    ? (Object.entries($libraryState.seatClaims).find(
+        ([, ownerId]) => ownerId === playerId
+      )?.[0] as PlayerId | undefined) ?? null
     : null;
   $: selectedNode = editingStory?.nodes.find(
     (node) => node.id === selectedNodeId
@@ -606,13 +632,37 @@
     showEditorHome();
   }
 
-  function selectStory(storyId: string, mode: StoryPlayMode): void {
+  function selectStory(
+    storyId: string | null,
+    mode: StoryPlayMode,
+    seat?: PlayerId
+  ): void {
     clearMessages();
     unlockAudioPlayback();
     socket.emit('library:select-story', {
       storyId,
-      mode
-    }, handleSimpleResult('Cartridge inserted. Story Mode is ready.'));
+      mode,
+      seat
+    }, (result: { ok: boolean; error?: string }) => {
+      if (result.ok) {
+        statusMessage = storyId
+          ? 'Cartridge inserted. Story Mode is ready.'
+          : 'Cartridge and multiplayer seat deselected.';
+        seatPickerStoryId = '';
+      } else {
+        errorMessage = result.error ?? 'The cartridge could not be selected.';
+      }
+    });
+  }
+
+  function storySeatClaimedByOther(seat: PlayerId): boolean {
+    const ownerId = $libraryState.seatClaims[seat];
+
+    return Boolean(ownerId && ownerId !== playerId);
+  }
+
+  function openSeatPicker(storyId: string): void {
+    seatPickerStoryId = seatPickerStoryId === storyId ? '' : storyId;
   }
 
   function matchPartnerCartridge(): void {
@@ -625,7 +675,11 @@
       : null;
 
     if (partnerMode) {
-      selectStory(partnerSelection, partnerMode);
+      if (partnerMode === 'multiplayer') {
+        openSeatPicker(partnerSelection);
+      } else {
+        selectStory(partnerSelection, partnerMode);
+      }
     }
   }
 
@@ -807,6 +861,11 @@
       return;
     }
 
+    if (activeStoryMap === 'multiplayer' && !localStorySeat) {
+      errorMessage = 'Choose Player 1 or Player 2 from the Library before playtesting a multiplayer map.';
+      return;
+    }
+
     if ($libraryState.activeStoryId && $libraryState.activeStoryId !== editingStory.id) {
       playtestWarningOpen = true;
       return;
@@ -833,7 +892,8 @@
 
       socket.emit('library:select-story', {
         storyId: editingStory?.id,
-        mode: activeStoryMap
+        mode: activeStoryMap,
+        seat: activeStoryMap === 'multiplayer' ? localStorySeat : undefined
       }, (result: { ok: boolean; error?: string }) => {
         if (!result.ok) {
           errorMessage = result.error ?? 'Could not stage the playtest.';
@@ -997,6 +1057,11 @@
       }
 
       if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+        if (node.type === 'timed-choice') {
+          node.type = 'choice';
+          node.timed = true;
+        }
+
         node.choices ??= [];
 
         while (node.choices.length < 2) {
@@ -1015,7 +1080,7 @@
 
         const enabledFallback = node.choices.find((choice) => !choice.disabled);
 
-        if (node.type === 'timed-choice'
+        if (node.type === 'choice' && node.timed
           && !node.choices.some(
             (choice) => choice.id === node.fallbackChoiceId && !choice.disabled
           )) {
@@ -1031,6 +1096,14 @@
         node.spinDirection ??= 'clockwise';
         node.effectColor ??= '#39ff88';
         node.scanDirection ??= 'left-to-right';
+      }
+
+      if (node.type === 'input') {
+        node.saveInput ??= true;
+      }
+
+      if (node.type === 'choice') {
+        node.decisionSeverity ??= 'none';
       }
 
       if (node.type === 'label') {
@@ -1447,14 +1520,6 @@
     refreshStory();
   }
 
-  function duplicateSelectedNode(): void {
-    if (!selectedNode) {
-      return;
-    }
-
-    duplicateNode(selectedNode);
-  }
-
   function duplicateNode(node: StoryNode): void {
     copiedNode = structuredClone(node);
     openNodePicker({
@@ -1462,14 +1527,6 @@
       insertAfterId: node.id
     });
     pasteNode();
-  }
-
-  function copySelectedNode(): void {
-    if (!selectedNode) {
-      return;
-    }
-
-    copyNode(selectedNode);
   }
 
   function copyNode(node: StoryNode): void {
@@ -1710,7 +1767,7 @@
   }
 
   function ensureTimedChoiceFallback(): void {
-    if (!selectedNode || selectedNode.type !== 'timed-choice') {
+    if (!selectedNode || selectedNode.type !== 'choice' || !selectedNode.timed) {
       return;
     }
 
@@ -1875,8 +1932,27 @@
 
     return {
       levels: orderedLevels,
-      maxColumns: Math.max(1, ...orderedLevels.map((level) => level.nodes.length))
+      maxColumns: Math.max(1, ...orderedLevels.map((level) => compactLevelColumnCount(level.nodes)))
     };
+  }
+
+  function compactLevelColumnCount(nodes: StoryNode[]): number {
+    const regularNodeCount = nodes.filter((node) => !isCompanionNode(node)).length;
+    const companionTypes = new Set(
+      nodes.filter(isCompanionNode).map((node) => node.type)
+    );
+
+    return regularNodeCount + companionTypes.size;
+  }
+
+  function companionStackIndex(nodes: StoryNode[], node: StoryNode): number {
+    if (!isCompanionNode(node)) {
+      return 0;
+    }
+
+    return nodes
+      .filter((candidate) => isCompanionNode(candidate) && candidate.type === node.type)
+      .findIndex((candidate) => candidate.id === node.id);
   }
 
   function branchPathLabel(node: StoryNode): string {
@@ -2111,6 +2187,7 @@
       label,
       direction: 'outgoing'
     };
+    inspectorExpanded = false;
     statusMessage = `Select a destination node for ${label.toLowerCase()}.`;
   }
 
@@ -2124,6 +2201,7 @@
       label: 'Previous node',
       direction: 'incoming'
     };
+    inspectorExpanded = false;
     statusMessage = 'Select the node that should lead into this one.';
   }
 
@@ -2137,6 +2215,7 @@
       label: 'Companion host',
       direction: 'attachment'
     };
+    inspectorExpanded = false;
     statusMessage = 'Select the main-flow node that this companion should modify.';
   }
 
@@ -2288,6 +2367,11 @@
 
     const sourceLane = source?.audience ?? 'both';
     const destinationLane = destination.audience ?? 'both';
+
+    // Conditions are the intentional bridge between player-specific and shared lanes.
+    if (source.type === 'condition') {
+      return true;
+    }
 
     return sourceLane === 'both'
       ? destinationLane === 'both'
@@ -2741,6 +2825,59 @@
     refreshStory();
   }
 
+  function insertStoredInputToken(event: Event): void {
+    if (!selectedNode) {
+      return;
+    }
+
+    const select = event.currentTarget as HTMLSelectElement;
+    const token = select.value;
+
+    if (!token) {
+      return;
+    }
+
+    rememberForUndo();
+
+    if (selectedNode.type === 'input') {
+      selectedNode.prompt = `${selectedNode.prompt ?? ''}${selectedNode.prompt ? ' ' : ''}${token}`;
+    } else {
+      selectedNode.text = `${selectedNode.text ?? ''}${selectedNode.text ? ' ' : ''}${token}`;
+    }
+
+    select.value = '';
+    refreshStory();
+  }
+
+  function storedInputToken(inputKey: unknown): string {
+    const normalizedKey = String(inputKey ?? '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_]+/g, '_');
+    const tokenKey = normalizedKey.startsWith('INPUT_')
+      ? normalizedKey
+      : `INPUT_${normalizedKey}`;
+
+    return `{${tokenKey}}`;
+  }
+
+  function setEffectStoredInput(event: Event): void {
+    if (!selectedNode?.effects?.[0]) {
+      return;
+    }
+
+    const select = event.currentTarget as HTMLSelectElement;
+
+    if (!select.value) {
+      return;
+    }
+
+    rememberForUndo();
+    selectedNode.effects[0].value = select.value;
+    select.value = '';
+    refreshStory();
+  }
+
   async function deleteStoryImage(path: string, confirmed = false): Promise<void> {
     const fileName = path.split('/').at(-1);
 
@@ -2879,7 +3016,6 @@
         };
       case 'choice':
       case 'vote':
-      case 'timed-choice':
         return {
           ...baseNode,
           choices: [
@@ -2894,12 +3030,8 @@
               next: ''
             }
           ],
-          ...(type === 'timed-choice'
-            ? {
-                durationMs: 20_000,
-                fallbackChoiceId: 'option-1'
-              }
-            : {})
+          timed: false,
+          decisionSeverity: 'none'
         };
       case 'checkpoint':
         return {
@@ -2912,6 +3044,7 @@
           prompt: 'Enter your response.',
           placeholder: 'Type your response…',
           inputKey: `INPUT_${id.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}`,
+          saveInput: true,
           maxLength: 200
         };
       case 'conversation':
@@ -3110,6 +3243,9 @@
         <div>
           <span>YOUR CARTRIDGE</span>
           <strong>{storyTitle(localSelection)}</strong>
+          {#if localSelectionMode === 'multiplayer' && localStorySeat}
+            <small>{localStorySeat === 'p1' ? 'PLAYER 1' : 'PLAYER 2'}</small>
+          {/if}
         </div>
         <div>
           <span>PARTNER CARTRIDGE</span>
@@ -3157,13 +3293,40 @@
                 </button>
               {/if}
               {#if story.playModes.multiplayer}
-                <button type="button" on:click={() => selectStory(story.id, 'multiplayer')}>
+                <button type="button" on:click={() => openSeatPicker(story.id)}>
                   {localSelection === story.id && localSelectionMode === 'multiplayer'
-                    ? 'Multiplayer inserted'
+                    ? `Multiplayer · ${localStorySeat === 'p1' ? 'Player 1' : 'Player 2'}`
                     : 'Insert multiplayer'}
                 </button>
               {/if}
+              {#if localSelection === story.id}
+                <button class="deselect-cartridge" type="button" on:click={() => selectStory(null, 'singleplayer')}>
+                  Deselect
+                </button>
+              {/if}
             </div>
+
+            {#if seatPickerStoryId === story.id}
+              <div class="seat-picker">
+                <p>Choose your multiplayer role. A claimed role cannot be taken from the other player.</p>
+                <div>
+                  <button
+                    type="button"
+                    disabled={storySeatClaimedByOther('p1')}
+                    on:click={() => selectStory(story.id, 'multiplayer', 'p1')}
+                  >
+                    {storySeatClaimedByOther('p1') ? 'Player 1 · claimed' : 'Play as Player 1'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={storySeatClaimedByOther('p2')}
+                    on:click={() => selectStory(story.id, 'multiplayer', 'p2')}
+                  >
+                    {storySeatClaimedByOther('p2') ? 'Player 2 · claimed' : 'Play as Player 2'}
+                  </button>
+                </div>
+              </div>
+            {/if}
           </article>
         {/each}
       </div>
@@ -3375,7 +3538,7 @@
       </div>
 
       <p class="graph-position-help">
-        Routes control rows. Select a node to change its audience or edit its previous and next connections in the inspector.
+        Routes control rows. Select a node to edit its previous and next connections in the inspector.
       </p>
 
       <div class="editor-workspace" style={`--inspector-width: ${inspectorWidth}px`}>
@@ -3463,10 +3626,12 @@
                           class:branch-node={nodeHasBranches(node)}
                           class:merge-node={nodeMergesRoutes(node)}
                           class:companion-node={isCompanionNode(node)}
+                          class:stacked-companion={companionStackIndex(level.nodes, node) > 0}
                           class:has-route={routeFields(node).some((field) => getRouteValue(node, field))}
                           class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
                           class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
                           class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
+                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}`}
                         >
                           {#if branchPathLabel(node)}
                             <span class="branch-path-label">{branchPathLabel(node)}</span>
@@ -3525,7 +3690,7 @@
                         class:valid-link-target={Boolean(linkSelection) && isValidLinkTarget(node)}
                         class:invalid-link-target={Boolean(linkSelection) && !isValidLinkTarget(node)}
                         type="button"
-                        on:click|stopPropagation={() => selectNode(node)}
+                        on:pointerdown|preventDefault|stopPropagation={() => selectNode(node)}
                       >
                         {#if isCompactSpecialNode(node)}
                           <strong class="compact-node-title">{compactNodeTitle(node)}</strong>
@@ -3640,29 +3805,7 @@
                 <h2>{selectedNode.type}</h2>
                 <code>{selectedNode.id}</code>
               </div>
-              <div class="inspector-actions">
-                <button type="button" on:click={copySelectedNode}>Copy</button>
-                <button type="button" on:click={duplicateSelectedNode}>Duplicate</button>
-              </div>
             </div>
-
-            <label for="node-audience">Audience</label>
-            {#if activeStoryMap === 'singleplayer'}
-              <input id="node-audience" value="Player 1" disabled>
-            {:else}
-              <select
-                id="node-audience"
-                bind:value={selectedNode.audience}
-                on:change={() => {
-                  activeLane = selectedNode.audience;
-                  refreshStory();
-                }}
-              >
-                <option value="p1">Player 1</option>
-                <option value="both">Both players</option>
-                <option value="p2">Player 2</option>
-              </select>
-            {/if}
 
             {#if activeStoryMap === 'singleplayer' && ['checkpoint', 'conversation', 'vote'].includes(selectedNode.type)}
               <p class="inspector-warning">This is a multiplayer-only node. Replace it before playing this solo map.</p>
@@ -3740,16 +3883,21 @@
             {#if selectedNode.type === 'input'}
               <label for="input-prompt">Player prompt</label>
               <textarea id="input-prompt" bind:value={selectedNode.prompt} rows="5"></textarea>
-              <label for="input-key">Saved input key</label>
-              <input
-                id="input-key"
-                bind:value={selectedNode.inputKey}
-                placeholder="FAVORITE_COLOR"
-              >
-              <p class="inspector-help">
-                This response lasts until the story restarts. Refer to it later with
-                {'{INPUT_FAVORITE_COLOR}'} when the key is FAVORITE_COLOR.
-              </p>
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.saveInput}>
+                Store this response for later nodes
+              </label>
+              {#if selectedNode.saveInput}
+                <label for="input-key">Saved input key</label>
+                <input
+                  id="input-key"
+                  bind:value={selectedNode.inputKey}
+                  placeholder="FAVORITE_COLOR"
+                >
+                <p class="inspector-help">
+                  This response is added to this cartridge’s input library until the story restarts.
+                </p>
+              {/if}
               <label for="input-placeholder">Input placeholder</label>
               <input id="input-placeholder" bind:value={selectedNode.placeholder} placeholder="Type your response…">
               <label for="input-max-length">Maximum response length</label>
@@ -3760,6 +3908,19 @@
                 max="2000"
                 bind:value={selectedNode.maxLength}
               >
+            {/if}
+
+            {#if storedInputNodes.length > 0
+              && !['condition', 'label', 'note', 'clear-terminal'].includes(selectedNode.type)}
+              <label for="stored-input-token">Insert a stored input value</label>
+              <select id="stored-input-token" value="" on:change={insertStoredInputToken}>
+                <option value="">Choose from this story’s input library…</option>
+                {#each storedInputNodes as inputNode}
+                  <option value={storedInputToken(inputNode.inputKey)}>
+                    {inputNode.inputKey} · {inputNode.prompt || inputNode.id}
+                  </option>
+                {/each}
+              </select>
             {/if}
 
             {#if supportsSpeakerProperties(selectedNode)}
@@ -3808,9 +3969,9 @@
                 <button type="button" on:click={() => openImageLibrary('portrait')}>Select speaker image</button>
                 {#if selectedNode.portrait}
                   <button type="button" on:click={removeCustomSpeakerPortrait}>Remove speaker image</button>
+                  <label for="custom-speaker-image-alt">Speaker image description</label>
+                  <input id="custom-speaker-image-alt" bind:value={selectedNode.portraitAlt} placeholder="Describe the speaker portrait">
                 {/if}
-                <label for="custom-speaker-image-alt">Speaker image description</label>
-                <input id="custom-speaker-image-alt" bind:value={selectedNode.portraitAlt} placeholder="Describe the speaker portrait">
               {/if}
             {/if}
 
@@ -3822,6 +3983,20 @@
                 maxlength="60"
                 placeholder="Continue"
               >
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.timed}>
+                Timed dialogue — disable Continue and advance automatically
+              </label>
+              {#if selectedNode.timed}
+                <label for="dialogue-duration">Automatic wait in milliseconds</label>
+                <input
+                  id="dialogue-duration"
+                  type="number"
+                  min="100"
+                  step="100"
+                  bind:value={selectedNode.durationMs}
+                >
+              {/if}
             {/if}
 
             {#if routeFields(selectedNode).includes('next')}
@@ -3857,7 +4032,11 @@
                 </div>
                 <div>
                   <label for="dice-stat">Stat</label>
-                  <input id="dice-stat" bind:value={selectedNode.stat}>
+                  <select id="dice-stat" bind:value={selectedNode.stat}>
+                    {#each characterStats as stat}
+                      <option value={stat}>{stat[0].toUpperCase() + stat.slice(1)}</option>
+                    {/each}
+                  </select>
                 </div>
                 <div>
                   <label for="dice-target">Target</label>
@@ -3918,8 +4097,26 @@
               </div>
             {/if}
 
-            {#if ['choice', 'vote', 'timed-choice'].includes(selectedNode.type)}
-              {#if selectedNode.type === 'timed-choice'}
+            {#if ['choice', 'vote'].includes(selectedNode.type)}
+              {#if selectedNode.type === 'choice'}
+                <fieldset class="decision-severity">
+                  <legend>Decision severity</legend>
+                  <p>Remember the selected option so later conditions can reference it.</p>
+                  {#each ['none', 'minor', 'major'] as severity}
+                    <label>
+                      <input type="radio" name={`decision-severity-${selectedNode.id}`} value={severity} bind:group={selectedNode.decisionSeverity}>
+                      {severity[0].toUpperCase() + severity.slice(1)}
+                    </label>
+                  {/each}
+                </fieldset>
+              {/if}
+              {#if selectedNode.type === 'choice'}
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.timed}>
+                  Timed choice
+                </label>
+              {/if}
+              {#if selectedNode.type === 'choice' && selectedNode.timed}
                 <label for="choice-duration">Timer in milliseconds</label>
                 <input id="choice-duration" type="number" min="1000" bind:value={selectedNode.durationMs}>
               {/if}
@@ -3935,7 +4132,7 @@
               <p class="inspector-help">
                 Add between two and five buttons. Disabled buttons remain visible but cannot be selected.
               </p>
-              {#if selectedNode.type === 'timed-choice'}
+              {#if selectedNode.type === 'choice' && selectedNode.timed}
                 <label for="fallback-choice">Automatic fallback</label>
                 <select id="fallback-choice" bind:value={selectedNode.fallbackChoiceId}>
                   {#each enabledNodeChoices(selectedNode) as choice}
@@ -3994,12 +4191,22 @@
                           <option value="flag-equals">Flag equals</option>
                           <option value="stat-at-least">Stat at least</option>
                           <option value="relationship-at-least">Relationship at least</option>
+                          <option value="decision-made">Remembered decision</option>
                         </select>
-                        <input
-                          aria-label="Requirement key"
-                          bind:value={choice.condition.key}
-                          placeholder="Item, flag, stat, or character ID"
-                        >
+                        {#if choice.condition.type === 'decision-made'}
+                          <select aria-label="Remembered decision" bind:value={choice.condition.key}>
+                            <option value="">Choose a remembered option</option>
+                            {#each rememberedChoiceOptions as rememberedChoice}
+                              <option value={rememberedChoice.key}>{rememberedChoice.label}</option>
+                            {/each}
+                          </select>
+                        {:else}
+                          <input
+                            aria-label="Requirement key"
+                            bind:value={choice.condition.key}
+                            placeholder="Item, flag, stat, or character ID"
+                          >
+                        {/if}
                         {#if choice.condition.type !== 'has-item'}
                           <input
                             aria-label="Requirement value"
@@ -4147,9 +4354,17 @@
               {/if}
               <label for="effect-value">Optional value</label>
               <input id="effect-value" bind:value={selectedNode.effects[0].value}>
-              <p class="inspector-help">
-                Values can use saved input tokens such as {'{INPUT_FAVORITE_COLOR}'}.
-              </p>
+              {#if storedInputNodes.length > 0}
+                <label for="effect-input-value">Use a stored input value</label>
+                <select id="effect-input-value" value="" on:change={setEffectStoredInput}>
+                  <option value="">Choose from this story’s input library…</option>
+                  {#each storedInputNodes as inputNode}
+                    <option value={storedInputToken(inputNode.inputKey)}>
+                      {inputNode.inputKey} · {inputNode.prompt || inputNode.id}
+                    </option>
+                  {/each}
+                </select>
+              {/if}
             {/if}
 
             {#if selectedNode.type === 'condition'}
@@ -4160,8 +4375,26 @@
                 <option value="stat-at-least">Player stat is at least value</option>
                 <option value="relationship-at-least">Relationship is at least value</option>
                 <option value="last-dice-success">Previous dice check succeeded</option>
+                <option value="decision-made">Player made a remembered decision</option>
+                {#if activeStoryMap === 'multiplayer'}
+                  <option value="playing-as">Playing as story player</option>
+                {/if}
               </select>
-              {#if selectedNode.condition.type !== 'last-dice-success'}
+              {#if selectedNode.condition.type === 'decision-made'}
+                <label for="condition-decision">Remembered option</label>
+                <select id="condition-decision" bind:value={selectedNode.condition.key}>
+                  <option value="">Choose a remembered option</option>
+                  {#each rememberedChoiceOptions as rememberedChoice}
+                    <option value={rememberedChoice.key}>{rememberedChoice.label}</option>
+                  {/each}
+                </select>
+              {:else if selectedNode.condition.type === 'playing-as'}
+                <label for="condition-player-role">Story role</label>
+                <select id="condition-player-role" bind:value={selectedNode.condition.key}>
+                  <option value="p1">Player 1</option>
+                  <option value="p2">Player 2</option>
+                </select>
+              {:else if selectedNode.condition.type !== 'last-dice-success'}
                 <label for="condition-key">Item, flag, stat, or relationship ID</label>
                 <input id="condition-key" bind:value={selectedNode.condition.key}>
               {/if}
@@ -4998,6 +5231,14 @@
       color: #f8e69a;
     }
 
+    small {
+      display: block;
+      margin-top: 5px;
+      color: #67e8f9;
+      font-size: 0.62rem;
+      letter-spacing: 1px;
+    }
+
     > p {
       grid-column: 1 / -1;
       color: #f8e69a;
@@ -5077,6 +5318,38 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
+  }
+
+  .deselect-cartridge {
+    color: #fca5a5;
+    border-color: #7f1d1d;
+  }
+
+  .seat-picker {
+    margin-top: 12px;
+    padding: 12px;
+    background: #07111d;
+    border: 1px solid #3b82f6;
+
+    p {
+      min-height: 0;
+      color: #bfdbfe;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    div {
+      margin-top: 10px;
+
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
   }
 
   .form-screen {
@@ -5469,7 +5742,7 @@
     min-width: max-content;
 
     display: flex;
-    gap: 16px;
+    gap: clamp(28px, 4vw, 64px);
     align-items: stretch;
   }
 
@@ -5650,8 +5923,27 @@
       }
     }
 
+    &.stacked-companion {
+      z-index: calc(2 + var(--companion-stack-index));
+      margin-left: -238px;
+      transform: translate(
+        calc(var(--companion-stack-index) * 12px),
+        calc(var(--companion-stack-index) * 8px)
+      );
+      transition: transform 0.18s ease, scale 0.18s ease;
+
+      &.selected-node-wrapper {
+        z-index: 40;
+        transform: translate(
+          calc(var(--companion-stack-index) * 12px),
+          -10px
+        );
+        scale: 1.035;
+      }
+    }
+
     &.connected-before .flow-node {
-      border-color: #c084fc !important;
+      border-color: #8b5dbd !important;
       border-style: dotted !important;
       border-width: 2px !important;
       box-shadow: none;
@@ -5662,10 +5954,10 @@
     }
 
     &.connected-after .flow-node {
-      border-color: #c084fc !important;
+      border-color: #d8b4fe !important;
       border-style: dashed !important;
       border-width: 2px !important;
-      box-shadow: none;
+      box-shadow: 0 0 9px #c084fc35;
 
       &::after {
         content: none;
@@ -6111,22 +6403,6 @@
     flex-direction: column;
   }
 
-  .inspector-actions {
-    width: 100%;
-
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 5px;
-
-    button {
-      min-width: 0;
-      min-height: 34px;
-      padding: 5px;
-      font-size: 0.64rem;
-    }
-
-  }
-
   .inspector-heading p {
     color: #4a98d9;
     font-size: 0.62rem;
@@ -6249,6 +6525,41 @@
     display: flex;
     align-items: center;
     gap: 8px;
+
+    input {
+      width: 16px;
+      min-height: 16px;
+    }
+  }
+
+  .decision-severity {
+    grid-column: 1 / -1;
+    padding: 12px;
+    background: #11101d;
+    border: 1px solid #4c356f;
+
+    legend {
+      padding: 0 6px;
+      color: #d8b4fe;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    p {
+      margin: 0 0 10px;
+      color: #8893a2;
+      font-size: 0.68rem;
+      line-height: 1.45;
+    }
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-right: 14px;
+    }
 
     input {
       width: 16px;
@@ -7257,6 +7568,10 @@
     }
 
     .card-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .seat-picker div {
       grid-template-columns: 1fr;
     }
 

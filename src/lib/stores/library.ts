@@ -23,6 +23,7 @@ export type StoryNode = {
   prompt?: string;
   placeholder?: string;
   inputKey?: string;
+  saveInput?: boolean;
   next?: string;
   choices?: Array<{
     id: string;
@@ -31,7 +32,7 @@ export type StoryNode = {
     next: string;
     disabled?: boolean;
     condition?: {
-      type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'relationship-at-least';
+      type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'relationship-at-least' | 'decision-made';
       key: string;
       value?: string | number | boolean;
     };
@@ -48,6 +49,8 @@ export type StoryNode = {
   failure?: string;
   durationMs?: number;
   fallbackChoiceId?: string;
+  timed?: boolean;
+  decisionSeverity?: 'none' | 'minor' | 'major';
   src?: string;
   alt?: string;
   logText?: string;
@@ -141,6 +144,7 @@ export type LibraryState = {
   stories: StorySummary[];
   selections: Record<PlayerId, string | null>;
   selectionModes: Record<PlayerId, 'singleplayer' | 'multiplayer' | null>;
+  seatClaims: Record<PlayerId, PlayerId | null>;
   activeStoryId: string | null;
   activeStoryMode: 'singleplayer' | 'multiplayer' | null;
   activeSoloPlayerId: PlayerId | null;
@@ -153,6 +157,10 @@ export const libraryState = writable<LibraryState>({
     p2: null
   },
   selectionModes: {
+    p1: null,
+    p2: null
+  },
+  seatClaims: {
     p1: null,
     p2: null
   },

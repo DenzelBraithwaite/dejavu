@@ -5,13 +5,27 @@
 
   export let embedded = false;
 
+  type SaveSummary = {
+    fileName: string;
+    storyTitle: string;
+    mode: string;
+    savedAt: string | null;
+  };
+
   let saveName = 'campaign-01';
-  let saves: string[] = [];
+  let saves: SaveSummary[] = [];
   let statusMessage = '';
   let loading = false;
+  let savesWereVisible = false;
 
-  $: if ($location === (embedded ? 'settings' : 'saves')) {
-    refreshSaves();
+  $: {
+    const savesAreVisible = $location === (embedded ? 'settings' : 'saves');
+
+    if (savesAreVisible && !savesWereVisible) {
+      refreshSaves();
+    }
+
+    savesWereVisible = savesAreVisible;
   }
 
   function refreshSaves(): void {
@@ -22,13 +36,13 @@
     loading = true;
     socket.emit('campaign:list-saves', (result: {
       ok: boolean;
-      files?: string[];
+      saves?: SaveSummary[];
       error?: string;
     }) => {
       loading = false;
 
       if (result.ok) {
-        saves = result.files ?? [];
+        saves = result.saves ?? [];
       } else {
         statusMessage = result.error ?? 'Could not list saves.';
       }
@@ -102,10 +116,16 @@
     <div class="save-list">
       <h2>Available saves</h2>
       {#if saves.length}
-        {#each saves as fileName}
+        {#each saves as save}
           <div class="save-row">
-            <span>{fileName}</span>
-            <button type="button" on:click={() => loadCampaign(fileName)}>Load</button>
+            <span>
+              <strong>{save.storyTitle}</strong>
+              <small>
+                {save.fileName} · {save.mode}
+                {save.savedAt ? ` · ${new Date(save.savedAt).toLocaleString()}` : ''}
+              </small>
+            </span>
+            <button type="button" on:click={() => loadCampaign(save.fileName)}>Load</button>
           </div>
         {/each}
       {:else}
@@ -246,6 +266,20 @@
     justify-content: space-between;
     align-items: center;
     gap: 14px;
+
+    span {
+      display: grid;
+      gap: 4px;
+    }
+
+    strong {
+      color: #f8e69a;
+    }
+
+    small {
+      color: #a8acb5;
+      line-height: 1.4;
+    }
   }
 
   .status-message {

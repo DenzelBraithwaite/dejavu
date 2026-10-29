@@ -4,7 +4,6 @@
     updateAudioSettings
   } from '../stores/audio';
   import location from '../stores/location';
-  import SaveMenu from './SaveMenu.svelte';
 
   function setVolume(
     setting: 'musicVolume' | 'soundsVolume',
@@ -108,8 +107,6 @@
         assigned yet.
       </p>
     </aside>
-
-    <SaveMenu embedded />
   </div>
 </section>
 

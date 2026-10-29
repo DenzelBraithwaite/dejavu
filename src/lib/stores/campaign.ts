@@ -1,5 +1,5 @@
 import { derived, writable } from 'svelte/store';
-import type { StoryDocument } from './library';
+import { libraryState, type StoryDocument } from './library';
 import type { CharacterRecord } from './characters';
 import { sessionState, type PlayerId } from './session';
 
@@ -97,12 +97,18 @@ export type CampaignState = {
 export const campaignState = writable<CampaignState | null>(null);
 
 export const localPlayer = derived(
-  [campaignState, sessionState],
-  ([$campaignState, $sessionState]) => {
+  [campaignState, sessionState, libraryState],
+  ([$campaignState, $sessionState, $libraryState]) => {
     if (!$campaignState || !$sessionState.playerId) {
       return null;
     }
 
-    return $campaignState.players[$sessionState.playerId];
+    const storyPlayerId = $libraryState.activeStoryMode === 'multiplayer'
+      ? (Object.entries($libraryState.seatClaims).find(
+          ([, connectionId]) => connectionId === $sessionState.playerId
+        )?.[0] as PlayerId | undefined) ?? $sessionState.playerId
+      : $sessionState.playerId;
+
+    return $campaignState.players[storyPlayerId];
   }
 );

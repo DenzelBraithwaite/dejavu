@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -112,6 +112,10 @@ const storySelections = {
   p2: null
 };
 const storySelectionModes = {
+  p1: null,
+  p2: null
+};
+const storySeatClaims = {
   p1: null,
   p2: null
 };
@@ -466,6 +470,19 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const accountOwner = ['p1', 'p2'].find(
+      (participantId) => participantId !== playerId
+        && characterSelections[participantId] === character.id
+    );
+
+    if (accountOwner) {
+      acknowledge({
+        ok: false,
+        error: 'That account is already active on the other connected device.'
+      });
+      return;
+    }
+
     characterSelections[playerId] = character.id;
     acknowledge({
       ok: true,
@@ -634,6 +651,7 @@ io.on('connection', (socket) => {
         if (storySelections[participantId] === normalizedStoryId) {
           storySelections[participantId] = null;
           storySelectionModes[participantId] = null;
+          releaseStorySeatClaims(participantId);
         }
       }
 
@@ -678,6 +696,9 @@ io.on('connection', (socket) => {
     const requestedMode = typeof selection === 'object'
       ? selection?.mode
       : null;
+    const requestedSeat = typeof selection === 'object'
+      ? selection?.seat
+      : null;
     const normalizedMode = requestedMode === 'singleplayer' || requestedMode === 'multiplayer'
       ? requestedMode
       : supportedModes.singleplayer
@@ -690,6 +711,31 @@ io.on('connection', (socket) => {
         error: `This cartridge does not include a ${normalizedMode} map.`
       });
       return;
+    }
+
+    if (story && normalizedMode === 'multiplayer') {
+      if (!['p1', 'p2'].includes(requestedSeat)) {
+        acknowledge({
+          ok: false,
+          error: 'Choose Player 1 or Player 2 before inserting a multiplayer cartridge.'
+        });
+        return;
+      }
+
+      const existingOwner = storySeatClaims[requestedSeat];
+
+      if (existingOwner && existingOwner !== playerId) {
+        acknowledge({
+          ok: false,
+          error: `${requestedSeat === 'p1' ? 'Player 1' : 'Player 2'} is already claimed.`
+        });
+        return;
+      }
+
+      releaseStorySeatClaims(playerId);
+      storySeatClaims[requestedSeat] = playerId;
+    } else {
+      releaseStorySeatClaims(playerId);
     }
 
     storySelections[playerId] = normalizedStoryId;
@@ -765,7 +811,8 @@ io.on('connection', (socket) => {
         return;
       }
 
-      const result = handleCampaignAction(campaignState, playerId, action);
+      const campaignPlayerId = resolveCampaignPlayerId(playerId);
+      const result = handleCampaignAction(campaignState, campaignPlayerId, action);
       acknowledge(result);
 
       if (result.ok) {
@@ -842,17 +889,35 @@ io.on('connection', (socket) => {
       }
 
       const fileName = createSaveFileName(saveName);
+      const temporaryFileName = `${fileName}.tmp`;
+      const savedAt = new Date().toISOString();
+      const saveDocument = {
+        saveFormatVersion: 2,
+        metadata: {
+          name: fileName.replace(/\.json$/i, ''),
+          storyId: campaignState.story.id,
+          storyTitle: campaignState.story.title,
+          mode: campaignState.sessionMode,
+          savedAt
+        },
+        campaign: campaignState
+      };
       await mkdir(savesDirectory, {
         recursive: true
       });
       await writeFile(
-        join(savesDirectory, fileName),
-        JSON.stringify(campaignState, null, 2),
+        join(savesDirectory, temporaryFileName),
+        JSON.stringify(saveDocument, null, 2),
         'utf8'
+      );
+      await rename(
+        join(savesDirectory, temporaryFileName),
+        join(savesDirectory, fileName)
       );
       acknowledge({
         ok: true,
-        fileName
+        fileName,
+        savedAt
       });
     } catch (error) {
       acknowledge({
@@ -867,12 +932,33 @@ io.on('connection', (socket) => {
       await mkdir(savesDirectory, {
         recursive: true
       });
-      const files = (await readdir(savesDirectory))
+      const fileNames = (await readdir(savesDirectory))
         .filter((fileName) => fileName.endsWith('.json'))
         .sort();
+      const saves = await Promise.all(fileNames.map(async (fileName) => {
+        try {
+          const contents = await readFile(join(savesDirectory, fileName), 'utf8');
+          const document = JSON.parse(contents);
+          const campaign = document.campaign ?? document;
+
+          return {
+            fileName,
+            storyTitle: document.metadata?.storyTitle ?? campaign.story?.title ?? 'Unknown story',
+            mode: document.metadata?.mode ?? campaign.sessionMode ?? 'multiplayer',
+            savedAt: document.metadata?.savedAt ?? campaign.updatedAt ?? null
+          };
+        } catch {
+          return {
+            fileName,
+            storyTitle: 'Unreadable save',
+            mode: 'unknown',
+            savedAt: null
+          };
+        }
+      }));
       acknowledge({
         ok: true,
-        files
+        saves
       });
     } catch (error) {
       acknowledge({
@@ -886,7 +972,8 @@ io.on('connection', (socket) => {
     try {
       const safeFileName = createSaveFileName(fileName);
       const contents = await readFile(join(savesDirectory, safeFileName), 'utf8');
-      campaignState = restoreCampaignState(JSON.parse(contents));
+      const saveDocument = JSON.parse(contents);
+      campaignState = restoreCampaignState(saveDocument.campaign ?? saveDocument);
       activeStoryId = campaignState.story.id;
       activeStoryMode = campaignState.sessionMode ?? 'multiplayer';
       activeSoloPlayerId = campaignState.soloPlayerId ?? null;
@@ -1270,8 +1357,11 @@ io.on('connection', (socket) => {
   socket.on('arcade:join', (gameId, mode, scope = 'main', callback = () => {}) => {
     const acknowledge = typeof scope === 'function' ? scope : callback;
     const sessionScope = scope === 'story' ? 'story' : 'main';
+    const arcadePlayerId = sessionScope === 'story'
+      ? resolveCampaignPlayerId(playerId)
+      : playerId;
 
-    if (sessionScope === 'story' && !playerCanUseActiveStoryMinigame(playerId)) {
+    if (sessionScope === 'story' && !playerCanUseActiveStoryMinigame(arcadePlayerId)) {
       acknowledge({
         ok: false,
         error: 'This story minigame belongs to the other player.'
@@ -1283,8 +1373,8 @@ io.on('connection', (socket) => {
     const result = joinArcadeGame(
       sessions,
       gameId,
-      playerId,
-      campaignState.players[playerId].name,
+      arcadePlayerId,
+      campaignState.players[arcadePlayerId].name,
       mode
     );
     acknowledge(result);
@@ -1297,14 +1387,21 @@ io.on('connection', (socket) => {
   socket.on('arcade:leave', (gameId, scope = 'main') => {
     const sessionScope = scope === 'story' ? 'story' : 'main';
     const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
-    leaveArcadeGame(sessions, gameId, playerId);
+    const arcadePlayerId = sessionScope === 'story'
+      ? resolveCampaignPlayerId(playerId)
+      : playerId;
+
+    leaveArcadeGame(sessions, gameId, arcadePlayerId);
     broadcastArcadeState(gameId, sessionScope);
   });
 
   socket.on('arcade:action', (request, acknowledge = () => {}) => {
     const sessionScope = request?.scope === 'story' ? 'story' : 'main';
+    const arcadePlayerId = sessionScope === 'story'
+      ? resolveCampaignPlayerId(playerId)
+      : playerId;
 
-    if (sessionScope === 'story' && !playerCanUseActiveStoryMinigame(playerId)) {
+    if (sessionScope === 'story' && !playerCanUseActiveStoryMinigame(arcadePlayerId)) {
       acknowledge({
         ok: false,
         error: 'This story minigame belongs to the other player.'
@@ -1316,7 +1413,7 @@ io.on('connection', (socket) => {
     const result = performArcadeAction(
       sessions,
       request?.game,
-      playerId,
+      arcadePlayerId,
       request?.action ?? {}
     );
     acknowledge(result);
@@ -1337,10 +1434,13 @@ io.on('connection', (socket) => {
     const acknowledge = typeof scope === 'function' ? scope : callback;
     const sessionScope = scope === 'story' ? 'story' : 'main';
     const sessions = sessionScope === 'story' ? storyArcadeSessions : arcadeSessions;
+    const arcadePlayerId = sessionScope === 'story'
+      ? resolveCampaignPlayerId(playerId)
+      : playerId;
     const result = voteArcadeRematch(
       sessions,
       gameId,
-      playerId,
+      arcadePlayerId,
       wantsRematch
     );
     acknowledge(result);
@@ -1592,6 +1692,7 @@ function scheduleSlotRelease(playerId, expectedToken) {
     storySelections[playerId] = null;
     storySelectionModes[playerId] = null;
     characterSelections[playerId] = null;
+    releaseStorySeatClaims(playerId);
     synchronizeActiveStory();
     broadcastSessionStatus();
     broadcastLibraryState();
@@ -1607,6 +1708,9 @@ function createLibraryState() {
     },
     selectionModes: {
       ...storySelectionModes
+    },
+    seatClaims: {
+      ...storySeatClaims
     },
     activeStoryId,
     activeStoryMode,
@@ -1630,6 +1734,24 @@ function broadcastCharacterLibraryState() {
 function selectedCharacter(playerId) {
   const characterId = characterSelections[playerId];
   return characterId ? characterRepository.getCharacter(characterId) : null;
+}
+
+function releaseStorySeatClaims(connectionPlayerId) {
+  for (const storyPlayerId of ['p1', 'p2']) {
+    if (storySeatClaims[storyPlayerId] === connectionPlayerId) {
+      storySeatClaims[storyPlayerId] = null;
+    }
+  }
+}
+
+function resolveCampaignPlayerId(connectionPlayerId) {
+  if (activeStoryMode !== 'multiplayer') {
+    return connectionPlayerId;
+  }
+
+  return ['p1', 'p2'].find(
+    (storyPlayerId) => storySeatClaims[storyPlayerId] === connectionPlayerId
+  ) ?? connectionPlayerId;
 }
 
 function synchronizeCharacterWallet(playerId, wallet) {
@@ -1809,6 +1931,8 @@ function resetPigzCompletion() {
 }
 
 function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcome = '') {
+  const storyPlayerId = resolveCampaignPlayerId(playerId);
+
   if (campaignState.activeMinigame?.id !== minigameId) {
     acknowledge({
       ok: false,
@@ -1817,7 +1941,7 @@ function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcom
     return;
   }
 
-  if (!playerCanUseActiveStoryMinigame(playerId)) {
+  if (!playerCanUseActiveStoryMinigame(storyPlayerId)) {
     acknowledge({
       ok: false,
       error: 'This story minigame belongs to the other player.'
@@ -1833,7 +1957,7 @@ function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcom
   }
 
   const finishedPlayers = storyMinigameFinishedPlayers[minigameId];
-  finishedPlayers.add(playerId);
+  finishedPlayers.add(storyPlayerId);
 
   const requiredPlayers = campaignState.sessionMode === 'singleplayer' ? 1 : 2;
 
@@ -1862,6 +1986,8 @@ function completeStoryMinigame(minigameId, playerId, acknowledge, reportedOutcom
 }
 
 function cancelStoryMinigame(minigameId, playerId, acknowledge) {
+  const storyPlayerId = resolveCampaignPlayerId(playerId);
+
   if (campaignState.activeMinigame?.id !== minigameId) {
     acknowledge({
       ok: false,
@@ -1871,7 +1997,7 @@ function cancelStoryMinigame(minigameId, playerId, acknowledge) {
   }
 
 
-  if (!playerCanUseActiveStoryMinigame(playerId)) {
+  if (!playerCanUseActiveStoryMinigame(storyPlayerId)) {
     acknowledge({
       ok: false,
       error: 'This story minigame belongs to the other player.'

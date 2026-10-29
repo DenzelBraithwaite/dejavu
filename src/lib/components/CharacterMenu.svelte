@@ -165,6 +165,12 @@
     });
   }
 
+  function accountIsUsedByOtherPlayer(characterId: string): boolean {
+    const otherPlayerId = $sessionState.playerId === 'p1' ? 'p2' : 'p1';
+
+    return $characterLibraryState.selections[otherPlayerId] === characterId;
+  }
+
   function deleteCharacter(): void {
     if (!editingCharacter?.id) {
       return;
@@ -459,10 +465,18 @@
                   </div>
                   <div class="card-actions">
                     {#if character.type === 'account'}
-                      <button type="button" on:click={() => {
+                      <button
+                        type="button"
+                        disabled={accountIsUsedByOtherPlayer(character.id)}
+                        on:click={() => {
                         selectCharacter(character);
-                      }}>
-                        {character.id === $activeCharacter?.id ? 'Selected' : 'Use account'}
+                        }}
+                      >
+                        {accountIsUsedByOtherPlayer(character.id)
+                          ? 'In use'
+                          : character.id === $activeCharacter?.id
+                            ? 'Selected'
+                            : 'Use account'}
                       </button>
                     {/if}
                     <button type="button" on:click={() => {

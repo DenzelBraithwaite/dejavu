@@ -47,8 +47,14 @@
   let hoveredButtonId = '';
   let storyAudioVisible = false;
   let lastStoryAudioVisible = false;
+  let lastStoryEnded = false;
 
-  $: playerId = $sessionState.playerId;
+  $: connectionPlayerId = $sessionState.playerId;
+  $: playerId = $libraryState.activeStoryMode === 'multiplayer'
+    ? (Object.entries($libraryState.seatClaims).find(
+        ([, ownerId]) => ownerId === connectionPlayerId
+      )?.[0] as 'p1' | 'p2' | undefined) ?? connectionPlayerId
+    : connectionPlayerId;
   $: sceneId = playerId && $campaignState
     ? $campaignState.currentScene[playerId]
     : '';
@@ -141,6 +147,14 @@
   $: storyEnded = Boolean(
     playerId && $campaignState?.endedPlayers?.includes(playerId)
   );
+  $: if (storyEnded !== lastStoryEnded) {
+    lastStoryEnded = storyEnded;
+
+    if (storyEnded) {
+      stopMusic();
+      stopSounds();
+    }
+  }
   $: {
     textValues = {};
 
@@ -174,18 +188,18 @@
     ? Math.max(0, $campaignState.deadlines[playerId] - now)
     : 0;
   $: remainingSeconds = Math.ceil(remainingMs / 1000);
-  $: localStoryId = playerId
-    ? $libraryState.selections[playerId]
+  $: localStoryId = connectionPlayerId
+    ? $libraryState.selections[connectionPlayerId]
     : null;
-  $: partnerStoryId = playerId
-    ? $libraryState.selections[playerId === 'p1' ? 'p2' : 'p1']
+  $: partnerStoryId = connectionPlayerId
+    ? $libraryState.selections[connectionPlayerId === 'p1' ? 'p2' : 'p1']
     : null;
   $: localStoryTitle = getStoryTitle(localStoryId);
   $: partnerStoryTitle = getStoryTitle(partnerStoryId);
   $: soloSpectator = $libraryState.activeStoryMode === 'singleplayer'
-    && Boolean(playerId)
+    && Boolean(connectionPlayerId)
     && Boolean($libraryState.activeSoloPlayerId)
-    && $libraryState.activeSoloPlayerId !== playerId;
+    && $libraryState.activeSoloPlayerId !== connectionPlayerId;
   $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
   $: audioCampaignId = $campaignState?.campaignId ?? '';
   $: storyAudioVisible = $location === 'terminal' || $storyMinigameView;
@@ -399,6 +413,11 @@
         return Number(player.stats[condition.key] ?? 0) >= Number(condition.value ?? 0);
       case 'relationship-at-least':
         return Number(player.relationships?.[condition.key] ?? 0) >= Number(condition.value ?? 0);
+      case 'decision-made':
+        return $campaignState.decisions.some(
+          (decision) => decision.playerId === playerId
+            && `${decision.sceneId}:${decision.choiceId}` === condition.key
+        );
       default:
         return false;
     }
@@ -458,7 +477,7 @@
   function completeTyping(): void {
     typingComplete = true;
 
-    if (scene?.type === 'timed-choice' && !remainingMs) {
+    if ((scene?.type === 'timed-choice' || scene?.timed) && !remainingMs) {
       sendAction({
         type: 'start-timer',
         sceneId: scene.id
@@ -741,21 +760,27 @@
   {#if $campaignState && scene}
     <div class="terminal-controls">
       {#if ['dialogue', 'image', 'effect', 'ambience'].includes(scene.type)}
-        <button
-          class:hover-effects={scene.hoverEffectsEnabled}
-          type="button"
-          data-hover-id="primary"
-          style={buttonHoverStyle(scene)}
-          on:mouseenter={showButtonHoverText}
-          on:mouseleave={hideButtonHoverText}
-          on:focus={showButtonHoverText}
-          on:blur={hideButtonHoverText}
-          on:click={advance}
-        >
-          {buttonLabel(scene.continueLabel?.trim() || 'Continue', 'primary', scene.hoverText)}
-        </button>
+        {#if scene.type !== 'dialogue' || !scene.timed}
+          <button
+            class:hover-effects={scene.hoverEffectsEnabled}
+            type="button"
+            data-hover-id="primary"
+            style={buttonHoverStyle(scene)}
+            on:mouseenter={showButtonHoverText}
+            on:mouseleave={hideButtonHoverText}
+            on:focus={showButtonHoverText}
+            on:blur={hideButtonHoverText}
+            on:click={advance}
+          >
+            {buttonLabel(scene.continueLabel?.trim() || 'Continue', 'primary', scene.hoverText)}
+          </button>
+        {:else if remainingMs}
+          <p class="timer" aria-live="polite">
+            CONTINUING IN {remainingSeconds}s
+          </p>
+        {/if}
       {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
-        {#if scene.type === 'timed-choice' && typingComplete && remainingMs}
+        {#if (scene.type === 'timed-choice' || scene.timed) && typingComplete && remainingMs}
           <p class="timer" aria-live="polite">
             AUTO-SELECT IN {remainingSeconds}s
           </p>

@@ -56,8 +56,13 @@
   $: neuroChatInstalled = Boolean(
     $campaignState?.installedMods.includes('neuro-link-chat')
   );
-  $: storyPlayer = $sessionState.playerId
-    ? $campaignState?.players[$sessionState.playerId]
+  $: storyPlayerId = $libraryState.activeStoryMode === 'multiplayer'
+    ? (Object.entries($libraryState.seatClaims).find(
+        ([, connectionId]) => connectionId === $sessionState.playerId
+      )?.[0] as PlayerId | undefined) ?? $sessionState.playerId
+    : $sessionState.playerId;
+  $: storyPlayer = storyPlayerId
+    ? $campaignState?.players[storyPlayerId]
     : null;
 
   $: if (!neuroChatInstalled && chatOpen) {
@@ -141,7 +146,7 @@
     campaignState.set(state);
 
     if (state.activeMinigame
-      && playerOwnsStoryMinigame(state, $sessionState.playerId)) {
+      && playerOwnsStoryMinigame(state, storyPlayerId)) {
       const minigameKey = `${state.activeMinigame.sceneId}:${state.activeMinigame.startedAt}`;
       minigameWasActive = true;
       activeStoryMinigameId = state.activeMinigame.id;
@@ -163,7 +168,7 @@
       }
     } else if (minigameWasActive
       && (!state.activeMinigame
-        || !playerOwnsStoryMinigame(state, $sessionState.playerId))) {
+        || !playerOwnsStoryMinigame(state, storyPlayerId))) {
       minigameWasActive = false;
 
       if ($location === activeStoryMinigameId) {
@@ -198,6 +203,10 @@
       selectionModes: state.selectionModes ?? {
         p1: state.selections.p1 ? 'multiplayer' : null,
         p2: state.selections.p2 ? 'multiplayer' : null
+      },
+      seatClaims: state.seatClaims ?? {
+        p1: null,
+        p2: null
       },
       activeStoryMode: state.activeStoryMode
         ?? (state.activeStoryId ? 'multiplayer' : null),
@@ -291,7 +300,7 @@
 
   function changePage(event: CustomEvent<string>): void {
     if (event.detail === 'terminal'
-      && playerOwnsStoryMinigame($campaignState, $sessionState.playerId)) {
+      && playerOwnsStoryMinigame($campaignState, storyPlayerId)) {
       storyMinigameView.set(true);
       location.set($campaignState?.activeMinigame?.id ?? 'terminal');
       return;

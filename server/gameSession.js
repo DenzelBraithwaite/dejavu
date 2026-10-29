@@ -275,7 +275,6 @@ export function handleCampaignAction(state, playerId, action) {
       result = handleAdvance(state, playerId, scene, action);
       break;
     case 'choice':
-    case 'timed-choice':
       result = handleChoice(state, playerId, scene, action);
       break;
     case 'input':
@@ -375,6 +374,19 @@ export function completeActiveMinigame(state, resultId) {
 }
 
 function handleAdvance(state, playerId, scene, action) {
+  if (scene.type === 'dialogue' && scene.timed && action.type === 'start-timer') {
+    if (!state.deadlines[playerId]) {
+      state.deadlines[playerId] = Date.now()
+        + (scene.durationMs ?? DEFAULT_TIMED_CHOICE_DURATION_MS);
+    }
+
+    return actionSuccess();
+  }
+
+  if (scene.type === 'dialogue' && scene.timed) {
+    return actionError('This dialogue advances automatically when its timer ends.');
+  }
+
   if (action.type !== 'advance') {
     return actionError('This scene requires an advance action.');
   }
@@ -398,7 +410,7 @@ function handleAdvance(state, playerId, scene, action) {
 }
 
 function handleChoice(state, playerId, scene, action) {
-  if (scene.type === 'timed-choice' && action.type === 'start-timer') {
+  if ((scene.type === 'timed-choice' || scene.timed) && action.type === 'start-timer') {
     if (!state.deadlines[playerId]) {
       state.deadlines[playerId] = Date.now()
         + (scene.durationMs ?? DEFAULT_TIMED_CHOICE_DURATION_MS);
@@ -418,8 +430,26 @@ function handleChoice(state, playerId, scene, action) {
   }
 
   applyEffects(state, playerId, choice.effects ?? []);
-  recordDecision(state, playerId, scene.id, choice.id, choice.label);
-  archiveSceneForPlayer(state, playerId, scene, `> ${choice.label}`);
+  const decisionSeverity = ['minor', 'major'].includes(scene.decisionSeverity)
+    ? scene.decisionSeverity
+    : 'none';
+
+  if (decisionSeverity !== 'none') {
+    recordDecision(
+      state,
+      playerId,
+      scene.id,
+      choice.id,
+      choice.label,
+      false,
+      decisionSeverity
+    );
+  }
+
+  const decisionNotice = decisionSeverity === 'none'
+    ? ''
+    : ` · ${decisionSeverity.toUpperCase()} DECISION REMEMBERED`;
+  archiveSceneForPlayer(state, playerId, scene, `> ${choice.label}${decisionNotice}`);
 
   setPlayerScene(state, playerId, choice.next);
 
@@ -437,12 +467,13 @@ function handleInput(state, playerId, scene, action) {
     return actionError('Enter a value before continuing.');
   }
 
-  const inputKey = normalizeInputKey(scene.inputKey || scene.id);
+  if (scene.saveInput !== false) {
+    const inputKey = normalizeInputKey(scene.inputKey || scene.id);
 
-  state.inputs ??= { p1: {}, p2: {} };
-  state.inputs[playerId] ??= {};
-  state.inputs[playerId][inputKey] = value;
-  recordDecision(state, playerId, scene.id, 'input', value);
+    state.inputs ??= { p1: {}, p2: {} };
+    state.inputs[playerId] ??= {};
+    state.inputs[playerId][inputKey] = value;
+  }
   archiveSceneForPlayer(state, playerId, scene, `> ${value}`);
   setPlayerScene(state, playerId, scene.next);
 
@@ -665,7 +696,19 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
     const scene = getScene(state, state.currentScene[playerId]);
     const deadline = state.deadlines[playerId];
 
-    if (!scene || scene.type !== 'timed-choice' || !deadline || deadline > now) {
+    if (!scene
+      || (scene.type !== 'timed-choice' && !scene.timed)
+      || !deadline
+      || deadline > now) {
+      continue;
+    }
+
+    if (scene.type === 'dialogue' && scene.timed) {
+      recordTranscript(state, playerId, scene.text ?? '', scene.speaker ?? 'Narrator', scene.id);
+      applyEffects(state, playerId, scene.effects ?? []);
+      archiveSceneForPlayer(state, playerId, scene);
+      setPlayerScene(state, playerId, scene.next);
+      changed = true;
       continue;
     }
 
@@ -683,9 +726,33 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
       continue;
     }
 
+    const decisionSeverity = ['minor', 'major'].includes(scene.decisionSeverity)
+      ? scene.decisionSeverity
+      : 'none';
+    const decisionNotice = decisionSeverity === 'none'
+      ? ''
+      : ` · ${decisionSeverity.toUpperCase()} DECISION REMEMBERED`;
+
     applyEffects(state, playerId, fallback.effects ?? []);
-    recordDecision(state, playerId, scene.id, fallback.id, fallback.label, true);
-    archiveSceneForPlayer(state, playerId, scene, `> ${fallback.label} (auto-selected)`);
+
+    if (decisionSeverity !== 'none') {
+      recordDecision(
+        state,
+        playerId,
+        scene.id,
+        fallback.id,
+        fallback.label,
+        true,
+        decisionSeverity
+      );
+    }
+
+    archiveSceneForPlayer(
+      state,
+      playerId,
+      scene,
+      `> ${fallback.label} (auto-selected)${decisionNotice}`
+    );
     setPlayerScene(state, playerId, fallback.next);
     changed = true;
   }
@@ -702,7 +769,7 @@ export function initializeDeadlines(state) {
   for (const playerId of PLAYER_IDS) {
     const scene = getScene(state, state.currentScene[playerId]);
 
-    if (scene?.type !== 'timed-choice') {
+    if (scene?.type !== 'timed-choice' && !scene?.timed) {
       delete state.deadlines[playerId];
     }
   }
@@ -928,6 +995,13 @@ function evaluateCondition(state, playerId, condition = {}) {
 
       return Boolean(lastDiceDecision?.successful);
     }
+    case 'decision-made':
+      return state.decisions.some(
+        (decision) => decision.playerId === playerId
+          && `${decision.sceneId}:${decision.choiceId}` === condition.key
+      );
+    case 'playing-as':
+      return playerId === condition.key;
     default:
       return false;
   }
@@ -1201,7 +1275,15 @@ function recordTranscript(state, playerId, text, speaker, sceneId = '') {
   });
 }
 
-function recordDecision(state, playerId, sceneId, choiceId, label, randomized = false) {
+function recordDecision(
+  state,
+  playerId,
+  sceneId,
+  choiceId,
+  label,
+  randomized = false,
+  severity = undefined
+) {
   state.decisions.push({
     type: 'choice',
     playerId,
@@ -1209,6 +1291,7 @@ function recordDecision(state, playerId, sceneId, choiceId, label, randomized = 
     choiceId,
     label,
     randomized,
+    severity,
     createdAt: new Date().toISOString()
   });
 }
