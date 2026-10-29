@@ -500,7 +500,7 @@
     errorMessage = '';
     socket.emit('campaign:reset', (result: { ok: boolean; error?: string }) => {
       if (!result.ok) {
-        errorMessage = result.error ?? 'Story Mode could not be reset.';
+        errorMessage = result.error ?? 'The cartridge could not be reset.';
       }
     });
   }
@@ -599,7 +599,7 @@
     {#if !$libraryState.activeStoryId}
       <div class="cartridge-status" role="status">
         <p class="scene-id">STORY CARTRIDGE REQUIRED</p>
-        <h1>Story Mode is offline</h1>
+        <h1>Cartridge is offline</h1>
 
         {#if !localStoryId}
           <p>Open Library and select a story cartridge to stage it.</p>
@@ -946,7 +946,7 @@
 
 <style lang="scss">
   .terminal {
-    --terminal-accent: #4a98d9;
+    --terminal-accent: #19488e;
 
     position: relative;
     width: 100%;

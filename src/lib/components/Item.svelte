@@ -185,6 +185,30 @@
     background-color: #163f76;
   }
 
+  .item-color__blue-spectrum-1 {
+    background-color: #6aaee8;
+  }
+
+  .item-color__blue-spectrum-2 {
+    background-color: #5798dc;
+  }
+
+  .item-color__blue-spectrum-3 {
+    background-color: #4382cf;
+  }
+
+  .item-color__blue-spectrum-4 {
+    background-color: #326dbd;
+  }
+
+  .item-color__blue-spectrum-5 {
+    background-color: #255aa6;
+  }
+
+  .item-color__blue-spectrum-6 {
+    background-color: #19488e;
+  }
+
   .item-color__mint {
     background-color: #5ee6c4;
   }

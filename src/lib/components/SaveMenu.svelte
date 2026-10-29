@@ -145,16 +145,16 @@
     height: 100%;
     max-width: 1100px;
     overflow: hidden;
-    background: #0e0c08;
-    border: 1px solid #d6a741;
+    background: #080f1b;
+    border: 1px solid #326dbd;
     border-radius: 8px;
-    box-shadow: 0 0 30px #d6a7412f;
+    box-shadow: 0 0 30px #326dbd2f;
 
     > header {
       padding: 11px 14px;
-      color: #f8e69a;
-      background: #211b0e;
-      border-bottom: 1px solid #d6a741;
+      color: #b9d4f5;
+      background: #0d1c32;
+      border-bottom: 1px solid #326dbd;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.75rem;
       letter-spacing: 2px;
@@ -208,7 +208,7 @@
     label {
       display: block;
       margin-bottom: 8px;
-      color: #d6a741;
+      color: #78a9e8;
       font-size: 0.75rem;
       text-transform: uppercase;
     }
@@ -225,8 +225,8 @@
     min-height: 44px;
     padding: 9px 13px;
     color: #e8edf6;
-    background: #17130a;
-    border: 1px solid #d6a741;
+    background: #0c1728;
+    border: 1px solid #326dbd;
     border-radius: 4px;
     font: inherit;
   }
@@ -241,8 +241,8 @@
 
     &:hover,
     &:focus-visible:not(:disabled) {
-      color: #17130a;
-      background: #d6a741;
+      color: #07101d;
+      background: #78a9e8;
       outline: 2px solid #ffffff;
       outline-offset: 2px;
     }
@@ -253,14 +253,14 @@
 
     h2 {
       margin-bottom: 14px;
-      color: #f8e69a;
+      color: #b9d4f5;
       font-size: 1rem;
     }
   }
 
   .save-row {
     padding: 10px 0;
-    border-bottom: 1px dashed #4c3e1e;
+    border-bottom: 1px dashed #294f80;
 
     display: flex;
     justify-content: space-between;
@@ -273,7 +273,7 @@
     }
 
     strong {
-      color: #f8e69a;
+      color: #b9d4f5;
     }
 
     small {
@@ -284,6 +284,6 @@
 
   .status-message {
     margin-top: 24px;
-    color: #f8e69a;
+    color: #b9d4f5;
   }
 </style>

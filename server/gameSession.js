@@ -125,6 +125,7 @@ function createPlayerState(character, fallbackName, fallbackStats) {
       ...(character?.stats ?? fallbackStats)
     },
     inventory: [],
+    itemImages: {},
     knownCharacters: [],
     statusEffects: [],
     relationships: {}
@@ -213,6 +214,7 @@ export function restoreCampaignState(candidate) {
 
   for (const playerId of PLAYER_IDS) {
     restored.players[playerId].relationships ??= {};
+    restored.players[playerId].itemImages ??= {};
   }
 
   // Migrate the short-lived persistent image format into the chronological
@@ -1099,11 +1101,17 @@ function applyEffects(state, playerId, effects) {
         break;
       case 'add-item':
         addUnique(state.players[playerId].inventory, effect.key);
+
+        if (effect.image) {
+          state.players[playerId].itemImages ??= {};
+          state.players[playerId].itemImages[effect.key] = effect.image;
+        }
         break;
       case 'remove-item':
         state.players[playerId].inventory = state.players[playerId].inventory.filter(
           (item) => item !== effect.key
         );
+        delete state.players[playerId].itemImages?.[effect.key];
         break;
       case 'discover-character':
         addUnique(state.players[playerId].knownCharacters, effect.key);

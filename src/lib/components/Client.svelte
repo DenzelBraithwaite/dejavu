@@ -49,6 +49,7 @@
   let unreadChatCount = 0;
   let showChatToast = false;
   let storyCharacterOpen = false;
+  let accountSelectorOpen = false;
   let chatToastTimer: number;
   let pendingPage: string | null = null;
   const partneredMinigames = new Set<string>();
@@ -64,6 +65,8 @@
   $: storyPlayer = storyPlayerId
     ? $campaignState?.players[storyPlayerId]
     : null;
+  $: storyToolsVisible = ['terminal', 'bag', 'journal', 'saves'].includes($location)
+    || $storyMinigameView;
 
   $: if (!neuroChatInstalled && chatOpen) {
     chatOpen = false;
@@ -503,13 +506,25 @@
       chatAvailable={neuroChatInstalled}
       chatUnreadCount={unreadChatCount}
       storyModeActive={$location === 'terminal' || $storyMinigameView}
+      {storyToolsVisible}
       on:select={changePage}
       on:show-story-character={() => storyCharacterOpen = true}
+      on:show-account-selector={() => accountSelectorOpen = true}
       on:toggle-chat={toggleChat}
       on:toggle-sidebar={() => sidebarExpanded = !sidebarExpanded}
     />
 
     <div class="main-content">
+      {#if accountSelectorOpen}
+        <div class="account-selector-backdrop">
+          <CharacterLanding
+            allowClose
+            on:close={() => accountSelectorOpen = false}
+            on:selected={() => accountSelectorOpen = false}
+          />
+        </div>
+      {/if}
+
       {#if pendingPage}
         <div class="exit-confirmation-backdrop">
           <section class="exit-confirmation" role="alertdialog" aria-modal="true" aria-labelledby="exit-minigame-title">
@@ -616,6 +631,12 @@
     place-items: center;
   }
 
+  .account-selector-backdrop {
+    position: fixed;
+    z-index: 1200;
+    inset: 0;
+  }
+
   .story-character-backdrop {
     position: fixed;
     z-index: 900;
@@ -635,12 +656,12 @@
     overflow-y: auto;
     color: #dbeafe;
     background: #09111e;
-    border: 1px solid #4a98d9;
-    box-shadow: 0 0 42px #4a98d944;
+    border: 1px solid #6aaee8;
+    box-shadow: 0 0 42px #6aaee844;
 
     header {
       padding-bottom: 14px;
-      border-bottom: 1px solid #294668;
+      border-bottom: 1px solid #3e6d94;
 
       display: flex;
       justify-content: space-between;
@@ -649,7 +670,7 @@
     }
 
     p {
-      color: #6dc2fb;
+      color: #9dcdf4;
       font-size: 0.66rem;
       letter-spacing: 1.4px;
     }
@@ -664,7 +685,7 @@
       min-height: 38px;
       color: #e8edf6;
       background: #111a2c;
-      border: 1px solid #4a98d9;
+      border: 1px solid #6aaee8;
       cursor: pointer;
     }
 
@@ -679,7 +700,7 @@
     dl > div {
       padding: 10px 12px;
       background: #07111d;
-      border: 1px solid #243750;
+      border: 1px solid #365d7f;
     }
 
     dt {
@@ -690,7 +711,7 @@
 
     dd {
       margin-top: 5px;
-      color: #02fbfb;
+      color: #9dcdf4;
       font-weight: 800;
     }
   }

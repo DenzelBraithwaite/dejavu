@@ -42,6 +42,7 @@
   type LaneGraph = {
     levels: LaneGraphLevel[];
     maxColumns: number;
+    columnWidth: number;
   };
 
   type EditorSnapshot = {
@@ -311,7 +312,7 @@
   let tutorialOpen = false;
   let imageUploading = false;
   let imageLibraryOpen = false;
-  let imageLibraryTarget: 'portrait' | 'image' = 'image';
+  let imageLibraryTarget: 'portrait' | 'image' | 'item' = 'image';
   let storyImages: string[] = [];
   let audioLibraryOpen = false;
   let audioLibraryTarget: 'music' | 'sound' = 'music';
@@ -646,7 +647,7 @@
     }, (result: { ok: boolean; error?: string }) => {
       if (result.ok) {
         statusMessage = storyId
-          ? 'Cartridge inserted. Story Mode is ready.'
+          ? 'Cartridge inserted and ready to play.'
           : 'Cartridge and multiplayer seat deselected.';
         seatPickerStoryId = '';
       } else {
@@ -1932,17 +1933,45 @@
 
     return {
       levels: orderedLevels,
-      maxColumns: Math.max(1, ...orderedLevels.map((level) => compactLevelColumnCount(level.nodes)))
+      maxColumns: Math.max(1, ...orderedLevels.map((level) => compactLevelColumnCount(level.nodes))),
+      columnWidth: 258 + Math.max(
+        0,
+        ...orderedLevels.flatMap((level) => level.nodes.map(
+          (node) => companionStackIndex(level.nodes, node) * 12
+        ))
+      )
     };
   }
 
   function compactLevelColumnCount(nodes: StoryNode[]): number {
     const regularNodeCount = nodes.filter((node) => !isCompanionNode(node)).length;
-    const companionTypes = new Set(
-      nodes.filter(isCompanionNode).map((node) => node.type)
+    const companionStacks = new Set(
+      nodes.filter(isCompanionNode).map(
+        (node) => `${node.attachedTo ?? 'detached'}:${node.type}`
+      )
     );
 
-    return regularNodeCount + companionTypes.size;
+    return regularNodeCount + companionStacks.size;
+  }
+
+  function visualLevelColumn(nodes: StoryNode[], node: StoryNode): number {
+    const visualKeys: string[] = [];
+
+    for (const candidate of nodes) {
+      const key = isCompanionNode(candidate)
+        ? `companion:${candidate.attachedTo ?? 'detached'}:${candidate.type}`
+        : `node:${candidate.id}`;
+
+      if (!visualKeys.includes(key)) {
+        visualKeys.push(key);
+      }
+
+      if (candidate.id === node.id) {
+        return visualKeys.indexOf(key) + 1;
+      }
+    }
+
+    return 1;
   }
 
   function companionStackIndex(nodes: StoryNode[], node: StoryNode): number {
@@ -1951,7 +1980,9 @@
     }
 
     return nodes
-      .filter((candidate) => isCompanionNode(candidate) && candidate.type === node.type)
+      .filter((candidate) => isCompanionNode(candidate)
+        && candidate.type === node.type
+        && candidate.attachedTo === node.attachedTo)
       .findIndex((candidate) => candidate.id === node.id);
   }
 
@@ -2616,7 +2647,7 @@
     refreshStory();
   }
 
-  async function openImageLibrary(target: 'portrait' | 'image'): Promise<void> {
+  async function openImageLibrary(target: 'portrait' | 'image' | 'item'): Promise<void> {
     imageLibraryTarget = target;
     clearMessages();
 
@@ -2646,6 +2677,8 @@
 
     if (imageLibraryTarget === 'portrait') {
       selectedNode.portrait = path;
+    } else if (imageLibraryTarget === 'item' && selectedNode.effects?.[0]) {
+      selectedNode.effects[0].image = path;
     } else {
       selectedNode.src = path;
     }
@@ -3075,7 +3108,8 @@
           effects: [
             {
               type: 'add-item',
-              key: 'new-item'
+              key: 'new-item',
+              image: ''
             }
           ]
         };
@@ -3259,8 +3293,8 @@
         <p>
           {$libraryState.activeStoryId
             ? $libraryState.activeStoryMode === 'singleplayer'
-              ? 'CARTRIDGE ACTIVE — STORY MODE READY'
-              : 'LINK ESTABLISHED — STORY MODE READY'
+              ? 'CARTRIDGE ACTIVE — READY TO PLAY'
+              : 'LINK ESTABLISHED — CARTRIDGE READY'
             : 'WAITING FOR MATCHING CARTRIDGES'}
         </p>
       </div>
@@ -3590,7 +3624,7 @@
                 class:active={activeLane === lane.id}
                 class:has-branches={laneGraph.maxColumns > 1}
                 class:singleplayer-disabled={activeStoryMap === 'singleplayer' && lane.id !== 'p1'}
-                style={`--lane-columns: ${laneGraph.maxColumns}`}
+                style={`--lane-columns: ${laneGraph.maxColumns}; --lane-column-width: ${laneGraph.columnWidth}px`}
                 role="group"
                 aria-label={`${lane.label} lane`}
               >
@@ -3614,6 +3648,7 @@
                       class:parallel-level={level.nodes.length > 1}
                       class:merge-level={level.nodes.some(nodeMergesRoutes)}
                       data-depth={level.depth}
+                      style={`--level-columns: ${compactLevelColumnCount(level.nodes)}`}
                     >
                       {#each level.nodes as node (`${node.id}:${storyRevision}`)}
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -3631,7 +3666,7 @@
                           class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
                           class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
                           class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
-                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}`}
+                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}; --node-column: ${visualLevelColumn(level.nodes, node)}`}
                         >
                           {#if branchPathLabel(node)}
                             <span class="branch-path-label">{branchPathLabel(node)}</span>
@@ -3836,6 +3871,27 @@
               </button>
             {/if}
 
+            {#if routeFields(selectedNode).includes('next')}
+              <div class="route-label">
+                {isCompanionNode(selectedNode) ? 'Legacy return node' : 'Next node'}
+              </div>
+              <div class="route-control">
+                <button
+                  class="route-node-link"
+                  class:missing={!selectedNode.next}
+                  type="button"
+                  disabled={!selectedNode.next}
+                  on:click={() => selectConnectedNode(selectedNode.next)}
+                >{routeLabel(selectedNode, 'next')}</button>
+                <button type="button" on:click={() => startLinkSelection('next', 'Next node')}>
+                  {isCompanionNode(selectedNode) ? 'Select legacy return' : 'Select next node'}
+                </button>
+                {#if selectedNode.next}
+                  <button type="button" aria-label="Clear next node" on:click={() => clearRoute(selectedNode, 'next')}>×</button>
+                {/if}
+              </div>
+            {/if}
+
             {#if isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined}
               <div class="route-label">Attached to story node</div>
               <div class="route-control">
@@ -3997,27 +4053,6 @@
                   bind:value={selectedNode.durationMs}
                 >
               {/if}
-            {/if}
-
-            {#if routeFields(selectedNode).includes('next')}
-              <div class="route-label">
-                {isCompanionNode(selectedNode) ? 'Legacy return node' : 'Next node'}
-              </div>
-              <div class="route-control">
-                <button
-                  class="route-node-link"
-                  class:missing={!selectedNode.next}
-                  type="button"
-                  disabled={!selectedNode.next}
-                  on:click={() => selectConnectedNode(selectedNode.next)}
-                >{routeLabel(selectedNode, 'next')}</button>
-                <button type="button" on:click={() => startLinkSelection('next', 'Next node')}>
-                  {isCompanionNode(selectedNode) ? 'Select legacy return' : 'Select next node'}
-                </button>
-                {#if selectedNode.next}
-                  <button type="button" aria-label="Clear next node" on:click={() => clearRoute(selectedNode, 'next')}>×</button>
-                {/if}
-              </div>
             {/if}
 
             {#if selectedNode.type === 'dice-check'}
@@ -4351,6 +4386,25 @@
               {#if selectedNode.effects[0].type !== 'set-player-name'}
                 <label for="effect-key">Item, flag, stat, relationship, character, or mod ID</label>
                 <input id="effect-key" bind:value={selectedNode.effects[0].key}>
+              {/if}
+              {#if selectedNode.effects[0].type === 'add-item'}
+                <span class="inspector-label">Optional item image</span>
+                {#if selectedNode.effects[0].image}
+                  <div class="image-preview">
+                    <img src={selectedNode.effects[0].image} alt="">
+                    <span>{selectedNode.effects[0].image.split('/').at(-1)}</span>
+                  </div>
+                  <button type="button" on:click={() => {
+                    selectedNode.effects[0].image = '';
+                    refreshStory();
+                  }}>Remove item image</button>
+                {/if}
+                <button type="button" on:click={() => openImageLibrary('item')}>
+                  {selectedNode.effects[0].image ? 'Change item image' : 'Select item image'}
+                </button>
+                <p class="inspector-help">
+                  Players can expand this artwork by selecting the item in their Bag.
+                </p>
               {/if}
               <label for="effect-value">Optional value</label>
               <input id="effect-value" bind:value={selectedNode.effects[0].value}>
@@ -4943,7 +4997,9 @@
                     DELETE
                   </button>
                 {:else}
-                  <span class="asset-built-in">BUILT-IN PORTRAIT</span>
+                  <span class="asset-built-in">
+                    {imagePath.startsWith('/character_imgs/') ? 'BUILT-IN PORTRAIT' : 'BUILT-IN IMAGE'}
+                  </span>
                 {/if}
               </article>
             {/each}
@@ -5264,9 +5320,50 @@
     gap: 16px;
 
     article {
-      padding: 20px;
-      background: #0c1322;
-      border: 1px solid #2c3b54;
+      position: relative;
+      min-height: 360px;
+      padding: 42px 24px 52px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, #17243a, #0a101c 65%),
+        #0c1322;
+      border: 4px solid #33445d;
+      border-radius: 12px 12px 28px 28px;
+      box-shadow:
+        inset 0 0 0 2px #080d16,
+        inset 0 -18px 0 #070b12,
+        0 12px 24px #02061788;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        width: 42%;
+        height: 10px;
+        background: #03060b;
+        border: 2px solid #435774;
+        border-radius: 999px;
+        box-shadow: inset 0 2px 4px #000000;
+        transform: translateX(-50%);
+      }
+
+      &::after {
+        content: '';
+        position: absolute;
+        right: 22%;
+        bottom: 9px;
+        left: 22%;
+        height: 13px;
+        background: repeating-linear-gradient(
+          90deg,
+          #b98a38 0,
+          #b98a38 8px,
+          #49330f 8px,
+          #49330f 12px
+        );
+        border: 1px solid #d9b96a;
+      }
 
       h2 {
         margin: 14px 0 10px;
@@ -5300,7 +5397,10 @@
 
     article.selected {
       border-color: #02fbfb;
-      box-shadow: 0 0 20px #02fbfb22;
+      box-shadow:
+        inset 0 0 0 2px #07111d,
+        inset 0 -18px 0 #07111d,
+        0 0 24px #02fbfb44;
     }
   }
 
@@ -5792,7 +5892,7 @@
   .flow-lane {
     flex: 0 0 auto;
     width: calc(
-      (var(--lane-columns, 1) * 258px)
+      (var(--lane-columns, 1) * var(--lane-column-width, 258px))
       + ((var(--lane-columns, 1) - 1) * 12px)
       + 20px
     );
@@ -5854,7 +5954,8 @@
     position: relative;
     min-width: 100%;
 
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(var(--level-columns, 1), var(--lane-column-width, 258px));
     justify-content: center;
     align-items: flex-start;
     gap: 12px;
@@ -5889,6 +5990,8 @@
     min-width: 258px;
 
     display: grid;
+    grid-column: var(--node-column, auto);
+    grid-row: 1;
     gap: 5px;
 
     &.has-route::after {
@@ -5925,7 +6028,6 @@
 
     &.stacked-companion {
       z-index: calc(2 + var(--companion-stack-index));
-      margin-left: -238px;
       transform: translate(
         calc(var(--companion-stack-index) * 12px),
         calc(var(--companion-stack-index) * 8px)

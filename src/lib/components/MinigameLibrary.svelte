@@ -253,7 +253,7 @@
               type="button"
               disabled={storyIsUsingMinigame(minigame.id)}
               title={storyIsUsingMinigame(minigame.id)
-                ? 'Resume this minigame from Story Mode.'
+                ? 'Resume this minigame from Cartridge.'
                 : `Launch ${minigame.title}`}
               on:click={() => location.set(minigame.id)}
             >
@@ -356,12 +356,53 @@
   }
 
   article {
+    position: relative;
+    min-height: 500px;
+    padding: 34px 14px 48px;
     overflow: hidden;
-    background: #100b1c;
-    border: 1px solid #453b82;
+    background: linear-gradient(145deg, #251841, #0b0813 68%);
+    border: 4px solid #5b4785;
+    border-radius: 12px 12px 28px 28px;
+    box-shadow:
+      inset 0 0 0 2px #0a0611,
+      inset 0 -18px 0 #07040d,
+      0 12px 24px #02010888;
 
     display: flex;
     flex-direction: column;
+
+    &::before {
+      content: '';
+      position: absolute;
+      z-index: 3;
+      top: 11px;
+      left: 50%;
+      width: 42%;
+      height: 9px;
+      background: #040207;
+      border: 2px solid #715aa2;
+      border-radius: 999px;
+      box-shadow: inset 0 2px 4px #000000;
+      transform: translateX(-50%);
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      z-index: 3;
+      right: 22%;
+      bottom: 8px;
+      left: 22%;
+      height: 13px;
+      background: repeating-linear-gradient(
+        90deg,
+        #d09945 0,
+        #d09945 8px,
+        #4c3210 8px,
+        #4c3210 12px
+      );
+      border: 1px solid #edc678;
+    }
   }
 
   .module-art {
@@ -369,6 +410,9 @@
     height: 190px;
     overflow: hidden;
     background: #020617;
+    border: 2px solid #7b61ad;
+    border-radius: 4px;
+    box-shadow: inset 0 0 18px #000000;
 
     img {
       width: 100%;

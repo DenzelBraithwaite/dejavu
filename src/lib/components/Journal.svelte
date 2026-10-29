@@ -4,7 +4,7 @@
 
   function closeLogs(): void {
 
-    // Logs are a cartridge view inside Story Mode, not a separate top-level destination.
+    // Logs are a cartridge view, not a separate top-level destination.
     location.set('terminal');
   }
 </script>
@@ -22,7 +22,7 @@
     {#if !$campaignState?.story}
       <div class="no-cartridge">
         <p>Load a story cartridge to create and view its logs.</p>
-        <button type="button" on:click={closeLogs}>Return to Story Mode</button>
+        <button type="button" on:click={closeLogs}>Return to Cartridge</button>
       </div>
     {:else}
 
@@ -72,16 +72,16 @@
     height: 100%;
     max-width: 1100px;
     overflow: hidden;
-    background: #0f0a07;
-    border: 1px solid #9d6337;
+    background: #07101a;
+    border: 1px solid #4382cf;
     border-radius: 8px;
-    box-shadow: 0 0 30px #9d633738;
+    box-shadow: 0 0 30px #4382cf38;
 
     > header {
       padding: 11px 14px;
-      color: #e1a66f;
-      background: #21150e;
-      border-bottom: 1px solid #9d6337;
+      color: #bad8f5;
+      background: #0e2035;
+      border-bottom: 1px solid #4382cf;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.75rem;
       letter-spacing: 2px;
@@ -93,9 +93,9 @@
       button {
         min-height: 28px;
         padding: 4px 9px;
-        color: #f4c69c;
-        background: #160e09;
-        border: 1px solid #9d6337;
+        color: #d5e9fb;
+        background: #091522;
+        border: 1px solid #4382cf;
         cursor: pointer;
         font-size: 0.62rem;
       }
@@ -115,7 +115,7 @@
 
   .eyebrow {
     margin-bottom: 7px;
-    color: #c8874f;
+    color: #70a9e2;
     font-size: 0.68rem;
     letter-spacing: 1.5px;
     text-transform: uppercase;
@@ -123,20 +123,20 @@
 
   .no-cartridge {
     padding: 24px;
-    background: #17100c;
-    border: 1px solid #513520;
+    background: #0b1725;
+    border: 1px solid #274f7b;
 
     p {
       margin-bottom: 18px;
-      color: #c6b6aa;
+      color: #afc4d9;
     }
 
     button {
       min-height: 38px;
       padding: 8px 12px;
-      color: #1b0e05;
-      background: #e1a66f;
-      border: 1px solid #f4c69c;
+      color: #06101b;
+      background: #70a9e2;
+      border: 1px solid #bad8f5;
       cursor: pointer;
       font-weight: 800;
     }
@@ -149,13 +149,13 @@
 
     article {
       padding: 20px;
-      background: #17100c;
-      border: 1px solid #513520;
+      background: #0b1725;
+      border: 1px solid #274f7b;
     }
 
     h2 {
       margin-bottom: 18px;
-      color: #e1a66f;
+      color: #bad8f5;
       font-size: 1rem;
     }
 
@@ -165,11 +165,11 @@
 
     li {
       padding: 12px 0;
-      border-bottom: 1px dashed #513520;
+      border-bottom: 1px dashed #274f7b;
     }
 
     span {
-      color: #c8874f;
+      color: #70a9e2;
       font-size: 0.72rem;
       text-transform: uppercase;
     }

@@ -204,7 +204,8 @@ app.get('/api/story-assets/images', async (_request, response) => {
       .filter((entry) => entry.isFile())
       .filter((entry) => /_(normal|angry|shocked|happy|sad)\.png$/i.test(entry.name))
       .map((entry) => `/character_imgs/${entry.name}`);
-    const images = [...storyImages, ...characterImages]
+    const builtInStoryImages = ['/images/vespas-city-map.png'];
+    const images = [...builtInStoryImages, ...storyImages, ...characterImages]
       .sort((left, right) => left.localeCompare(right));
 
     response.json({
@@ -806,7 +807,7 @@ io.on('connection', (socket) => {
         && campaignState.soloPlayerId !== playerId) {
         acknowledge({
           ok: false,
-          error: 'The other player owns this single-player Story Mode session.'
+          error: 'The other player owns this single-player cartridge session.'
         });
         return;
       }
@@ -847,7 +848,7 @@ io.on('connection', (socket) => {
     if (!activeStoryId) {
       acknowledge({
         ok: false,
-        error: 'Select a story cartridge before resetting Story Mode.'
+        error: 'Select a story cartridge before resetting the cartridge.'
       });
       return;
     }

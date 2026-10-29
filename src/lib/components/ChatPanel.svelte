@@ -128,10 +128,10 @@
     overflow: hidden;
     color: #e8edf6;
     background: #070b16f2;
-    border: 1px solid #ff75fd;
+    border: 1px solid #255aa6;
     border-radius: 6px;
     box-shadow:
-      0 0 32px #ff75fd33,
+      0 0 32px #255aa633,
       inset 0 0 28px #000000;
     backdrop-filter: blur(8px);
 
@@ -141,8 +141,8 @@
 
   .chat-header {
     padding: 14px 16px;
-    background: #171329;
-    border-bottom: 1px solid #453b82;
+    background: #0d1a30;
+    border-bottom: 1px solid #255aa6;
 
     display: flex;
     justify-content: space-between;
@@ -156,7 +156,7 @@
   }
 
   .chat-protocol {
-    color: #ff75fd;
+    color: #78a8e3;
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-size: 0.68rem;
     letter-spacing: 1px;
@@ -196,7 +196,7 @@
   .own-message {
     margin-right: 0;
     margin-left: 28px;
-    border-right: 3px solid #ff75fd;
+    border-right: 3px solid #255aa6;
     border-left: 0;
   }
 

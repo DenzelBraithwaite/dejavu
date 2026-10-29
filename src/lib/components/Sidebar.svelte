@@ -11,6 +11,7 @@
   export let chatUnreadCount = 0;
   export let chatAvailable = false;
   export let storyModeActive = false;
+  export let storyToolsVisible = false;
 
   const createEvent = createEventDispatcher();
 </script>
@@ -18,88 +19,94 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 
 <div class="sidebar" class:sidebar-collapsed={!sidebarExpanded} class:sidebar-expanded={sidebarExpanded}>
-  <button
-    class="collapse-button"
-    class:rotate={!sidebarExpanded}
-    type="button"
-    aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-    on:click={() => createEvent('toggle-sidebar')}
-  >
-    <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M19 15V9"/>
-      <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
-    </svg>
-  </button>
+  <div class="sidebar-scroll">
+    <button
+      class="collapse-button"
+      class:rotate={!sidebarExpanded}
+      type="button"
+      aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+      on:click={() => createEvent('toggle-sidebar')}
+    >
+      <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M19 15V9"/>
+        <path d="M15 15h-3v4l-7-7 7-7v4h3v6z"/>
+      </svg>
+    </button>
 
-  <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
-    <div class="story-tools" aria-label="Story tools">
-      <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'player'} label="Player">
-        <span slot="title">Player</span>
-        <span slot="description">View this player’s story stats</span>
+    <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
+      {#if storyToolsVisible}
+        <div class="story-tools" aria-label="Cartridge tools">
+          <Item on:click={() => createEvent('show-story-character')} collapsed={!sidebarExpanded} color={'blue-spectrum-1'} iconType={'player'} label="Player">
+            <span slot="title">Player</span>
+            <span slot="description">View this player’s story stats</span>
+          </Item>
+
+          <Item on:click={() => createEvent('select', 'bag')} collapsed={!sidebarExpanded} color={'blue-spectrum-2'} iconType={'bag'} label="Bag">
+            <span slot="title">Bag</span>
+            <span slot="description">View story items and effects</span>
+          </Item>
+
+          <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'blue-spectrum-3'} iconType={'journal'} label="Logs">
+            <span slot="title">Logs</span>
+            <span slot="description">Review this cartridge’s history</span>
+          </Item>
+
+          <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'blue-spectrum-4'} iconType={'save'} label="Saves">
+            <span slot="title">Saves</span>
+            <span slot="description">Save or restore this story</span>
+          </Item>
+
+          {#if chatAvailable}
+            <Item
+              on:click={() => createEvent('toggle-chat')}
+              collapsed={!sidebarExpanded}
+              color={'blue-spectrum-5'}
+              iconType={'chat'}
+              badge={chatUnreadCount}
+              label="Messages"
+            >
+              <span slot="title">Messages</span>
+              <span slot="description">Open your unlocked Neuro-Link</span>
+            </Item>
+          {/if}
+        </div>
+      {/if}
+
+      <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue-spectrum-6'} iconType={'terminal'} label="Cartridge">
+        <span slot="title">Cartridge</span>
+        <span slot="description">Play the inserted story</span>
       </Item>
 
-      <Item on:click={() => createEvent('select', 'bag')} collapsed={!sidebarExpanded} color={'blue-soft'} iconType={'bag'} label="Bag">
-        <span slot="title">Bag</span>
-        <span slot="description">View story items and effects</span>
-      </Item>
-
-      <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'blue-deep'} iconType={'journal'} label="Logs">
-        <span slot="title">Logs</span>
-        <span slot="description">Review this cartridge’s history</span>
-      </Item>
-
-      <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'blue-deep'} iconType={'save'} label="Saves">
-        <span slot="title">Saves</span>
-        <span slot="description">Save or restore this story</span>
-      </Item>
-
-      {#if chatAvailable}
-        <Item
-          on:click={() => createEvent('toggle-chat')}
-          collapsed={!sidebarExpanded}
-          color={'blue-deep'}
-          iconType={'chat'}
-          badge={chatUnreadCount}
-          label="Messages"
-        >
-          <span slot="title">Messages</span>
-          <span slot="description">Open your unlocked Neuro-Link</span>
-        </Item>
+      {#if storyToolsVisible}
+        <div class="story-tools-divider" aria-hidden="true"></div>
       {/if}
     </div>
 
-    <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue'} iconType={'terminal'} label="Story Mode">
-      <span slot="title">Story Mode</span>
-      <span slot="description">Play the inserted story</span>
+    <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
+      <span slot="title">Library</span>
+      <span slot="description">Select and load stories</span>
     </Item>
 
-    <div class="story-tools-divider" aria-hidden="true"></div>
+    <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'} label="Minigames">
+      <span slot="title">Minigames</span>
+      <span slot="description">Browse coded game modules</span>
+    </Item>
+
+    <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'pink'} iconType={'player'} label="Characters">
+      <span slot="title">Characters</span>
+      <span slot="description">Create and manage the cast</span>
+    </Item>
+
+    <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'} label="Editor">
+      <span slot="title">Editor</span>
+      <span slot="description">Create and manage stories</span>
+    </Item>
+
+    <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'} label="Settings">
+      <span slot="title">Settings</span>
+      <span slot="description">Audio and local preferences</span>
+    </Item>
   </div>
-
-  <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
-    <span slot="title">Library</span>
-    <span slot="description">Select and load stories</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'} label="Minigames">
-    <span slot="title">Minigames</span>
-    <span slot="description">Browse coded game modules</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'pink'} iconType={'player'} label="Characters">
-    <span slot="title">Characters</span>
-    <span slot="description">Create and manage the cast</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'} label="Editor">
-    <span slot="title">Editor</span>
-    <span slot="description">Create and manage stories</span>
-  </Item>
-
-  <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'} label="Settings">
-    <span slot="title">Settings</span>
-    <span slot="description">Audio and local preferences</span>
-  </Item>
 
   {#if $activeCharacter}
     <button
@@ -107,7 +114,7 @@
       class:account-summary--collapsed={!sidebarExpanded}
       type="button"
       aria-label={`View or change account: ${$activeCharacter.name}`}
-      on:click={() => createEvent('select', 'character')}
+      on:click={() => createEvent('show-account-selector')}
     >
       {#if $activeCharacter.images.normal}
         <img
@@ -141,7 +148,10 @@
     box-shadow: 4px 0 16px var(--box-shadow-color);
     transition: all 0.5s ease-out; // Match this to .client transition speed (or don't 😅)
     border-radius: 8px 0 0 8px; // left side only, matches .screen right side border-radius
-    overflow-y: auto;
+    overflow: hidden;
+
+    display: flex;
+    flex-direction: column;
 
     .icon {
       stroke-linecap: round;
@@ -150,6 +160,13 @@
       stroke: var(--white);
       fill: none;
     }
+  }
+
+  .sidebar-scroll {
+    min-height: 0;
+    overflow-y: auto;
+
+    flex: 1 1 auto;
   }
 
   .collapse-button {
@@ -208,7 +225,7 @@
   .account-summary {
     width: 100%;
     min-height: 62px;
-    margin-top: auto;
+    margin-top: 10px;
     padding: 8px;
     color: #e8edf6;
     background: #101827;
@@ -220,6 +237,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
+
+    flex: 0 0 auto;
 
     img,
     .account-placeholder {
@@ -297,11 +316,20 @@
       border-radius: 0;
       grid-column: 1;
       grid-row: 2;
+      overflow: hidden;
+
+      display: flex;
+      gap: 7px;
+    }
+
+    .sidebar-scroll {
+      min-width: 0;
       overflow-x: auto;
       overflow-y: hidden;
 
       display: flex;
       gap: 7px;
+      flex: 1 1 auto;
     }
 
     .collapse-button {
@@ -344,6 +372,7 @@
       padding: 6px;
 
       flex: 0 0 56px;
+      order: -1;
 
       img,
       .account-placeholder {

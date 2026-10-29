@@ -9,6 +9,7 @@ export type CampaignPlayer = {
   wallet: number;
   stats: Record<string, number>;
   inventory: string[];
+  itemImages: Record<string, string>;
   knownCharacters: string[];
   statusEffects: string[];
   relationships: Record<string, number>;

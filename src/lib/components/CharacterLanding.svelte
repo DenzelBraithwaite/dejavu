@@ -1,10 +1,15 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import { socket } from '../socket';
   import {
     characterLibraryState,
     type CharacterRecord
   } from '../stores/characters';
   import { sessionState } from '../stores/session';
+
+  export let allowClose = false;
+
+  const dispatch = createEventDispatcher();
 
   let creatingCharacter = false;
   let newCharacterName = '';
@@ -39,7 +44,10 @@
     }) => {
       if (!result.ok) {
         errorMessage = result.error ?? 'The character could not be selected.';
+        return;
       }
+
+      dispatch('selected');
     });
   }
 
@@ -75,6 +83,11 @@
     </header>
 
     <div class="landing-content">
+      {#if allowClose}
+        <button class="close-selector" type="button" on:click={() => dispatch('close')}>
+          × Close account selector
+        </button>
+      {/if}
       <p class="eyebrow">CHOOSE YOUR ACCOUNT</p>
       <h1 id="landing-title">Who is playing?</h1>
       <p class="introduction">
@@ -181,7 +194,21 @@
   }
 
   .landing-content {
+    position: relative;
     padding: clamp(26px, 5vw, 64px);
+  }
+
+  .close-selector {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    float: right;
+    min-height: 38px;
+    padding: 8px 12px;
+    color: #ffd2ed;
+    background: #2a0c22;
+    border: 1px solid #ff75c8;
+    cursor: pointer;
   }
 
   .eyebrow {

@@ -2,6 +2,22 @@
   import { campaignState, localPlayer } from '../stores/campaign';
   import location from '../stores/location';
   import { characterRegistry } from '../story/characters';
+
+  let expandedItem: {
+    name: string;
+    image: string;
+  } | null = null;
+
+  function openItem(name: string, image: string): void {
+    expandedItem = {
+      name,
+      image
+    };
+  }
+
+  function closeItem(): void {
+    expandedItem = null;
+  }
 </script>
 
 <section class="bag" class:hide={$location !== 'bag'} aria-labelledby="bag-title">
@@ -16,7 +32,17 @@
         {#if $localPlayer?.inventory.length}
           <ul class="inventory-list">
             {#each $localPlayer.inventory as item}
-              <li>{item}</li>
+              <li>
+                {#if $localPlayer.itemImages?.[item]}
+                  <button type="button" on:click={() => openItem(item, $localPlayer.itemImages[item])}>
+                    <img src={$localPlayer.itemImages[item]} alt="">
+                    <span>{item}</span>
+                    <small>VIEW</small>
+                  </button>
+                {:else}
+                  <span>{item}</span>
+                {/if}
+              </li>
             {/each}
           </ul>
         {:else}
@@ -63,6 +89,16 @@
       </article>
     </div>
   </div>
+
+  {#if expandedItem}
+    <button class="item-image-backdrop" type="button" aria-label="Close item image" on:click={closeItem}>
+      <span class="item-image-modal" role="dialog" aria-modal="true" aria-label={expandedItem.name}>
+        <strong>{expandedItem.name}</strong>
+        <img src={expandedItem.image} alt={expandedItem.name}>
+        <small>Click anywhere to close</small>
+      </span>
+    </button>
+  {/if}
 </section>
 
 <style lang="scss">
@@ -71,16 +107,16 @@
     height: 100%;
     max-width: 1100px;
     overflow: hidden;
-    background: #07100e;
-    border: 1px solid #4f813d;
+    background: #07101b;
+    border: 1px solid #5798dc;
     border-radius: 8px;
-    box-shadow: 0 0 30px #4f813d2f;
+    box-shadow: 0 0 30px #5798dc2f;
 
     > header {
       padding: 11px 14px;
-      color: #d7f0bb;
-      background: #112016;
-      border-bottom: 1px solid #4f813d;
+      color: #c5e2fa;
+      background: #10233a;
+      border-bottom: 1px solid #5798dc;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.75rem;
       letter-spacing: 2px;
@@ -105,13 +141,13 @@
 
     article {
       padding: 20px;
-      background: #0d1713;
-      border: 1px solid #2c4024;
+      background: #0d1826;
+      border: 1px solid #294a6b;
     }
 
     h2 {
       margin-bottom: 18px;
-      color: #9fcf87;
+      color: #8fc3ed;
       font-size: 1rem;
     }
   }
@@ -122,7 +158,84 @@
     li {
       padding: 8px 0;
       color: #e8edf6;
-      border-bottom: 1px dashed #2c4024;
+      border-bottom: 1px dashed #294a6b;
+
+      > button {
+        width: 100%;
+        min-height: 48px;
+        padding: 5px;
+        color: #e8edf6;
+        background: #0a1523;
+        border: 1px solid #294a6b;
+        cursor: pointer;
+        text-align: left;
+
+        display: grid;
+        grid-template-columns: 38px 1fr auto;
+        align-items: center;
+        gap: 10px;
+
+        &:hover,
+        &:focus-visible {
+          border-color: #5798dc;
+          box-shadow: 0 0 14px #5798dc33;
+        }
+
+        img {
+          width: 38px;
+          height: 38px;
+          object-fit: cover;
+        }
+
+        small {
+          color: #8fc3ed;
+          font-size: 0.62rem;
+          letter-spacing: 1px;
+        }
+      }
+    }
+  }
+
+  .item-image-backdrop {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    padding: 24px;
+    color: #e8edf6;
+    background: #020617df;
+    border: 0;
+    cursor: zoom-out;
+
+    display: grid;
+    place-items: center;
+  }
+
+  .item-image-modal {
+    width: min(720px, 100%);
+    max-height: calc(100vh - 48px);
+    padding: 18px;
+    overflow-y: auto;
+    background: #08121e;
+    border: 1px solid #5798dc;
+    box-shadow: 0 0 36px #5798dc55;
+
+    display: grid;
+    gap: 14px;
+
+    strong {
+      color: #c5e2fa;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      text-align: left;
+    }
+
+    img {
+      width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+    }
+
+    small {
+      color: #79aeda;
     }
   }
 
@@ -137,8 +250,8 @@
 
   .contact-card {
     padding: 14px;
-    background: #08100c;
-    border-left: 3px solid #4f813d;
+    background: #08121e;
+    border-left: 3px solid #5798dc;
 
     display: grid;
     grid-template-columns: auto 1fr;
@@ -148,11 +261,11 @@
       width: 72px;
       height: 72px;
       object-fit: cover;
-      border: 1px solid #4f813d;
+      border: 1px solid #5798dc;
     }
 
     h3 {
-      color: #d7f0bb;
+      color: #c5e2fa;
     }
 
     p {
@@ -162,7 +275,7 @@
   }
 
   .contact-role {
-    color: #7fa66c;
+    color: #79aeda;
     font-size: 0.75rem;
   }
 

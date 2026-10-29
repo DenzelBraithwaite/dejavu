@@ -3,7 +3,6 @@
   import { blur } from 'svelte/transition';
   import { socket } from '../socket';
   import {
-    activeCharacter,
     characterLibraryState,
     type CharacterExpression,
     type CharacterRecord,
@@ -26,13 +25,9 @@
   let uploadingExpression: CharacterExpression | null = null;
   let deleteArmed = false;
   let screenElement: HTMLElement;
-  let accountCharacters: CharacterRecord[] = [];
   let playableCharacters: CharacterRecord[] = [];
   let npcCharacters: CharacterRecord[] = [];
 
-  $: accountCharacters = $characterLibraryState.characters.filter(
-    (character) => character.type === 'account'
-  );
   $: playableCharacters = $characterLibraryState.characters.filter(
     (character) => character.type === 'playable'
   );
@@ -146,31 +141,6 @@
     });
   }
 
-  function selectCharacter(character: CharacterRecord): void {
-    if (character.type !== 'account') {
-      return;
-    }
-
-    clearMessages();
-
-    socket.emit('characters:select', character.id, (result: {
-      ok: boolean;
-      error?: string;
-    }) => {
-      if (result.ok) {
-        statusMessage = `${character.name} is now your active account.`;
-      } else {
-        errorMessage = result.error ?? 'The character could not be selected.';
-      }
-    });
-  }
-
-  function accountIsUsedByOtherPlayer(characterId: string): boolean {
-    const otherPlayerId = $sessionState.playerId === 'p1' ? 'p2' : 'p1';
-
-    return $characterLibraryState.selections[otherPlayerId] === characterId;
-  }
-
   function deleteCharacter(): void {
     if (!editingCharacter?.id) {
       return;
@@ -269,10 +239,9 @@
       <div>
         <p class="eyebrow">CENTRAL CAST DATABASE</p>
         <h1 id="character-title">Characters</h1>
-        <p>Manage app accounts, playable story characters, and NPCs in one cast database.</p>
+        <p>Manage playable story characters and NPCs in one cast database.</p>
       </div>
       <div class="create-actions">
-        <button type="button" on:click={() => startCharacter('account')}>New account</button>
         <button class="primary-button" type="button" on:click={() => startCharacter('playable')}>New playable</button>
         <button type="button" on:click={() => startCharacter('npc')}>New NPC</button>
       </div>
@@ -300,7 +269,6 @@
           <label>
             <span>Character type</span>
             <select bind:value={editingCharacter.type} disabled={editingCharacter.builtIn}>
-              <option value="account">Account</option>
               <option value="playable">Story playable</option>
               <option value="npc">NPC</option>
             </select>
@@ -402,23 +370,7 @@
         </div>
       </form>
     {:else}
-      {#if $activeCharacter}
-        <section class="active-profile" aria-label="Active account">
-          <div>
-            <p class="eyebrow">ACTIVE ACCOUNT</p>
-            <h2>{$activeCharacter.name}</h2>
-          </div>
-          <strong>{$activeCharacter.wallet.toLocaleString()}₭</strong>
-        </section>
-      {/if}
-
       {#each [
-        {
-          id: 'account',
-          title: 'Accounts',
-          description: 'App identities used for main-menu minigames, wallets, and stats.',
-          characters: accountCharacters
-        },
         {
           id: 'playable',
           title: 'Story playable characters',
@@ -447,7 +399,7 @@
           {:else}
             <div class="character-grid">
               {#each section.characters as character}
-                <article class:active={character.id === $activeCharacter?.id}>
+                <article>
                   {#if character.images.normal}
                     <img
                       src={character.images.normal}
@@ -464,21 +416,6 @@
                     <strong>{character.wallet.toLocaleString()}₭</strong>
                   </div>
                   <div class="card-actions">
-                    {#if character.type === 'account'}
-                      <button
-                        type="button"
-                        disabled={accountIsUsedByOtherPlayer(character.id)}
-                        on:click={() => {
-                        selectCharacter(character);
-                        }}
-                      >
-                        {accountIsUsedByOtherPlayer(character.id)
-                          ? 'In use'
-                          : character.id === $activeCharacter?.id
-                            ? 'Selected'
-                            : 'Use account'}
-                      </button>
-                    {/if}
                     <button type="button" on:click={() => {
                       openCharacter(character);
                     }}>Edit</button>
@@ -528,7 +465,6 @@
 
   .title-row,
   .form-heading,
-  .active-profile,
   .form-actions {
     display: flex;
     justify-content: space-between;
@@ -608,24 +544,6 @@
     border: 1px solid #e94c7d;
   }
 
-  .active-profile {
-    margin-bottom: 20px;
-    padding: 18px;
-    background: #211027;
-    border: 1px solid #d44ba3;
-
-    h2 {
-      color: #ffffff;
-      font-family: "Orbitron", "Space Mono", sans-serif;
-    }
-
-    > strong {
-      color: #55f09a;
-      font-family: "Orbitron", "Space Mono", sans-serif;
-      font-size: 1.4rem;
-    }
-  }
-
   .character-section {
     margin-top: 26px;
     padding: 18px;
@@ -657,14 +575,6 @@
         border: 1px solid currentColor;
         text-align: center;
       }
-    }
-  }
-
-  .character-section--account {
-    border-color: #28bddd;
-
-    > header > span {
-      color: #67e8f9;
     }
   }
 
@@ -703,11 +613,6 @@
       display: grid;
       grid-template-columns: 82px 1fr;
       gap: 14px;
-
-      &.active {
-        border-color: #55f09a;
-        box-shadow: inset 3px 0 #55f09a;
-      }
 
       > img,
       > .portrait-placeholder {
@@ -903,8 +808,7 @@
     }
 
     .title-row,
-    .form-heading,
-    .active-profile {
+    .form-heading {
       align-items: flex-start;
       flex-direction: column;
     }
