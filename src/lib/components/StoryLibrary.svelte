@@ -4790,7 +4790,9 @@
               <p class="inspector-warning">This is a multiplayer-only node. Replace it before playing this solo map.</p>
             {/if}
 
-            {#if selectedNode.type !== 'label' && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
+            {#if selectedNode.type !== 'label'
+              && !nodeIsStart(selectedNode)
+              && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
               <div class="route-label">Previous node</div>
               <div class="previous-route-list">
                 {#if incomingConnections(selectedNode).length === 0}

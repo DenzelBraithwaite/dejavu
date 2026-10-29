@@ -56,6 +56,7 @@ export type TerminalOutputEntry = {
 
 export type CampaignState = {
   version: number;
+  serverTime: number;
   campaignId: string;
   story: StoryDocument | null;
   relationshipDefinitions: StoryRelationship[];

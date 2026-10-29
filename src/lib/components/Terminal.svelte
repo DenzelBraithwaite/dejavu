@@ -26,6 +26,7 @@
   let typingComplete = false;
   let submittedSceneId = '';
   let now = Date.now();
+  let serverClockOffsetMs = 0;
   let clock: number;
   let textValues: Record<string, string | number> = {};
   let lastScrollKey = '';
@@ -185,9 +186,15 @@
     ? $campaignState.votes[scene.id]
     : null;
   $: remainingMs = playerId && $campaignState?.deadlines[playerId]
-    ? Math.max(0, $campaignState.deadlines[playerId] - now)
+    ? Math.max(
+      0,
+      $campaignState.deadlines[playerId] - (now - serverClockOffsetMs)
+    )
     : 0;
   $: remainingSeconds = Math.ceil(remainingMs / 1000);
+  $: serverClockOffsetMs = $campaignState?.serverTime
+    ? Date.now() - $campaignState.serverTime
+    : 0;
   $: localStoryId = connectionPlayerId
     ? $libraryState.selections[connectionPlayerId]
     : null;

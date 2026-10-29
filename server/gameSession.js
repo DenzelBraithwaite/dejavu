@@ -187,7 +187,10 @@ function resolvePlayerCharacters(story, sessionMode, soloPlayerId, characters) {
 }
 
 export function getCampaignSnapshot(state) {
-  return structuredClone(state);
+  return {
+    ...structuredClone(state),
+    serverTime: Date.now()
+  };
 }
 
 export function restoreCampaignState(candidate) {

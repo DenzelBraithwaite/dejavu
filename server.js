@@ -526,7 +526,7 @@ io.on('connection', (socket) => {
     if (story && lock && lock.socketId !== socket.id) {
       acknowledge({
         ok: false,
-        error: `${lock.playerName} is already editing this story.`
+        error: `${lock.accountName} is already editing this story.`
       });
       return;
     }
@@ -535,7 +535,7 @@ io.on('connection', (socket) => {
       releaseEditorLocks(socket.id);
       storyEditLocks.set(normalizedStoryId, {
         socketId: socket.id,
-        playerName: campaignState.players[playerId].name
+        accountName: editorAccountName(playerId)
       });
     }
 
@@ -557,7 +557,7 @@ io.on('connection', (socket) => {
       releaseEditorLocks(socket.id);
       storyEditLocks.set(story.id, {
         socketId: socket.id,
-        playerName: campaignState.players[playerId].name
+        accountName: editorAccountName(playerId)
       });
       acknowledge({
         ok: true,
@@ -642,7 +642,7 @@ io.on('connection', (socket) => {
       const lock = storyEditLocks.get(normalizedStoryId);
 
       if (lock && lock.socketId !== socket.id) {
-        throw new Error(`${lock.playerName} is editing this story, so it cannot be deleted.`);
+        throw new Error(`${lock.accountName} is editing this story, so it cannot be deleted.`);
       }
 
       storyRepository.deleteStory(normalizedStoryId);
@@ -1744,6 +1744,11 @@ function broadcastCharacterLibraryState() {
 function selectedCharacter(playerId) {
   const characterId = characterSelections[playerId];
   return characterId ? characterRepository.getCharacter(characterId) : null;
+}
+
+function editorAccountName(playerId) {
+  return selectedCharacter(playerId)?.name
+    ?? `Player ${playerId === 'p2' ? '2' : '1'}`;
 }
 
 function releaseStorySeatClaims(connectionPlayerId) {
