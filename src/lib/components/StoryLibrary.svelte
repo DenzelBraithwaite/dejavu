@@ -78,7 +78,6 @@
     { type: 'change-character', label: 'Change character' },
     { type: 'image', label: 'Image' },
     { type: 'minigame', label: 'Minigame' },
-    { type: 'label', label: 'Visual label' },
     { type: 'ending', label: 'Ending' }
   ];
 
@@ -86,6 +85,7 @@
     { type: 'item-effect', label: 'Item' },
     { type: 'story-flag', label: 'Story flag' },
     { type: 'player-state', label: 'Player state' },
+    { type: 'label', label: 'Visual label' },
     { type: 'note', label: 'Note' },
     { type: 'audio', label: 'Audio' },
     { type: 'stop-audio', label: 'Stop audio' },
@@ -110,7 +110,7 @@
           name: 'Player input',
           type: 'input',
           description: 'Collects a free-form response without changing the player character.',
-          usage: 'Enable Store response when the answer matters later. Give it a key, then insert that stored value from the dropdowns in future text or effects.'
+          usage: 'Enable Store response when the answer matters later. Give it a key, then insert that value in future text or use Player state → Set player name to create a session-only custom name.'
         },
         {
           name: 'Open floor',
@@ -236,7 +236,7 @@
           name: 'Visual label',
           type: 'label',
           description: 'Adds a heading or note to organize the editor canvas without affecting play.',
-          usage: 'Write a useful chapter or section title. Labels never receive story routes.'
+          usage: 'Attach it to a nearby host node and write a useful chapter or section title. Labels never receive story routes or appear during play.'
         },
         {
           name: 'Note',
@@ -301,11 +301,23 @@
     { value: 3, label: 'Friendly' },
     { value: 5, label: 'Loyal' }
   ];
+  const playableStartNodeTypes = new Set([
+    'choice',
+    'condition',
+    'conversation',
+    'dialogue',
+    'dice-check',
+    'image',
+    'input',
+    'minigame',
+    'vote'
+  ]);
 
   let mode: EditorMode = 'library';
   let newTitle = '';
   let newDescription = '';
   let newAuthor = '';
+  let newProtected = false;
   let newPlayModes = {
     singleplayer: true,
     multiplayer: false
@@ -375,6 +387,8 @@
   }> = [];
   let knownStoryItems: string[] = [];
   let knownStoryFlags: string[] = [];
+  let storySettingsOpen = false;
+  let unprotectConfirmationOpen = false;
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -382,6 +396,40 @@
 
   function closeTutorial(): void {
     tutorialOpen = false;
+  }
+
+  function openStorySettings(): void {
+    storySettingsOpen = true;
+    unprotectConfirmationOpen = false;
+  }
+
+  function closeStorySettings(): void {
+    storySettingsOpen = false;
+    unprotectConfirmationOpen = false;
+  }
+
+  function requestProtectionChange(checked: boolean): void {
+    if (!editingStory) {
+      return;
+    }
+
+    if (editingStory.protected && !checked) {
+      unprotectConfirmationOpen = true;
+      return;
+    }
+
+    editingStory.protected = checked;
+    refreshStory();
+  }
+
+  function confirmUnprotectStory(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    editingStory.protected = false;
+    unprotectConfirmationOpen = false;
+    refreshStory();
   }
 
   function openExpandedInspector(node: StoryNode): void {
@@ -733,6 +781,7 @@
       title: newTitle,
       description: newDescription,
       author: newAuthor,
+      protected: newProtected,
       playModes: newPlayModes,
       mainCharacterIds: newMainCharacterIds,
       characterIds: [
@@ -753,6 +802,7 @@
       newTitle = '';
       newDescription = '';
       newAuthor = '';
+      newProtected = false;
       newPlayModes = {
         singleplayer: true,
         multiplayer: false
@@ -810,7 +860,9 @@
         : editingStory.initialSceneIds.p1;
       selectedNodeId = editingStory.nodes.some((node) => node.id === preferredNodeId)
         ? preferredNodeId
-        : fallbackNodeId;
+        : editingStory.nodes.some((node) => node.id === fallbackNodeId)
+          ? fallbackNodeId
+          : editingStory.nodes.find((node) => nodeMap(node) === activeStoryMap)?.id ?? '';
       const preferredNode = editingStory.nodes.find((node) => node.id === selectedNodeId);
       activeLane = (preferredNode?.audience ?? 'p1') as LaneId;
       lastSavedStoryKey = storyContentKey(editingStory);
@@ -902,6 +954,13 @@
 
   function requestPlaytest(): void {
     if (!editingStory) {
+      return;
+    }
+
+    const startIssue = storyStartIssue(editingStory);
+
+    if (startIssue) {
+      errorMessage = `Unavailable: ${startIssue}`;
       return;
     }
 
@@ -1023,31 +1082,17 @@
     };
     prepared.characterIds ??= [];
     prepared.relationships ??= [];
-
-    if (!prepared.singleplayerInitialSceneId
-      || !prepared.nodes.some((node) => node.id === prepared.singleplayerInitialSceneId)) {
-      const startId = `${prepared.id}.solo.start`;
-      const endingId = `${prepared.id}.solo.ending`;
-      prepared.singleplayerInitialSceneId = startId;
-      prepared.nodes.push(
-        {
-          id: startId,
-          type: 'dialogue',
-          audience: 'p1',
-          map: 'singleplayer',
-          speaker: 'SYSTEM',
-          text: 'Your story begins here.',
-          next: endingId
-        },
-        {
-          id: endingId,
-          type: 'ending',
-          audience: 'p1',
-          map: 'singleplayer',
-          text: 'End of story.'
-        }
-      );
-    }
+    prepared.protected ??= false;
+    prepared.unavailableReason ??= '';
+    prepared.singleplayerInitialSceneId ??= '';
+    prepared.initialSceneIds ??= {
+      p1: '',
+      p2: ''
+    };
+    prepared.multiplayerStartMode ??= prepared.initialSceneIds.p1
+      && prepared.initialSceneIds.p1 === prepared.initialSceneIds.p2
+      ? 'shared'
+      : 'separate';
 
     for (const imageNode of prepared.nodes.filter(
       (node) => node.type === 'image' && node.attachedTo
@@ -1069,6 +1114,10 @@
 
       if (node.map === 'singleplayer') {
         node.audience = 'p1';
+      }
+
+      if (node.type === 'label') {
+        node.attachedTo ??= '';
       }
 
       if (node.type === 'background') {
@@ -1231,6 +1280,22 @@
         node.stopSounds ??= false;
         node.fadeOutSeconds ??= 0;
       }
+    }
+
+    // Labels became companion annotations. Attach legacy labels to the nearest
+    // preceding playable node when possible, while leaving isolated labels visibly invalid.
+    for (const [index, label] of prepared.nodes.entries()) {
+      if (label.type !== 'label' || label.attachedTo) {
+        continue;
+      }
+
+      const nearbyHost = prepared.nodes.slice(0, index).reverse().find((candidate) => (
+        nodeMap(candidate) === nodeMap(label)
+        && candidate.audience === label.audience
+        && !isCompanionNodeType(candidate.type)
+      ));
+
+      label.attachedTo = nearbyHost?.id ?? '';
     }
 
     return prepared;
@@ -1411,6 +1476,113 @@
 
     return editingStory.singleplayerInitialSceneId === node.id
       || Object.values(editingStory.initialSceneIds).includes(node.id);
+  }
+
+  function startNodeLabel(node: StoryNode): string {
+    if (!editingStory) {
+      return '';
+    }
+
+    if (editingStory.singleplayerInitialSceneId === node.id) {
+      return 'SOLO START';
+    }
+
+    const isPlayerOneStart = editingStory.initialSceneIds.p1 === node.id;
+    const isPlayerTwoStart = editingStory.initialSceneIds.p2 === node.id;
+
+    if (isPlayerOneStart && isPlayerTwoStart) {
+      return 'SHARED START';
+    }
+
+    if (isPlayerOneStart) {
+      return 'PLAYER 1 START';
+    }
+
+    return isPlayerTwoStart ? 'PLAYER 2 START' : '';
+  }
+
+  function eligibleStartNodes(audience: LaneId): StoryNode[] {
+    return editingStory?.nodes.filter((node) => (
+      nodeMap(node) === activeStoryMap
+      && node.audience === audience
+      && playableStartNodeTypes.has(node.type)
+      && !isCompanionNodeType(node.type)
+    )) ?? [];
+  }
+
+  function setMultiplayerStartMode(mode: 'shared' | 'separate'): void {
+    if (!editingStory) {
+      return;
+    }
+
+    rememberForUndo();
+    editingStory.multiplayerStartMode = mode;
+
+    if (mode === 'shared') {
+      const sharedNode = eligibleStartNodes('both')[0];
+      editingStory.initialSceneIds.p1 = sharedNode?.id ?? '';
+      editingStory.initialSceneIds.p2 = sharedNode?.id ?? '';
+    } else if (editingStory.initialSceneIds.p1 === editingStory.initialSceneIds.p2) {
+      editingStory.initialSceneIds.p1 = eligibleStartNodes('p1')[0]?.id ?? '';
+      editingStory.initialSceneIds.p2 = eligibleStartNodes('p2')[0]?.id ?? '';
+    }
+
+    refreshStory();
+  }
+
+  function setSharedStart(nodeId: string): void {
+    if (!editingStory) {
+      return;
+    }
+
+    editingStory.initialSceneIds.p1 = nodeId;
+    editingStory.initialSceneIds.p2 = nodeId;
+    refreshStory();
+  }
+
+  function storyStartIssue(story: StoryDocument): string {
+    const nodesById = new Map(story.nodes.map((node) => [node.id, node]));
+
+    if (story.playModes.singleplayer
+      && !startNodeIsValid(nodesById.get(story.singleplayerInitialSceneId), 'singleplayer', 'p1')) {
+      return 'Single-player start is missing or invalid.';
+    }
+
+    if (!story.playModes.multiplayer) {
+      return '';
+    }
+
+    if (story.multiplayerStartMode === 'shared') {
+      const sharedStart = story.initialSceneIds.p1 === story.initialSceneIds.p2
+        ? nodesById.get(story.initialSceneIds.p1)
+        : undefined;
+
+      return startNodeIsValid(sharedStart, 'multiplayer', 'both')
+        ? ''
+        : 'Shared start is missing or invalid.';
+    }
+
+    if (!startNodeIsValid(nodesById.get(story.initialSceneIds.p1), 'multiplayer', 'p1')) {
+      return 'Player 1 start is missing or invalid.';
+    }
+
+    return startNodeIsValid(nodesById.get(story.initialSceneIds.p2), 'multiplayer', 'p2')
+      ? ''
+      : 'Player 2 start is missing or invalid.';
+  }
+
+  function startNodeIsValid(
+    node: StoryNode | undefined,
+    map: StoryPlayMode,
+    audience: LaneId
+  ): boolean {
+    return Boolean(
+      node
+      && nodeMap(node) === map
+      && node.audience === audience
+      && playableStartNodeTypes.has(node.type)
+      && !isCompanionNodeType(node.type)
+    );
   }
 
   function createSnapshot(): EditorSnapshot | null {
@@ -1717,14 +1889,6 @@
       return;
     }
 
-    if (
-      Object.values(editingStory.initialSceneIds).includes(node.id)
-      || editingStory.singleplayerInitialSceneId === node.id
-    ) {
-      errorMessage = 'Choose a different start node before deleting this one.';
-      return;
-    }
-
     rememberForUndo();
     const replacementId = supportsSimpleNext(node) ? node.next ?? '' : '';
 
@@ -1748,6 +1912,16 @@
     editingStory.nodes = editingStory.nodes.filter(
       (candidate) => candidate.id !== node.id
     );
+
+    if (editingStory.singleplayerInitialSceneId === node.id) {
+      editingStory.singleplayerInitialSceneId = '';
+    }
+
+    for (const playerId of ['p1', 'p2'] as PlayerId[]) {
+      if (editingStory.initialSceneIds[playerId] === node.id) {
+        editingStory.initialSceneIds[playerId] = '';
+      }
+    }
     selectedNodeId = selectedNodeId === node.id
       ? replacementId || editingStory.nodes[0]?.id || ''
       : selectedNodeId;
@@ -2103,9 +2277,12 @@
     }
 
     activeStoryMap = map;
-    selectedNodeId = map === 'singleplayer'
+    const preferredNodeId = map === 'singleplayer'
       ? editingStory.singleplayerInitialSceneId
       : editingStory.initialSceneIds.p1;
+    selectedNodeId = editingStory.nodes.some((node) => node.id === preferredNodeId)
+      ? preferredNodeId
+      : editingStory.nodes.find((node) => nodeMap(node) === map)?.id ?? '';
     activeLane = 'p1';
     linkSelection = null;
     insertionTarget = null;
@@ -2769,7 +2946,7 @@
   }
 
   function nodeIsInvalid(node: StoryNode): boolean {
-    if (!editingStory || node.type === 'label') {
+    if (!editingStory) {
       return false;
     }
 
@@ -3648,6 +3825,7 @@
           id,
           type,
           audience: 'both',
+          attachedTo: '',
           text: 'NEW SECTION'
         };
       case 'ending':
@@ -3742,11 +3920,14 @@
         {#each $libraryState.stories as story}
           <article class:selected={localSelection === story.id}>
             <div class="story-card-header">
-              <span>{story.builtIn ? 'BUILT-IN' : 'PLAYABLE'}</span>
+              <span>{story.status === 'draft' ? 'UNAVAILABLE' : story.protected ? 'PROTECTED' : 'PLAYABLE'}</span>
               <span>V{story.version}</span>
             </div>
             <h2>{story.title}</h2>
             <p>{story.description || 'No description yet.'}</p>
+            {#if story.unavailableReason}
+              <p class="story-unavailable-reason">{story.unavailableReason}</p>
+            {/if}
             <dl>
               <div>
                 <dt>AUTHOR</dt>
@@ -3759,14 +3940,14 @@
             </dl>
             <div class="card-actions">
               {#if story.playModes.singleplayer}
-                <button type="button" on:click={() => selectStory(story.id, 'singleplayer')}>
+                <button disabled={story.status === 'draft'} type="button" on:click={() => selectStory(story.id, 'singleplayer')}>
                   {localSelection === story.id && localSelectionMode === 'singleplayer'
                     ? 'Singleplayer inserted'
                     : 'Insert singleplayer'}
                 </button>
               {/if}
               {#if story.playModes.multiplayer}
-                <button type="button" on:click={() => openSeatPicker(story.id)}>
+                <button disabled={story.status === 'draft'} type="button" on:click={() => openSeatPicker(story.id)}>
                   {localSelection === story.id && localSelectionMode === 'multiplayer'
                     ? `Multiplayer · ${localStorySeat === 'p1' ? 'Player 1' : 'Player 2'}`
                     : 'Insert multiplayer'}
@@ -3829,6 +4010,12 @@
           maxlength="500"
           rows="5"
         ></textarea>
+
+        <label class="mode-checkbox story-protection-toggle">
+          <input type="checkbox" bind:checked={newProtected}>
+          Protect this story from deletion
+        </label>
+        <p class="field-help">Protected stories must be explicitly unprotected in Story settings before they can be deleted.</p>
 
         <fieldset class="play-mode-fieldset">
           <legend>Playable modes</legend>
@@ -3918,8 +4105,11 @@
           ← Editor
         </button>
         <div>
-          <input aria-label="Story title" bind:value={editingStory.title} maxlength="80">
-          <span>VERSION {editingStory.version} · {editingStory.builtIn ? 'BUILT-IN' : 'PLAYABLE'}</span>
+          <strong class="editor-story-title">{editingStory.title}</strong>
+          <span>
+            VERSION {editingStory.version} · {storyStartIssue(editingStory) ? 'UNAVAILABLE' : 'PLAYABLE'}
+            {editingStory.protected ? ' · PROTECTED' : ''}
+          </span>
         </div>
         <div class="toolbar-actions">
           <button type="button" disabled={undoStack.length === 0} on:click={undo} aria-label="Undo last editor change">
@@ -3931,7 +4121,10 @@
           <button class="tutorial-button" type="button" on:click={openTutorial} aria-label="Open editor tutorial">
             ⓘ Guide
           </button>
-          <button type="button" disabled={saveInFlight} on:click={requestPlaytest}>
+          <button type="button" on:click={openStorySettings}>
+            Story settings
+          </button>
+          <button type="button" disabled={saveInFlight || Boolean(storyStartIssue(editingStory))} on:click={requestPlaytest}>
             ▶ Play
           </button>
           <button class="primary-button" type="button" disabled={saveInFlight} on:click={() => saveStory()}>
@@ -4009,6 +4202,82 @@
           {/if}
         </div>
       </div>
+
+      <details class="start-settings" open>
+        <summary>
+          <span>Story start</span>
+          <strong>{storyStartIssue(editingStory) || 'Ready to play'}</strong>
+        </summary>
+        <div class="start-settings-content">
+          {#if activeStoryMap === 'singleplayer'}
+            <label>
+              <span>Single-player start node</span>
+              <select bind:value={editingStory.singleplayerInitialSceneId}>
+                <option value="">No start selected</option>
+                {#each eligibleStartNodes('p1') as node}
+                  <option value={node.id}>{displayNodeName(node)}</option>
+                {/each}
+              </select>
+            </label>
+          {:else}
+            <fieldset class="start-mode-options">
+              <legend>Multiplayer opening</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="multiplayer-start-mode"
+                  checked={editingStory.multiplayerStartMode === 'shared'}
+                  on:change={() => setMultiplayerStartMode('shared')}
+                >
+                One shared start for both players
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="multiplayer-start-mode"
+                  checked={editingStory.multiplayerStartMode === 'separate'}
+                  on:change={() => setMultiplayerStartMode('separate')}
+                >
+                Separate Player 1 and Player 2 starts
+              </label>
+            </fieldset>
+
+            {#if editingStory.multiplayerStartMode === 'shared'}
+              <label>
+                <span>Shared start node</span>
+                <select value={editingStory.initialSceneIds.p1} on:change={(event) => setSharedStart(event.currentTarget.value)}>
+                  <option value="">No shared start selected</option>
+                  {#each eligibleStartNodes('both') as node}
+                    <option value={node.id}>{displayNodeName(node)}</option>
+                  {/each}
+                </select>
+              </label>
+            {:else}
+              <div class="start-node-grid">
+                <label>
+                  <span>Player 1 start node</span>
+                  <select bind:value={editingStory.initialSceneIds.p1}>
+                    <option value="">No Player 1 start selected</option>
+                    {#each eligibleStartNodes('p1') as node}
+                      <option value={node.id}>{displayNodeName(node)}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label>
+                  <span>Player 2 start node</span>
+                  <select bind:value={editingStory.initialSceneIds.p2}>
+                    <option value="">No Player 2 start selected</option>
+                    {#each eligibleStartNodes('p2') as node}
+                      <option value={node.id}>{displayNodeName(node)}</option>
+                    {/each}
+                  </select>
+                </label>
+              </div>
+            {/if}
+          {/if}
+          <p>Only player-facing scene nodes and Condition nodes can start a cartridge. Incomplete starts save safely as an unavailable draft.</p>
+        </div>
+      </details>
 
       <details class="relationship-settings">
         <summary>
@@ -4100,6 +4369,13 @@
           aria-label="Story flow"
           bind:this={flowCanvasElement}
         >
+          {#if linkSelection}
+            <div class="link-mode-banner" role="status">
+              <span>Select a destination for {linkSelection.label.toLowerCase()}.</span>
+              <button type="button" on:click={cancelLinkSelection}>Cancel</button>
+            </div>
+          {/if}
+
           <div
             class="map-zoom-controls"
             class:link-active={Boolean(linkSelection)}
@@ -4121,13 +4397,6 @@
               on:click={() => adjustMapZoom(mapZoomStep)}
             >+</button>
           </div>
-
-          {#if linkSelection}
-            <div class="link-mode-banner" role="status">
-              <span>Select a destination for {linkSelection.label.toLowerCase()}.</span>
-              <button type="button" on:click={cancelLinkSelection}>Cancel</button>
-            </div>
-          {/if}
 
           <div
             class="flow-lanes"
@@ -4192,7 +4461,7 @@
                             <span class="branch-path-label merge-label">MERGED PATHS</span>
                           {/if}
                       <div class="node-quick-actions" aria-label={`Quick actions for ${displayNodeName(node)}`}>
-                        {#if !isCompanionNode(node) && node.type !== 'label'}
+                        {#if !isCompanionNode(node)}
                           <button
                             class="node-companion-button"
                             type="button"
@@ -4245,6 +4514,9 @@
                         type="button"
                         on:pointerdown|preventDefault|stopPropagation={() => selectNode(node)}
                       >
+                        {#if startNodeLabel(node)}
+                          <span class="start-node-badge">{startNodeLabel(node)}</span>
+                        {/if}
                         {#if isCompactSpecialNode(node)}
                           <strong class="compact-node-title">{compactNodeTitle(node)}</strong>
                           {#if isMultiplayerNodeType(node.type)}
@@ -4346,12 +4618,6 @@
           bind:this={inspectorElement}
         >
           {#if selectedNode}
-            {#if inspectorExpanded}
-              <button class="inspector-modal-close" type="button" on:click={closeExpandedInspector}>
-                × Close expanded view
-              </button>
-            {/if}
-
             <div class="inspector-heading">
               <div>
                 <p>NODE INSPECTOR</p>
@@ -4437,6 +4703,17 @@
                 placeholder="Record context or reminders for other authors."
               ></textarea>
               <p class="inspector-help">Notes only appear in the editor and never enter the terminal.</p>
+            {/if}
+
+            {#if selectedNode.type === 'label'}
+              <label for="label-text">Label title</label>
+              <input
+                id="label-text"
+                bind:value={selectedNode.text}
+                maxlength="60"
+                placeholder="Chapter or section label"
+              >
+              <p class="inspector-help">Labels organize the editor beside their host and never appear during play.</p>
             {/if}
 
             {#if selectedNode.type !== 'condition'
@@ -5059,6 +5336,9 @@
               {:else if selectedNode.effects[0].type === 'set-player-name'}
                 <label for="new-player-name">New player name</label>
                 <input id="new-player-name" bind:value={selectedNode.effects[0].value} placeholder="New name">
+                <p class="inspector-help">
+                  This sets a custom name for the current cartridge session. It never renames the reusable character.
+                </p>
 
                 {#if storedInputNodes.length > 0}
                   <label for="player-name-input">Use a stored input value</label>
@@ -5534,6 +5814,12 @@
                 Delete node
               </button>
             </div>
+
+            {#if inspectorExpanded}
+              <button class="inspector-modal-close" type="button" on:click={closeExpandedInspector}>
+                × Close expanded view
+              </button>
+            {/if}
           {:else}
             <p class="empty-inspector">Select a node from the flow canvas.</p>
           {/if}
@@ -5573,32 +5859,13 @@
             </label>
 
             {#if !nodeSearch && recentNodeTypes.length > 0}
-              <p class="node-group-label">RECENTLY USED</p>
-              <div class="node-type-grid">
-                {#each recentNodeDefinitions() as node}
-                  <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
-                    <span class="node-badge-row">
-                      {#if isCompanionNodeType(node.type)}
-                        <span class="node-type-badge companion">COMPANION</span>
-                      {/if}
-                      {#if isMultiplayerNodeType(node.type)}
-                        <span class="node-type-badge multiplayer">MULTIPLAYER</span>
-                      {/if}
-                    </span>
-                    <strong>{node.name}</strong>
-                    <small>{node.description}</small>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-
-            {#each tutorialNodeSections as section}
-              {@const visibleNodes = section.nodes.filter((node) => nodeAvailableForMap(node.type) && nodeMatchesSearch(node, nodeSearch))}
-              {#if visibleNodes.length > 0}
-                <p class="node-group-label">{section.title}</p>
-                <p class="node-group-description">{section.description}</p>
+              <section class="node-palette-section node-palette-recents">
+                <header>
+                  <p class="node-group-label">RECENTLY USED</p>
+                  <small>Your quickest access to the last node types you added.</small>
+                </header>
                 <div class="node-type-grid">
-                  {#each visibleNodes as node}
+                  {#each recentNodeDefinitions() as node}
                     <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
                       <span class="node-badge-row">
                         {#if isCompanionNodeType(node.type)}
@@ -5613,8 +5880,90 @@
                     </button>
                   {/each}
                 </div>
+              </section>
+            {/if}
+
+            {#each tutorialNodeSections as section, sectionIndex}
+              {@const visibleNodes = section.nodes.filter((node) => nodeAvailableForMap(node.type) && nodeMatchesSearch(node, nodeSearch))}
+              {#if visibleNodes.length > 0}
+                <section class={`node-palette-section node-palette-section-${sectionIndex + 1}`}>
+                  <header>
+                    <p class="node-group-label">{section.title}</p>
+                    <p class="node-group-description">{section.description}</p>
+                  </header>
+                  <div class="node-type-grid">
+                    {#each visibleNodes as node}
+                      <button class={nodeShapeClass(node.type)} type="button" on:click={() => addNode(node.type)}>
+                        <span class="node-badge-row">
+                          {#if isCompanionNodeType(node.type)}
+                            <span class="node-type-badge companion">COMPANION</span>
+                          {/if}
+                          {#if isMultiplayerNodeType(node.type)}
+                            <span class="node-type-badge multiplayer">MULTIPLAYER</span>
+                          {/if}
+                        </span>
+                        <strong>{node.name}</strong>
+                        <small>{node.description}</small>
+                      </button>
+                    {/each}
+                  </div>
+                </section>
               {/if}
             {/each}
+          </section>
+        </div>
+      {/if}
+
+      {#if storySettingsOpen}
+        <div class="node-picker-backdrop" role="presentation" on:click|self={closeStorySettings}>
+          <section class="story-settings-modal" role="dialog" aria-modal="true" aria-labelledby="story-settings-title">
+            <header>
+              <div>
+                <p>CARTRIDGE METADATA</p>
+                <h2 id="story-settings-title">Story settings</h2>
+              </div>
+              <button type="button" aria-label="Close story settings" on:click={closeStorySettings}>×</button>
+            </header>
+
+            <label>
+              <span>Story title</span>
+              <input bind:value={editingStory.title} maxlength="80">
+            </label>
+            <label>
+              <span>Author</span>
+              <input bind:value={editingStory.author} maxlength="80">
+            </label>
+            <label>
+              <span>Description</span>
+              <textarea bind:value={editingStory.description} maxlength="500" rows="6"></textarea>
+            </label>
+            <label class="mode-checkbox story-protection-toggle">
+              <input
+                type="checkbox"
+                checked={editingStory.protected}
+                on:change={(event) => requestProtectionChange(event.currentTarget.checked)}
+              >
+              Protect this story from deletion
+            </label>
+            <p class="field-help">Protection does not prevent editing. It only prevents accidental deletion.</p>
+
+            <footer>
+              <button class="primary-button" type="button" on:click={closeStorySettings}>Done</button>
+            </footer>
+          </section>
+        </div>
+      {/if}
+
+      {#if unprotectConfirmationOpen}
+        <div class="node-picker-backdrop protection-confirmation-backdrop" role="presentation">
+          <section class="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="unprotect-title">
+            <p>REMOVE STORY PROTECTION</p>
+            <h2 id="unprotect-title">Allow this story to be deleted?</h2>
+            <p>You can protect it again at any time. This confirmation does not delete the story.</p>
+            <div>
+              <button type="button" on:click={() => unprotectConfirmationOpen = false}>Keep protected</button>
+              <button class="danger-button" type="button" on:click={confirmUnprotectStory}>Unprotect story</button>
+            </div>
           </section>
         </div>
       {/if}
@@ -5654,12 +6003,15 @@
               <p class="tutorial-section-label">WORKFLOW</p>
               <h3 id="workflow-guide-title">Build and connect a path</h3>
               <ol>
+                <li><strong>Story settings</strong> edits the title, author, description, and deletion protection after creation.</li>
+                <li><strong>Story start</strong> chooses a solo opening, one Shared multiplayer opening, or separate Player 1 and Player 2 openings. Missing starts save as an unavailable draft.</li>
                 <li><strong>Add to Player</strong> appends a node to that lane. It auto-connects only when the previous node has an unused normal route.</li>
                 <li><strong>+ next, + yes, or + no</strong> creates a node directly on that route. Use <strong>Select node</strong> to connect an existing node instead.</li>
                 <li><strong>Select previous node</strong> makes an existing node lead into the selected node. Red nodes are missing a required or valid connection.</li>
                 <li><strong>Loops are supported.</strong> Route branch endings back to a Choice hub and route one exit button forward. Backward routes display <strong>↻ LOOP</strong>.</li>
                 <li>Use the <strong>Player 1</strong> and <strong>Player 2</strong> lanes for private scenes. Put synchronized actions and votes in <strong>Shared</strong>.</li>
                 <li>Companions use <strong>Select host node</strong>. They never receive previous or next routes.</li>
+                <li>A stored Player input can feed <strong>Player state → Set player name</strong>. The custom name lasts only for the current cartridge session.</li>
               </ol>
             </section>
 
@@ -5732,14 +6084,23 @@
           <article>
             <button class="editor-story-open" type="button" on:click={() => openEditor(story.id)}>
               <strong>{story.title}</strong>
-              <span>{story.builtIn ? 'BUILT-IN' : 'PLAYABLE'} · V{story.version}</span>
+              <span>
+                {story.status === 'draft' ? 'UNAVAILABLE' : story.protected ? 'PROTECTED' : 'PLAYABLE'} · V{story.version}
+              </span>
+              {#if story.unavailableReason}
+                <small>{story.unavailableReason}</small>
+              {/if}
             </button>
             <div>
               <button type="button" on:click={() => openEditor(story.id)}>Edit</button>
               <button type="button" on:click={() => duplicateStory(story.id)}>Duplicate</button>
-              {#if !story.builtIn}
+              {#if !story.builtIn && !story.protected}
                 <button class="danger-button" type="button" on:click={() => deleteStory(story.id)}>
                   {deleteArmedId === story.id ? 'Confirm delete' : 'Delete'}
+                </button>
+              {:else if story.protected}
+                <button type="button" disabled title="Unprotect this story in Story settings before deleting it.">
+                  Protected
                 </button>
               {/if}
             </div>
@@ -6295,7 +6656,27 @@
     height: calc(100% - 38px);
 
     display: grid;
-    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  }
+
+  .editor-story-title {
+    display: block;
+    margin-bottom: 4px;
+    color: #f5e8dd;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+  }
+
+  .field-help,
+  .story-unavailable-reason {
+    color: #e8a589;
+    font-size: 0.7rem;
+    line-height: 1.5;
+  }
+
+  .story-protection-toggle {
+    padding: 10px;
+    background: #17121e;
+    border: 1px solid #6d4a89;
   }
 
   .play-mode-fieldset {
@@ -6334,7 +6715,8 @@
     gap: 12px;
   }
 
-  .relationship-settings {
+  .relationship-settings,
+  .start-settings {
     background: #09111e;
     border-bottom: 1px solid #2c3b54;
 
@@ -6354,6 +6736,54 @@
         color: #647f9c;
         font-size: 0.62rem;
       }
+    }
+  }
+
+  .start-settings-content {
+    padding: 12px 14px 16px;
+    border-top: 1px solid #1f3045;
+
+    display: grid;
+    gap: 12px;
+
+    > label,
+    .start-node-grid label {
+      color: #8fd6ff;
+
+      display: grid;
+      gap: 6px;
+    }
+
+    > p {
+      color: #8ea5bd;
+      font-size: 0.7rem;
+      line-height: 1.5;
+    }
+  }
+
+  .start-node-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .start-mode-options {
+    padding: 10px;
+    border: 1px solid #29445d;
+
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    legend {
+      padding-inline: 5px;
+      color: #8fd6ff;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
     }
   }
 
@@ -6680,6 +7110,7 @@
       left: 50%;
       width: min(760px, calc(100% - 40px));
       padding: clamp(20px, 3vw, 38px);
+      padding-bottom: 92px;
       box-sizing: border-box;
       border: 1px solid #ff8a32;
       box-shadow: 0 24px 80px #000000bb, 0 0 34px #ff8a3244;
@@ -6745,14 +7176,16 @@
   }
 
   .inspector-modal-close {
-    position: sticky;
-    z-index: 2;
-    top: 0;
-    width: 100%;
-    margin-bottom: 16px;
+    position: fixed;
+    z-index: 64;
+    bottom: clamp(24px, 5vh, 52px);
+    left: 50%;
+    width: min(680px, calc(100% - 72px));
     color: #ffd5b5;
     background: #35170a;
     border-color: #ff8a32;
+    box-shadow: 0 8px 24px #000000aa;
+    transform: translateX(-50%);
   }
 
   .flow-canvas {
@@ -6782,7 +7215,7 @@
     gap: 4px;
 
     &.link-active {
-      top: 58px;
+      top: 64px;
     }
 
     button {
@@ -6823,7 +7256,7 @@
 
   .link-mode-banner {
     position: sticky;
-    z-index: 6;
+    z-index: 10;
     top: 0;
     margin-bottom: 14px;
     padding: 10px 12px;
@@ -6847,6 +7280,17 @@
       background: #ffffffaa;
       border-color: #07111d;
     }
+  }
+
+  .start-node-badge {
+    width: fit-content;
+    padding: 2px 6px;
+    color: #120a07;
+    background: #f8e69a;
+    border: 1px solid #ffffff;
+    font-size: 0.55rem;
+    font-weight: 900;
+    letter-spacing: 0.8px;
   }
 
   .flow-lane {
@@ -7837,6 +8281,97 @@
     }
   }
 
+  .node-palette-section {
+    --palette-accent: #4a98d9;
+
+    margin-top: 16px;
+    padding: 14px;
+    background: color-mix(in srgb, var(--palette-accent) 8%, #07101d);
+    border: 1px solid color-mix(in srgb, var(--palette-accent) 52%, #243750);
+    border-left: 5px solid var(--palette-accent);
+
+    > header {
+      margin-bottom: 12px;
+      padding-bottom: 9px;
+      border-bottom: 1px dashed color-mix(in srgb, var(--palette-accent) 55%, transparent);
+
+      small {
+        color: #9bb0c6;
+      }
+    }
+
+    .node-group-label {
+      margin: 0 0 5px;
+      color: var(--palette-accent);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .node-group-description {
+      margin: 0;
+    }
+  }
+
+  .node-palette-recents {
+    --palette-accent: #f8e69a;
+  }
+
+  .node-palette-section-1 {
+    --palette-accent: #35d3ff;
+  }
+
+  .node-palette-section-2 {
+    --palette-accent: #c4b5fd;
+  }
+
+  .node-palette-section-3 {
+    --palette-accent: #ff88b7;
+  }
+
+  .node-palette-section-4 {
+    --palette-accent: #8cff9c;
+  }
+
+  .node-palette-section-5 {
+    --palette-accent: #ffb568;
+  }
+
+  .story-settings-modal {
+    width: min(640px, 100%);
+    padding: 22px;
+    background: #120c08;
+    border: 1px solid #ff8a32;
+    box-shadow: 0 20px 60px #000000aa;
+
+    display: grid;
+    gap: 12px;
+
+    > header {
+      padding-bottom: 12px;
+      border-bottom: 1px solid #5b321c;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+    }
+
+    > label:not(.mode-checkbox) {
+      color: #ffbd8b;
+
+      display: grid;
+      gap: 6px;
+    }
+
+    footer {
+      display: flex;
+      justify-content: flex-end;
+    }
+  }
+
+  .protection-confirmation-backdrop {
+    z-index: 24;
+  }
+
   .node-search {
     margin-bottom: 20px;
 
@@ -8581,8 +9116,9 @@
 
     .editor-toolbar.mobile-collapsed > :not(.mobile-toolbar-toggle),
     .editor-toolbar.mobile-collapsed + .map-toolbar,
-    .editor-toolbar.mobile-collapsed + .map-toolbar + .relationship-settings,
-    .editor-toolbar.mobile-collapsed + .map-toolbar + .relationship-settings + .graph-position-help {
+    .editor-toolbar.mobile-collapsed + .map-toolbar + .start-settings,
+    .editor-toolbar.mobile-collapsed + .map-toolbar + .start-settings + .relationship-settings,
+    .editor-toolbar.mobile-collapsed + .map-toolbar + .start-settings + .relationship-settings + .graph-position-help {
       display: none;
     }
 
@@ -8609,6 +9145,10 @@
       button {
         width: 100%;
       }
+    }
+
+    .start-node-grid {
+      grid-template-columns: 1fr;
     }
 
     .relationship-config-list article {

@@ -122,7 +122,9 @@ export type StoryDocument = {
   title: string;
   description: string;
   author: string;
-  status: 'playable';
+  status: 'playable' | 'draft';
+  unavailableReason: string;
+  protected: boolean;
   version: number;
   builtIn: boolean;
   playModes: {
@@ -137,6 +139,7 @@ export type StoryDocument = {
   relationships: StoryRelationship[];
   singleplayerInitialSceneId: string;
   initialSceneIds: Record<PlayerId, string>;
+  multiplayerStartMode: 'shared' | 'separate';
   nodes: StoryNode[];
   theme: Record<string, unknown>;
   supportedMinigames: string[];
@@ -144,7 +147,7 @@ export type StoryDocument = {
 
 export type StorySummary = Pick<
   StoryDocument,
-  'id' | 'title' | 'description' | 'author' | 'status' | 'version' | 'builtIn' | 'playModes'
+  'id' | 'title' | 'description' | 'author' | 'status' | 'version' | 'builtIn' | 'protected' | 'playModes' | 'multiplayerStartMode' | 'unavailableReason'
 > & {
   createdAt: string;
   updatedAt: string;

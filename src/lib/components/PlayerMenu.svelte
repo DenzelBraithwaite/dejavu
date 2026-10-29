@@ -18,10 +18,14 @@
     {#if $libraryState.activeStoryId && $campaignState?.story && $localPlayer}
       <div class="player-grid">
         <article class="identity-card">
-          <span>STORY PLAYER</span>
+          <span>{$localPlayer.customName ? 'CUSTOM NAME' : 'DEFAULT NAME'}</span>
           <strong>{$localPlayer.name}</strong>
+          {#if $localPlayer.customName}
+            <small>Default character name: {$localPlayer.defaultName}</small>
+          {/if}
           <p>
-            This identity, wallet, and stat profile belong to the current cartridge session.
+            A custom name belongs only to this cartridge session and disappears when the
+            cartridge is restarted or changed.
           </p>
         </article>
 
@@ -122,6 +126,11 @@
     p {
       color: #a9bdd1;
       line-height: 1.65;
+    }
+
+    small {
+      color: #82a1bd;
+      line-height: 1.5;
     }
   }
 

@@ -2,7 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { dejaVuStoryDocument } from '../src/lib/story/dejaVuStory.js';
+
+const retiredBuiltInStoryIds = ['deja-vu'];
+const playableStartNodeTypes = new Set([
+  'choice',
+  'condition',
+  'conversation',
+  'dialogue',
+  'dice-check',
+  'image',
+  'input',
+  'minigame',
+  'vote'
+]);
 
 export function createStoryRepository(databasePath) {
   mkdirSync(dirname(databasePath), {
@@ -25,7 +37,7 @@ export function createStoryRepository(databasePath) {
     )
   `);
 
-  seedBuiltInStory(database, dejaVuStoryDocument);
+  removeRetiredBuiltInStories(database);
   migrateLegacyStoryNodes(database);
 
   return {
@@ -148,6 +160,7 @@ export function createStoryRepository(databasePath) {
         mainCharacterIds: existing.mainCharacterIds,
         characterIds: existing.characterIds,
         relationships: existing.relationships,
+        multiplayerStartMode: existing.multiplayerStartMode,
         theme: existing.theme,
         supportedMinigames: existing.supportedMinigames
       });
@@ -161,7 +174,11 @@ export function createStoryRepository(databasePath) {
       }
 
       if (existing.builtIn) {
-        throw new Error('The built-in Déjà Vu story cannot be deleted. Duplicate it before experimenting.');
+        throw new Error('Built-in stories cannot be deleted.');
+      }
+
+      if (existing.protected) {
+        throw new Error('Unprotect this story in Story settings before deleting it.');
       }
 
       database.prepare('DELETE FROM stories WHERE id = ?').run(id);
@@ -169,104 +186,15 @@ export function createStoryRepository(databasePath) {
   };
 }
 
-function seedBuiltInStory(database, document) {
-  const existing = database.prepare(
-    `
-      SELECT
-        id,
-        version,
-        document_json AS documentJson
-      FROM stories
-      WHERE id = ?
-    `
-  ).get(document.id);
+function removeRetiredBuiltInStories(database) {
+  const deleteStory = database.prepare(`
+    DELETE FROM stories
+    WHERE id = ? AND built_in = 1
+  `);
 
-  const now = new Date().toISOString();
-
-  if (existing) {
-    const storedDocument = JSON.parse(existing.documentJson);
-    const supportedMinigames = [
-      ...new Set([
-        ...(storedDocument.supportedMinigames ?? []),
-        ...document.supportedMinigames
-      ])
-    ];
-
-    const requiresStatusMigration = storedDocument.status !== 'playable';
-    const requiresCharacterMigration = !storedDocument.mainCharacterIds;
-    const requiresDocumentMigration = Number(storedDocument.builtInRevision ?? 0)
-      < Number(document.builtInRevision ?? 1);
-
-    if (supportedMinigames.length === storedDocument.supportedMinigames?.length
-      && !requiresStatusMigration
-      && !requiresCharacterMigration
-      && !requiresDocumentMigration) {
-      return;
-    }
-
-    const nextVersion = Number(existing.version) + 1;
-    const migratedDocument = requiresDocumentMigration
-      ? {
-        ...document,
-        title: storedDocument.title ?? document.title,
-        description: storedDocument.description ?? document.description,
-        author: storedDocument.author ?? document.author,
-        version: nextVersion,
-        status: 'playable',
-        supportedMinigames
-      }
-      : {
-        ...storedDocument,
-        version: nextVersion,
-        status: 'playable',
-        supportedMinigames,
-        mainCharacterIds: storedDocument.mainCharacterIds ?? document.mainCharacterIds,
-        characterIds: storedDocument.characterIds ?? document.characterIds
-      };
-
-    database.prepare(`
-      UPDATE stories
-      SET
-        status = ?,
-        version = ?,
-        document_json = ?,
-        updated_at = ?
-      WHERE id = ?
-    `).run(
-      'playable',
-      nextVersion,
-      JSON.stringify(migratedDocument),
-      now,
-      document.id
-    );
-    return;
+  for (const storyId of retiredBuiltInStoryIds) {
+    deleteStory.run(storyId);
   }
-
-  database.prepare(`
-    INSERT INTO stories (
-      id,
-      title,
-      description,
-      author,
-      status,
-      version,
-      built_in,
-      document_json,
-      created_at,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    document.id,
-    document.title,
-    document.description,
-    document.author,
-    document.status,
-    document.version,
-    1,
-    JSON.stringify(document),
-    now,
-    now
-  );
 }
 
 function createStoryDocument(input) {
@@ -280,7 +208,7 @@ function createStoryDocument(input) {
     title: input.title,
     description: input.description,
     author: input.author,
-    status: 'playable',
+    protected: Boolean(input.protected),
     version: 1,
     builtIn: false,
     initialSceneIds: input.initialSceneIds ?? {
@@ -288,6 +216,7 @@ function createStoryDocument(input) {
       p2: `${id}.p2.start`
     },
     singleplayerInitialSceneId: input.singleplayerInitialSceneId ?? `${id}.solo.start`,
+    multiplayerStartMode: input.multiplayerStartMode ?? 'separate',
     playModes,
     mainCharacterIds: normalizeMainCharacterIds(input.mainCharacterIds),
     characterIds: normalizeCharacterIds(input.characterIds, input.mainCharacterIds),
@@ -313,21 +242,24 @@ function normalizeStoryDocument(document) {
     throw new Error('A story document requires a nodes array.');
   }
 
-  validateStoryStructure({
-    ...document,
-    nodes
-  });
-
-  return {
+  const initialSceneIds = {
+    p1: String(document.initialSceneIds?.p1 ?? ''),
+    p2: String(document.initialSceneIds?.p2 ?? '')
+  };
+  const multiplayerStartMode = document.multiplayerStartMode === 'shared'
+    || (initialSceneIds.p1 && initialSceneIds.p1 === initialSceneIds.p2)
+    ? 'shared'
+    : 'separate';
+  const normalized = {
     ...document,
     nodes,
     schemaVersion: 1,
     title,
     description: String(document.description ?? '').trim().slice(0, 500),
     author: String(document.author ?? '').trim().slice(0, 80),
-    status: 'playable',
     version: Math.max(1, Number(document.version ?? 1)),
     builtIn: Boolean(document.builtIn),
+    protected: Boolean(document.protected),
     playModes: normalizePlayModes(document.playModes),
     mainCharacterIds: normalizeMainCharacterIds(document.mainCharacterIds),
     characterIds: normalizeCharacterIds(document.characterIds, document.mainCharacterIds),
@@ -337,9 +269,21 @@ function normalizeStoryDocument(document) {
         ?? document.initialSceneIds?.p1
         ?? ''
     ),
+    initialSceneIds,
+    multiplayerStartMode,
     supportedMinigames: Array.isArray(document.supportedMinigames)
       ? document.supportedMinigames
       : []
+  };
+
+  validateStoryStructure(normalized);
+
+  const unavailableReason = getUnavailableReason(normalized);
+
+  return {
+    ...normalized,
+    status: unavailableReason ? 'draft' : 'playable',
+    unavailableReason
   };
 }
 
@@ -348,7 +292,7 @@ function normalizeLegacyStoryNodes(nodes) {
     return nodes;
   }
 
-  return nodes.map((node) => {
+  const migratedNodes = nodes.map((node) => {
     const migratedNode = structuredClone(node);
 
     if (migratedNode?.type === 'background') {
@@ -401,6 +345,59 @@ function normalizeLegacyStoryNodes(nodes) {
 
     return migratedNode;
   });
+
+  // Labels used to sit in the playable route. Preserve that route while
+  // converting each legacy label into an editor-only companion annotation.
+  for (const label of migratedNodes.filter(
+    (node) => node.type === 'label' && node.attachedTo === undefined
+  )) {
+    let incomingNode = null;
+
+    for (const candidate of migratedNodes) {
+      const routeWasReplaced = replaceNodeDestination(
+        candidate,
+        label.id,
+        String(label.next ?? '')
+      );
+
+      if (routeWasReplaced && !incomingNode) {
+        incomingNode = candidate;
+      }
+    }
+
+    label.attachedTo = incomingNode?.id ?? '';
+    delete label.next;
+  }
+
+  return migratedNodes;
+}
+
+function replaceNodeDestination(node, destinationId, replacementId) {
+  let replaced = false;
+  const directRouteFields = ['next', 'success', 'failure', 'trueNext', 'falseNext'];
+
+  for (const field of directRouteFields) {
+    if (node[field] === destinationId) {
+      node[field] = replacementId;
+      replaced = true;
+    }
+  }
+
+  for (const choice of node.choices ?? []) {
+    if (choice.next === destinationId) {
+      choice.next = replacementId;
+      replaced = true;
+    }
+  }
+
+  for (const [result, resultDestination] of Object.entries(node.resultNext ?? {})) {
+    if (resultDestination === destinationId) {
+      node.resultNext[result] = replacementId;
+      replaced = true;
+    }
+  }
+
+  return replaced;
 }
 
 function migrateLegacyStoryNodes(database) {
@@ -416,6 +413,7 @@ function migrateLegacyStoryNodes(database) {
     const document = JSON.parse(storedStory.documentJson);
     const hasLegacyNode = document.nodes?.some((node) => (
       ['background', 'music', 'sound-effect', 'stop-music', 'effect'].includes(node.type)
+      || (node.type === 'label' && node.attachedTo === undefined)
       || node.choices?.some((choice) => choice.playerMode)
     ));
 
@@ -577,23 +575,83 @@ function validateStoryStructure(document) {
     }
   }
 
-  if (playModes.multiplayer) {
-    for (const playerId of ['p1', 'p2']) {
-      const startNodeId = document.initialSceneIds?.[playerId];
+}
 
-      if (!startNodeId || !nodeIds.has(startNodeId)) {
-        throw new Error(`The ${playerId.toUpperCase()} start node does not exist.`);
-      }
-    }
-  }
+function getUnavailableReason(document) {
+  const playModes = normalizePlayModes(document.playModes);
+  const nodesById = new Map(document.nodes.map((node) => [node.id, node]));
 
   if (playModes.singleplayer) {
-    const startNodeId = document.singleplayerInitialSceneId;
+    const soloIssue = getStartNodeIssue(
+      nodesById.get(document.singleplayerInitialSceneId),
+      'singleplayer',
+      'p1',
+      'Single-player'
+    );
 
-    if (!startNodeId || !nodeIds.has(startNodeId)) {
-      throw new Error('The single-player start node does not exist.');
+    if (soloIssue) {
+      return soloIssue;
     }
   }
+
+  if (!playModes.multiplayer) {
+    return '';
+  }
+
+  if (document.multiplayerStartMode === 'shared') {
+    const sharedStartId = document.initialSceneIds?.p1;
+
+    if (!sharedStartId || sharedStartId !== document.initialSceneIds?.p2) {
+      return 'Shared start is missing.';
+    }
+
+    return getStartNodeIssue(
+      nodesById.get(sharedStartId),
+      'multiplayer',
+      'both',
+      'Shared'
+    );
+  }
+
+  const playerOneIssue = getStartNodeIssue(
+    nodesById.get(document.initialSceneIds?.p1),
+    'multiplayer',
+    'p1',
+    'Player 1'
+  );
+
+  if (playerOneIssue) {
+    return playerOneIssue;
+  }
+
+  return getStartNodeIssue(
+    nodesById.get(document.initialSceneIds?.p2),
+    'multiplayer',
+    'p2',
+    'Player 2'
+  );
+}
+
+function getStartNodeIssue(node, map, audience, label) {
+  if (!node) {
+    return `${label} start is missing.`;
+  }
+
+  if (!playableStartNodeTypes.has(node.type)) {
+    return `${label} start must use a player-facing scene or Condition node.`;
+  }
+
+  if (node.map !== map) {
+    return `${label} start is on the wrong map.`;
+  }
+
+  if (node.audience !== audience) {
+    const target = audience === 'both' ? 'both players' : audience.toUpperCase();
+
+    return `${label} start must target ${target}.`;
+  }
+
+  return '';
 }
 
 function normalizePlayModes(value) {
@@ -682,6 +740,9 @@ function normalizeStorySummary(row) {
   return {
     ...summary,
     builtIn: Boolean(row.builtIn),
-    playModes: normalizePlayModes(document.playModes)
+    playModes: normalizePlayModes(document.playModes),
+    protected: Boolean(document.protected),
+    multiplayerStartMode: document.multiplayerStartMode ?? 'separate',
+    unavailableReason: String(document.unavailableReason ?? '')
   };
 }

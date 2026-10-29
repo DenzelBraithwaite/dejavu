@@ -1,6 +1,7 @@
 <script lang="ts">
   // Hooks
   import { createEventDispatcher } from 'svelte';
+  import { slide } from 'svelte/transition';
 
   // Components
   import { Item } from './index';
@@ -116,7 +117,11 @@
 
     <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
       {#if storyToolsVisible}
-        <div class="story-tools" aria-label="Cartridge tools">
+        <div
+          class="story-tools"
+          aria-label="Cartridge tools"
+          transition:slide={{ duration: 220 }}
+        >
           {#each storyNavigationItems as item}
             <Item
               on:click={() => {
@@ -283,7 +288,8 @@
   }
 
   .story-tools {
-    display: contents;
+    display: grid;
+    gap: 0;
   }
 
   .story-navigation-group {
@@ -397,6 +403,8 @@
       overflow: hidden;
 
       display: flex;
+      flex-direction: row;
+      align-items: center;
       gap: 7px;
     }
 

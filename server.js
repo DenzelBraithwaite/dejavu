@@ -690,6 +690,15 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (story && story.status !== 'playable') {
+      acknowledge({
+        ok: false,
+        error: story.unavailableReason
+          || 'This cartridge is unavailable until its start points are configured.'
+      });
+      return;
+    }
+
     const supportedModes = story?.playModes ?? {
       singleplayer: false,
       multiplayer: true

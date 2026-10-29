@@ -9,6 +9,8 @@ import { sessionState, type PlayerId } from './session';
 
 export type CampaignPlayer = {
   characterId: string | null;
+  defaultName: string;
+  customName: string;
   name: string;
   wallet: number;
   stats: Record<string, number>;

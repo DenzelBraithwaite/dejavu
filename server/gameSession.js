@@ -131,9 +131,13 @@ export function createCampaignState(story = null, options = {}) {
 }
 
 function createPlayerState(character, fallbackName, fallbackStats, relationshipDefinitions) {
+  const defaultName = character?.name ?? fallbackName;
+
   return {
     characterId: character?.id ?? null,
-    name: character?.name ?? fallbackName,
+    defaultName,
+    customName: '',
+    name: defaultName,
     wallet: Number(character?.wallet ?? 0),
     stats: {
       ...(character?.stats ?? fallbackStats)
@@ -237,6 +241,10 @@ export function restoreCampaignState(candidate) {
   for (const playerId of PLAYER_IDS) {
     restored.players[playerId].relationships ??= {};
     restored.players[playerId].itemImages ??= {};
+    restored.players[playerId].defaultName ??= restored.players[playerId].name;
+    restored.players[playerId].customName ??= '';
+    restored.players[playerId].name = restored.players[playerId].customName
+      || restored.players[playerId].defaultName;
 
     for (const relationship of restored.relationshipDefinitions) {
       restored.players[playerId].relationships[relationship.id]
@@ -1015,7 +1023,8 @@ function applyCharacterChange(state, playerId, scene) {
   state.players[playerId] = {
     ...state.players[playerId],
     characterId: character.id,
-    name: character.name,
+    defaultName: character.name,
+    name: state.players[playerId].customName || character.name,
     wallet: Number(character.wallet ?? 0),
     stats: {
       ...character.stats
@@ -1144,8 +1153,9 @@ function applyEffects(state, playerId, effects) {
         state.flags[effect.key] = value;
         break;
       case 'set-player-name':
-        state.players[playerId].name = String(value ?? '').trim()
-          || state.players[playerId].name;
+        state.players[playerId].customName = String(value ?? '').trim();
+        state.players[playerId].name = state.players[playerId].customName
+          || state.players[playerId].defaultName;
         break;
       case 'add-item':
         addUnique(state.players[playerId].inventory, effect.key);
