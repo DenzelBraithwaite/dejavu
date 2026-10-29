@@ -32,7 +32,7 @@ export type StoryNode = {
     next: string;
     disabled?: boolean;
     condition?: {
-      type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'relationship-at-least' | 'decision-made';
+      type: 'has-item' | 'flag-equals' | 'stat-at-least' | 'relationship-at-least' | 'relationship-at-most' | 'decision-made';
       key: string;
       value?: string | number | boolean;
     };
@@ -107,6 +107,15 @@ export type EditorHandoff = {
   map: 'singleplayer' | 'multiplayer';
 };
 
+export type StoryRelationship = {
+  id: string;
+  characterId: string;
+  initialValue: number;
+  minimum: number;
+  maximum: number;
+  visible: boolean;
+};
+
 export type StoryDocument = {
   schemaVersion: number;
   id: string;
@@ -125,6 +134,7 @@ export type StoryDocument = {
     multiplayer: Record<PlayerId, string | null>;
   };
   characterIds: string[];
+  relationships: StoryRelationship[];
   singleplayerInitialSceneId: string;
   initialSceneIds: Record<PlayerId, string>;
   nodes: StoryNode[];

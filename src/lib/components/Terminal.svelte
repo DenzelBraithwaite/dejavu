@@ -413,6 +413,8 @@
         return Number(player.stats[condition.key] ?? 0) >= Number(condition.value ?? 0);
       case 'relationship-at-least':
         return Number(player.relationships?.[condition.key] ?? 0) >= Number(condition.value ?? 0);
+      case 'relationship-at-most':
+        return Number(player.relationships?.[condition.key] ?? 0) <= Number(condition.value ?? 0);
       case 'decision-made':
         return $campaignState.decisions.some(
           (decision) => decision.playerId === playerId

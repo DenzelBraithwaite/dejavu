@@ -1,5 +1,9 @@
 import { derived, writable } from 'svelte/store';
-import { libraryState, type StoryDocument } from './library';
+import {
+  libraryState,
+  type StoryDocument,
+  type StoryRelationship
+} from './library';
 import type { CharacterRecord } from './characters';
 import { sessionState, type PlayerId } from './session';
 
@@ -52,6 +56,7 @@ export type CampaignState = {
   version: number;
   campaignId: string;
   story: StoryDocument | null;
+  relationshipDefinitions: StoryRelationship[];
   sessionMode: 'singleplayer' | 'multiplayer';
   soloPlayerId: PlayerId | null;
   currentScene: Record<PlayerId, string>;

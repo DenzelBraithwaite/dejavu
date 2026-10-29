@@ -45,10 +45,14 @@ export function createCampaignState(story = null, options = {}) {
     soloPlayerId,
     characters
   );
+  const relationshipDefinitions = Array.isArray(story?.relationships)
+    ? structuredClone(story.relationships)
+    : [];
   const state = {
     version: 1,
     campaignId: randomUUID(),
     story: story ? structuredClone(story) : null,
+    relationshipDefinitions,
     sessionMode,
     soloPlayerId,
     currentScene: {
@@ -60,8 +64,18 @@ export function createCampaignState(story = null, options = {}) {
       p2: ''
     },
     players: {
-      p1: createPlayerState(playerCharacters.p1, 'Nova', DEFAULT_STATS.p1),
-      p2: createPlayerState(playerCharacters.p2, 'Avona', DEFAULT_STATS.p2)
+      p1: createPlayerState(
+        playerCharacters.p1,
+        'Nova',
+        DEFAULT_STATS.p1,
+        relationshipDefinitions
+      ),
+      p2: createPlayerState(
+        playerCharacters.p2,
+        'Avona',
+        DEFAULT_STATS.p2,
+        relationshipDefinitions
+      )
     },
     defaultCharacterIds: {
       p1: playerCharacters.p1?.id ?? null,
@@ -116,7 +130,7 @@ export function createCampaignState(story = null, options = {}) {
   return state;
 }
 
-function createPlayerState(character, fallbackName, fallbackStats) {
+function createPlayerState(character, fallbackName, fallbackStats, relationshipDefinitions) {
   return {
     characterId: character?.id ?? null,
     name: character?.name ?? fallbackName,
@@ -128,7 +142,12 @@ function createPlayerState(character, fallbackName, fallbackStats) {
     itemImages: {},
     knownCharacters: [],
     statusEffects: [],
-    relationships: {}
+    relationships: Object.fromEntries(
+      relationshipDefinitions.map((relationship) => [
+        relationship.id,
+        Number(relationship.initialValue ?? 0)
+      ])
+    )
   };
 }
 
@@ -180,6 +199,9 @@ export function restoreCampaignState(candidate) {
     ...candidate,
     sessionMode: candidate.sessionMode ?? 'multiplayer',
     soloPlayerId: candidate.soloPlayerId ?? null,
+    relationshipDefinitions: candidate.relationshipDefinitions
+      ?? candidate.story.relationships
+      ?? [],
     installedMods: candidate.installedMods ?? [],
     characters: candidate.characters ?? [],
     minigames: candidate.minigames ?? {},
@@ -215,6 +237,11 @@ export function restoreCampaignState(candidate) {
   for (const playerId of PLAYER_IDS) {
     restored.players[playerId].relationships ??= {};
     restored.players[playerId].itemImages ??= {};
+
+    for (const relationship of restored.relationshipDefinitions) {
+      restored.players[playerId].relationships[relationship.id]
+        ??= Number(relationship.initialValue ?? 0);
+    }
   }
 
   // Migrate the short-lived persistent image format into the chronological
@@ -875,6 +902,7 @@ function applyAttachedCompanions(state, playerId, scene) {
       const announcement = effectAnnouncement(
         effect,
         companion.announcementTemplate,
+        companion.playerMessage,
         companion.text
       );
 
@@ -897,14 +925,19 @@ function applyAttachedCompanions(state, playerId, scene) {
   state.appliedCompanions[playerId] = [...applied];
 }
 
-function effectAnnouncement(effect, announcementTemplate, legacyText) {
+function effectAnnouncement(effect, announcementTemplate, playerMessage, legacyText) {
   const customTemplate = String(announcementTemplate ?? '').trim();
+  const customPlayerMessage = String(playerMessage ?? '').trim();
   const customText = String(legacyText ?? '').trim();
 
   if (customTemplate) {
     return customTemplate.includes('<ITEM>')
       ? customTemplate.replaceAll('<ITEM>', effect.key)
       : `${customTemplate}${effect.key}`;
+  }
+
+  if (customPlayerMessage) {
+    return customPlayerMessage;
   }
 
   if (customText && customText !== 'You acquired a new item.') {
@@ -1002,6 +1035,9 @@ function evaluateCondition(state, playerId, condition = {}) {
     case 'relationship-at-least':
       return Number(state.players[playerId].relationships?.[condition.key] ?? 0)
         >= Number(condition.value ?? 0);
+    case 'relationship-at-most':
+      return Number(state.players[playerId].relationships?.[condition.key] ?? 0)
+        <= Number(condition.value ?? 0);
     case 'last-dice-success': {
       const lastDiceDecision = [...state.decisions].reverse().find(
         (decision) => decision.type === 'dice-check' && decision.playerId === playerId
@@ -1133,12 +1169,22 @@ function applyEffects(state, playerId, effects) {
           state.players[playerId].stats[effect.key] ?? 0
         ) + Number(value ?? 0);
         break;
-      case 'adjust-relationship':
+      case 'adjust-relationship': {
         state.players[playerId].relationships ??= {};
-        state.players[playerId].relationships[effect.key] = Number(
+        const relationship = state.relationshipDefinitions?.find(
+          (definition) => definition.id === effect.key
+        );
+        const nextRelationshipValue = Number(
           state.players[playerId].relationships[effect.key] ?? 0
         ) + Number(value ?? 0);
+        state.players[playerId].relationships[effect.key] = relationship
+          ? Math.min(
+            Number(relationship.maximum ?? 5),
+            Math.max(Number(relationship.minimum ?? -5), nextRelationshipValue)
+          )
+          : nextRelationshipValue;
         break;
+      }
       case 'install-mod':
         addUnique(state.installedMods, effect.key);
         break;

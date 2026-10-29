@@ -61,8 +61,14 @@
         ([, connectionId]) => connectionId === $sessionState.playerId
       )?.[0] as PlayerId | undefined) ?? $sessionState.playerId
     : $sessionState.playerId;
-  $: storyToolsVisible = ['terminal', 'player', 'bag', 'journal', 'saves'].includes($location)
-    || $storyMinigameView;
+  $: cartridgeInserted = Boolean($libraryState.activeStoryId && $campaignState?.story);
+  $: storyToolsVisible = cartridgeInserted && (
+    ['terminal', 'player', 'bag', 'journal', 'saves'].includes($location)
+    || $storyMinigameView
+  );
+  $: if (!cartridgeInserted && ['player', 'bag', 'journal', 'saves'].includes($location)) {
+    location.set('terminal');
+  }
 
   $: if (!neuroChatInstalled && chatOpen) {
     chatOpen = false;

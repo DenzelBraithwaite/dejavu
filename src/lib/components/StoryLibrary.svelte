@@ -13,7 +13,8 @@
     libraryState,
     type AudioAsset,
     type StoryDocument,
-    type StoryNode
+    type StoryNode,
+    type StoryRelationship
   } from '../stores/library';
   import location from '../stores/location';
   import { campaignState } from '../stores/campaign';
@@ -293,6 +294,13 @@
     'firewall-auction',
     'drone-relay'
   ]);
+  const relationshipLevelOptions = [
+    { value: -5, label: 'Hostile' },
+    { value: -3, label: 'Wary' },
+    { value: 0, label: 'Neutral' },
+    { value: 3, label: 'Friendly' },
+    { value: 5, label: 'Loyal' }
+  ];
 
   let mode: EditorMode = 'library';
   let newTitle = '';
@@ -366,6 +374,7 @@
     label: string;
   }> = [];
   let knownStoryItems: string[] = [];
+  let knownStoryFlags: string[] = [];
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -478,6 +487,12 @@
   $: knownStoryItems = [...new Set(
     editingStory?.nodes
       .filter((node) => node.type === 'item-effect')
+      .map((node) => String(node.effects?.[0]?.key ?? '').trim())
+      .filter(Boolean) ?? []
+  )].sort((left, right) => left.localeCompare(right));
+  $: knownStoryFlags = [...new Set(
+    editingStory?.nodes
+      .filter((node) => node.type === 'story-flag')
       .map((node) => String(node.effects?.[0]?.key ?? '').trim())
       .filter(Boolean) ?? []
   )].sort((left, right) => left.localeCompare(right));
@@ -978,6 +993,11 @@
       editingStory.mainCharacterIds.singleplayer,
       editingStory.mainCharacterIds.multiplayer.p1,
       editingStory.mainCharacterIds.multiplayer.p2,
+      ...editingStory.relationships.map((relationship) => (
+        relationship.characterId === 'other-player'
+          ? null
+          : relationship.characterId
+      )),
       ...editingStory.nodes.map((node) => node.characterId)
     ].filter((characterId): characterId is string => Boolean(characterId));
 
@@ -998,6 +1018,7 @@
       }
     };
     prepared.characterIds ??= [];
+    prepared.relationships ??= [];
 
     if (!prepared.singleplayerInitialSceneId
       || !prepared.nodes.some((node) => node.id === prepared.singleplayerInitialSceneId)) {
@@ -2105,6 +2126,117 @@
     refreshStory();
   }
 
+  function relationshipTargets(currentIndex = -1): Array<{ id: string; name: string }> {
+    if (!editingStory) {
+      return [];
+    }
+
+    const selectedIds = new Set(editingStory.relationships
+      .filter((_relationship, index) => index !== currentIndex)
+      .map((relationship) => relationship.characterId));
+    const targets = speakerCharacters
+      .filter((character) => !selectedIds.has(character.id))
+      .map((character) => ({
+        id: character.id,
+        name: character.name
+      }));
+
+    if (editingStory.playModes.multiplayer && !selectedIds.has('other-player')) {
+      targets.push({
+        id: 'other-player',
+        name: 'Other player'
+      });
+    }
+
+    return targets;
+  }
+
+  function addRelationship(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const target = relationshipTargets()[0];
+
+    if (!target) {
+      errorMessage = 'Every available relationship target is already configured.';
+      return;
+    }
+
+    rememberForUndo();
+    editingStory.relationships = [
+      ...editingStory.relationships,
+      {
+        id: target.id,
+        characterId: target.id,
+        initialValue: 0,
+        minimum: -5,
+        maximum: 5,
+        visible: true
+      }
+    ];
+    refreshStory();
+  }
+
+  function setRelationshipTarget(index: number, event: Event): void {
+    const relationship = editingStory?.relationships[index];
+
+    if (!relationship) {
+      return;
+    }
+
+    const characterId = (event.currentTarget as HTMLSelectElement).value;
+    relationship.characterId = characterId;
+    relationship.id = characterId;
+    refreshStory();
+  }
+
+  function normalizeRelationship(index: number): void {
+    const relationship = editingStory?.relationships[index];
+
+    if (!relationship) {
+      return;
+    }
+
+    const minimum = Math.min(
+      Number(relationship.minimum ?? -5),
+      Number(relationship.maximum ?? 5)
+    );
+    const maximum = Math.max(
+      Number(relationship.minimum ?? -5),
+      Number(relationship.maximum ?? 5)
+    );
+
+    relationship.minimum = minimum;
+    relationship.maximum = maximum;
+    relationship.initialValue = Math.min(
+      maximum,
+      Math.max(minimum, Number(relationship.initialValue ?? 0))
+    );
+    refreshStory();
+  }
+
+  function removeRelationship(index: number): void {
+    if (!editingStory?.relationships[index]) {
+      return;
+    }
+
+    rememberForUndo();
+    editingStory.relationships = editingStory.relationships.filter(
+      (_relationship, relationshipIndex) => relationshipIndex !== index
+    );
+    refreshStory();
+  }
+
+  function relationshipTargetName(relationshipId: string): string {
+    if (relationshipId === 'other-player') {
+      return 'Other player';
+    }
+
+    return speakerCharacters.find((character) => character.id === relationshipId)?.name
+      ?? relationshipId;
+  }
+
   function nodeOrdinal(node: StoryNode): string {
     const nodesOfType = getLaneNodes((node.audience ?? 'both') as LaneId)
       .filter((candidate) => candidate.type === node.type);
@@ -2935,9 +3067,121 @@
     choice.condition = enabled
       ? {
           type: 'has-item',
-          key: 'item-id'
+          key: defaultConditionKey('has-item')
         }
       : undefined;
+    refreshStory();
+  }
+
+  function defaultConditionKey(type: string): string {
+    if (type === 'has-item') {
+      return knownStoryItems[0] ?? '';
+    }
+
+    if (type === 'flag-equals') {
+      return knownStoryFlags[0] ?? '';
+    }
+
+    if (type === 'stat-at-least') {
+      return characterStats[0];
+    }
+
+    if (['relationship-at-least', 'relationship-at-most'].includes(type)) {
+      return editingStory?.relationships[0]?.id ?? '';
+    }
+
+    if (type === 'decision-made') {
+      return rememberedChoiceOptions[0]?.key ?? '';
+    }
+
+    if (type === 'playing-as') {
+      return 'p1';
+    }
+
+    return '';
+  }
+
+  function storyFlagValues(flagId: string): string[] {
+    return [...new Set(
+      editingStory?.nodes
+        .filter((node) => (
+          node.type === 'story-flag'
+          && String(node.effects?.[0]?.key ?? '') === flagId
+        ))
+        .map((node) => String(node.effects?.[0]?.value ?? ''))
+        .filter(Boolean) ?? []
+    )];
+  }
+
+  function defaultConditionValue(type: string): string | number | boolean | undefined {
+    if (type === 'flag-equals') {
+      return storyFlagValues(knownStoryFlags[0] ?? '')[0] ?? 'true';
+    }
+
+    if (type === 'stat-at-least') {
+      return 1;
+    }
+
+    if (['relationship-at-least', 'relationship-at-most'].includes(type)) {
+      return type === 'relationship-at-least' ? 3 : -3;
+    }
+
+    return undefined;
+  }
+
+  function setNodeConditionType(event: Event): void {
+    if (!selectedNode?.condition) {
+      return;
+    }
+
+    const type = (event.currentTarget as HTMLSelectElement).value;
+    rememberForUndo();
+    selectedNode.condition = {
+      type,
+      key: defaultConditionKey(type),
+      value: defaultConditionValue(type)
+    };
+    refreshStory();
+  }
+
+  function setChoiceConditionType(index: number, event: Event): void {
+    const choice = selectedNode?.choices?.[index];
+
+    if (!choice?.condition) {
+      return;
+    }
+
+    const type = (event.currentTarget as HTMLSelectElement).value;
+    rememberForUndo();
+    choice.condition = {
+      type,
+      key: defaultConditionKey(type),
+      value: defaultConditionValue(type)
+    } as typeof choice.condition;
+    refreshStory();
+  }
+
+  function setNodeConditionFlag(event: Event): void {
+    if (!selectedNode?.condition) {
+      return;
+    }
+
+    const flagId = (event.currentTarget as HTMLSelectElement).value;
+    selectedNode.condition.key = flagId;
+    selectedNode.condition.value = storyFlagValues(flagId)[0] ?? '';
+    refreshStory();
+  }
+
+  function setChoiceConditionFlag(index: number, event: Event): void {
+    const condition = selectedNode?.choices?.[index]?.condition;
+
+    if (!condition) {
+      return;
+    }
+
+    const flagId = (event.currentTarget as HTMLSelectElement).value;
+    condition.key = flagId;
+    condition.value = storyFlagValues(flagId)[0] ?? '';
     refreshStory();
   }
 
@@ -3028,7 +3272,7 @@
       'adjust-stat': { key: 'luck', value: 1 },
       'set-player-name': { key: '', value: '' },
       'discover-character': { key: '' },
-      'adjust-relationship': { key: '', value: 1 },
+      'adjust-relationship': { key: editingStory?.relationships[0]?.id ?? '', value: 1 },
       'install-mod': { key: 'neuro-link-chat' },
       'remove-mod': { key: 'neuro-link-chat' }
     };
@@ -3039,6 +3283,9 @@
       type: operation,
       ...nextEffect
     };
+    selectedNode.playerMessage = operation === 'adjust-relationship'
+      ? String(selectedNode.playerMessage ?? '')
+      : '';
     refreshStory();
   }
 
@@ -3759,6 +4006,85 @@
         </div>
       </div>
 
+      <details class="relationship-settings">
+        <summary>
+          <span>Relationships</span>
+          <strong>{editingStory.relationships.length} configured</strong>
+        </summary>
+        <div class="relationship-settings-content">
+          <div class="relationship-settings-heading">
+            <p>
+              Configure one named score per character. Player State nodes change these meters and Condition nodes check them.
+            </p>
+            <button
+              type="button"
+              disabled={relationshipTargets().length === 0}
+              on:click={addRelationship}
+            >
+              + Add relationship
+            </button>
+          </div>
+
+          {#if editingStory.relationships.length === 0}
+            <p class="relationship-empty">No relationship meters are configured for this story.</p>
+          {:else}
+            <div class="relationship-config-list">
+              {#each editingStory.relationships as relationship, index}
+                <article>
+                  <label>
+                    <span>Character</span>
+                    <select
+                      value={relationship.characterId}
+                      on:change={(event) => setRelationshipTarget(index, event)}
+                    >
+                      {#each relationshipTargets(index) as target}
+                        <option value={target.id}>{target.name}</option>
+                      {/each}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Starting value</span>
+                    <input
+                      type="number"
+                      bind:value={relationship.initialValue}
+                      on:change={() => normalizeRelationship(index)}
+                    >
+                  </label>
+                  <label>
+                    <span>Minimum</span>
+                    <input
+                      type="number"
+                      bind:value={relationship.minimum}
+                      on:change={() => normalizeRelationship(index)}
+                    >
+                  </label>
+                  <label>
+                    <span>Maximum</span>
+                    <input
+                      type="number"
+                      bind:value={relationship.maximum}
+                      on:change={() => normalizeRelationship(index)}
+                    >
+                  </label>
+                  <label class="relationship-visible-toggle">
+                    <input type="checkbox" bind:checked={relationship.visible}>
+                    <span>Visible to player</span>
+                  </label>
+                  <button
+                    class="relationship-remove"
+                    type="button"
+                    aria-label={`Remove relationship with ${relationshipTargetName(relationship.id)}`}
+                    on:click={() => removeRelationship(index)}
+                  >
+                    Remove
+                  </button>
+                </article>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </details>
+
       <p class="graph-position-help">
         Routes control rows. Select a node to edit its previous and next connections in the inspector.
       </p>
@@ -4409,11 +4735,15 @@
                     </label>
                     {#if choice.condition}
                       <div class="choice-condition-editor">
-                        <select aria-label="Requirement type" bind:value={choice.condition.type}>
+                        <select
+                          aria-label="Requirement type"
+                          value={choice.condition.type.startsWith('relationship-') ? 'relationship-at-least' : choice.condition.type}
+                          on:change={(event) => setChoiceConditionType(index, event)}
+                        >
                           <option value="has-item">Has item</option>
                           <option value="flag-equals">Flag equals</option>
                           <option value="stat-at-least">Stat at least</option>
-                          <option value="relationship-at-least">Relationship at least</option>
+                          <option value="relationship-at-least">Relationship</option>
                           <option value="decision-made">Remembered decision</option>
                         </select>
                         {#if choice.condition.type === 'decision-made'}
@@ -4423,19 +4753,61 @@
                               <option value={rememberedChoice.key}>{rememberedChoice.label}</option>
                             {/each}
                           </select>
-                        {:else}
-                          <input
-                            aria-label="Requirement key"
-                            bind:value={choice.condition.key}
-                            placeholder="Item, flag, stat, or character ID"
+                        {:else if choice.condition.type === 'has-item'}
+                          <select aria-label="Required item" bind:value={choice.condition.key}>
+                            <option value="">Choose a story item</option>
+                            {#each knownStoryItems as item}
+                              <option value={item}>{item}</option>
+                            {/each}
+                          </select>
+                        {:else if choice.condition.type === 'flag-equals'}
+                          <select
+                            aria-label="Required story flag"
+                            value={choice.condition.key}
+                            on:change={(event) => setChoiceConditionFlag(index, event)}
                           >
+                            <option value="">Choose a story flag</option>
+                            {#each knownStoryFlags as flag}
+                              <option value={flag}>{flag}</option>
+                            {/each}
+                          </select>
+                        {:else if choice.condition.type === 'stat-at-least'}
+                          <select aria-label="Required player stat" bind:value={choice.condition.key}>
+                            {#each characterStats as stat}
+                              <option value={stat}>{stat}</option>
+                            {/each}
+                          </select>
+                        {:else if choice.condition.type.startsWith('relationship-')}
+                          <select aria-label="Relationship target" bind:value={choice.condition.key}>
+                            <option value="">Choose a configured relationship</option>
+                            {#each editingStory.relationships as relationship}
+                              <option value={relationship.id}>{relationshipTargetName(relationship.id)}</option>
+                            {/each}
+                          </select>
+                          <select aria-label="Relationship comparison" bind:value={choice.condition.type}>
+                            <option value="relationship-at-least">Is at least</option>
+                            <option value="relationship-at-most">Is at most</option>
+                          </select>
                         {/if}
-                        {#if choice.condition.type !== 'has-item'}
+                        {#if choice.condition.type === 'flag-equals'}
+                          <select aria-label="Required flag value" bind:value={choice.condition.value}>
+                            <option value="">Choose a value set by this story</option>
+                            {#each storyFlagValues(choice.condition.key) as flagValue}
+                              <option value={flagValue}>{flagValue}</option>
+                            {/each}
+                          </select>
+                        {:else if choice.condition.type === 'stat-at-least'}
                           <input
-                            aria-label="Requirement value"
+                            type="number"
+                            aria-label="Required stat value"
                             bind:value={choice.condition.value}
-                            placeholder="Required value"
                           >
+                        {:else if choice.condition.type.startsWith('relationship-')}
+                          <select aria-label="Required relationship level" bind:value={choice.condition.value}>
+                            {#each relationshipLevelOptions as level}
+                              <option value={level.value}>{level.label} ({level.value > 0 ? '+' : ''}{level.value})</option>
+                            {/each}
+                          </select>
                         {/if}
                       </div>
                     {/if}
@@ -4704,12 +5076,48 @@
                   {/each}
                 </select>
               {:else if selectedNode.effects[0].type === 'adjust-relationship'}
-                <label for="relationship-id">Relationship ID</label>
-                <input id="relationship-id" bind:value={selectedNode.effects[0].key} placeholder="ajax_trust">
+                <label for="relationship-id">With</label>
+                <select id="relationship-id" bind:value={selectedNode.effects[0].key}>
+                  <option value="">Choose a configured relationship</option>
+                  {#each editingStory.relationships as relationship}
+                    <option value={relationship.id}>{relationshipTargetName(relationship.id)}</option>
+                  {/each}
+                </select>
 
                 <label for="relationship-amount">Amount to add</label>
                 <input id="relationship-amount" type="number" step="1" bind:value={selectedNode.effects[0].value}>
-                <p class="inspector-help">Use a negative number to reduce the relationship value.</p>
+                <div class="relationship-amount-buttons" aria-label="Relationship amount shortcuts">
+                  {#each [-2, -1, 1, 2] as amount}
+                    <button type="button" on:click={() => {
+                      selectedNode.effects[0].value = amount;
+                      refreshStory();
+                    }}>{amount > 0 ? '+' : ''}{amount}</button>
+                  {/each}
+                </div>
+
+                <label for="relationship-message">Player message</label>
+                <input
+                  id="relationship-message"
+                  bind:value={selectedNode.playerMessage}
+                  placeholder="Ajax appreciated your honesty."
+                >
+                {#if editingStory.relationships.length === 0}
+                  <p class="inspector-help">Configure a relationship in Story Relationships before changing one.</p>
+                {:else}
+                  {@const relationshipDefinition = editingStory.relationships.find(
+                    (relationship) => relationship.id === selectedNode.effects[0].key
+                  )}
+                  <div class="effect-preview">
+                    <span>WHEN TRIGGERED</span>
+                    <strong>
+                      The current player’s relationship with
+                      {relationshipTargetName(String(selectedNode.effects[0].key || ''))}
+                      {Number(selectedNode.effects[0].value ?? 0) < 0 ? 'decreases' : 'increases'} by
+                      {Math.abs(Number(selectedNode.effects[0].value ?? 0))},
+                      clamped between {relationshipDefinition?.minimum ?? -5} and {relationshipDefinition?.maximum ?? 5}.
+                    </strong>
+                  </div>
+                {/if}
               {:else}
                 <label for="neuro-mod-id">Neuro mod ID</label>
                 <input id="neuro-mod-id" bind:value={selectedNode.effects[0].key} placeholder="neuro-link-chat">
@@ -4718,11 +5126,15 @@
 
             {#if selectedNode.type === 'condition'}
               <label for="condition-type">Condition</label>
-              <select id="condition-type" bind:value={selectedNode.condition.type}>
+              <select
+                id="condition-type"
+                value={selectedNode.condition.type.startsWith('relationship-') ? 'relationship-at-least' : selectedNode.condition.type}
+                on:change={setNodeConditionType}
+              >
                 <option value="has-item">Player has item</option>
                 <option value="flag-equals">Story flag equals value</option>
                 <option value="stat-at-least">Player stat is at least value</option>
-                <option value="relationship-at-least">Relationship is at least value</option>
+                <option value="relationship-at-least">Player relationship</option>
                 <option value="last-dice-success">Previous dice check succeeded</option>
                 <option value="decision-made">Player made a remembered decision</option>
                 {#if activeStoryMap === 'multiplayer'}
@@ -4743,13 +5155,83 @@
                   <option value="p1">Player 1</option>
                   <option value="p2">Player 2</option>
                 </select>
-              {:else if selectedNode.condition.type !== 'last-dice-success'}
-                <label for="condition-key">Item, flag, stat, or relationship ID</label>
-                <input id="condition-key" bind:value={selectedNode.condition.key}>
+              {:else if selectedNode.condition.type === 'has-item'}
+                <label for="condition-item">Item</label>
+                <select id="condition-item" bind:value={selectedNode.condition.key}>
+                  <option value="">Choose an item created by this story</option>
+                  {#each knownStoryItems as item}
+                    <option value={item}>{item}</option>
+                  {/each}
+                </select>
+                {#if knownStoryItems.length === 0}
+                  <p class="inspector-help">Add an Item node that gives an item before using this condition.</p>
+                {/if}
+              {:else if selectedNode.condition.type === 'flag-equals'}
+                <label for="condition-flag">Story flag</label>
+                <select
+                  id="condition-flag"
+                  value={selectedNode.condition.key}
+                  on:change={setNodeConditionFlag}
+                >
+                  <option value="">Choose a flag created by this story</option>
+                  {#each knownStoryFlags as flag}
+                    <option value={flag}>{flag}</option>
+                  {/each}
+                </select>
+                {#if knownStoryFlags.length === 0}
+                  <p class="inspector-help">Add a Story Flag node before using this condition.</p>
+                {/if}
+              {:else if selectedNode.condition.type === 'stat-at-least'}
+                <label for="condition-stat">Player stat</label>
+                <select id="condition-stat" bind:value={selectedNode.condition.key}>
+                  {#each characterStats as stat}
+                    <option value={stat}>{stat}</option>
+                  {/each}
+                </select>
+              {:else if selectedNode.condition.type.startsWith('relationship-')}
+                <label for="condition-relationship">Relationship with</label>
+                <select id="condition-relationship" bind:value={selectedNode.condition.key}>
+                  <option value="">Choose a configured relationship</option>
+                  {#each editingStory.relationships as relationship}
+                    <option value={relationship.id}>{relationshipTargetName(relationship.id)}</option>
+                  {/each}
+                </select>
+                <label for="condition-relationship-comparison">Comparison</label>
+                <select id="condition-relationship-comparison" bind:value={selectedNode.condition.type}>
+                  <option value="relationship-at-least">Is at least</option>
+                  <option value="relationship-at-most">Is at most</option>
+                </select>
+                {#if editingStory.relationships.length === 0}
+                  <p class="inspector-help">Configure a relationship in Story Relationships before checking one.</p>
+                {/if}
               {/if}
-              {#if ['flag-equals', 'stat-at-least', 'relationship-at-least'].includes(selectedNode.condition.type)}
+              {#if selectedNode.condition.type === 'flag-equals'}
                 <label for="condition-value">Comparison value</label>
-                <input id="condition-value" bind:value={selectedNode.condition.value}>
+                <select id="condition-value" bind:value={selectedNode.condition.value}>
+                  <option value="">Choose a value set by this story</option>
+                  {#each storyFlagValues(selectedNode.condition.key) as flagValue}
+                    <option value={flagValue}>{flagValue}</option>
+                  {/each}
+                </select>
+              {:else if selectedNode.condition.type === 'stat-at-least'}
+                <label for="condition-value">Minimum stat value</label>
+                <input id="condition-value" type="number" bind:value={selectedNode.condition.value}>
+              {:else if selectedNode.condition.type.startsWith('relationship-')}
+                <label for="condition-value">Relationship level</label>
+                <select id="condition-value" bind:value={selectedNode.condition.value}>
+                  {#each relationshipLevelOptions as level}
+                    <option value={level.value}>{level.label} ({level.value > 0 ? '+' : ''}{level.value})</option>
+                  {/each}
+                </select>
+                <div class="effect-preview">
+                  <span>WHEN EVALUATED</span>
+                  <strong>
+                    If the relationship with {relationshipTargetName(String(selectedNode.condition.key || ''))}
+                    is {selectedNode.condition.type === 'relationship-at-most' ? 'at most' : 'at least'}
+                    {relationshipLevelOptions.find((level) => level.value === Number(selectedNode.condition.value))?.label ?? selectedNode.condition.value},
+                    follow the true branch.
+                  </strong>
+                </div>
               {/if}
               <div class="route-label">When true</div>
               <div class="route-control">
@@ -5809,7 +6291,7 @@
     height: calc(100% - 38px);
 
     display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
   }
 
   .play-mode-fieldset {
@@ -5846,6 +6328,115 @@
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+  }
+
+  .relationship-settings {
+    background: #09111e;
+    border-bottom: 1px solid #2c3b54;
+
+    summary {
+      min-height: 36px;
+      padding: 8px 14px;
+      color: #9dcdf4;
+      cursor: pointer;
+      font-size: 0.7rem;
+      letter-spacing: 1px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      strong {
+        color: #647f9c;
+        font-size: 0.62rem;
+      }
+    }
+  }
+
+  .relationship-settings-content {
+    max-height: 280px;
+    padding: 12px 14px 16px;
+    overflow-y: auto;
+    border-top: 1px solid #1f3045;
+  }
+
+  .relationship-settings-heading {
+    margin-bottom: 12px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+
+    p {
+      max-width: 75ch;
+      color: #8ea5bd;
+      font-size: 0.7rem;
+      line-height: 1.5;
+    }
+
+    button {
+      flex: 0 0 auto;
+    }
+  }
+
+  .relationship-config-list {
+    display: grid;
+    gap: 8px;
+
+    article {
+      padding: 10px;
+      background: #070d18;
+      border: 1px solid #294d6d;
+
+      display: grid;
+      grid-template-columns: minmax(170px, 1.5fr) repeat(3, minmax(100px, 0.7fr)) auto auto;
+      align-items: end;
+      gap: 8px;
+    }
+
+    label {
+      min-width: 0;
+
+      display: grid;
+      gap: 4px;
+
+      > span {
+        color: #82bced;
+        font-size: 0.58rem;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+      }
+    }
+
+    input,
+    select {
+      width: 100%;
+      min-width: 0;
+    }
+  }
+
+  .relationship-visible-toggle {
+    min-height: 40px;
+    grid-template-columns: auto 1fr !important;
+    align-items: center;
+
+    input {
+      width: auto;
+    }
+  }
+
+  .relationship-remove {
+    color: #fca5a5;
+    border-color: #7f1d1d;
+  }
+
+  .relationship-empty {
+    padding: 12px;
+    color: #7f96ae;
+    background: #070d18;
+    border: 1px dashed #294d6d;
+    font-size: 0.72rem;
   }
 
   .map-tabs,
@@ -5931,6 +6522,20 @@
       color: #9aafc4;
       font-size: 0.68rem;
       line-height: 1.5;
+    }
+  }
+
+  .relationship-amount-buttons {
+    margin: 7px 0 12px;
+
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+
+    button {
+      min-width: 0;
+      color: #b9dcf8;
+      border-color: #315f87;
     }
   }
 
@@ -7895,6 +8500,10 @@
     .editor-workspace {
       grid-template-columns: minmax(0, 1fr) 8px var(--inspector-width, 290px);
     }
+
+    .relationship-config-list article {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 800px) {
@@ -7968,7 +8577,8 @@
 
     .editor-toolbar.mobile-collapsed > :not(.mobile-toolbar-toggle),
     .editor-toolbar.mobile-collapsed + .map-toolbar,
-    .editor-toolbar.mobile-collapsed + .map-toolbar + .graph-position-help {
+    .editor-toolbar.mobile-collapsed + .map-toolbar + .relationship-settings,
+    .editor-toolbar.mobile-collapsed + .map-toolbar + .relationship-settings + .graph-position-help {
       display: none;
     }
 
@@ -7986,6 +8596,19 @@
     .mode-toggles,
     .cast-controls {
       width: max-content;
+    }
+
+    .relationship-settings-heading {
+      align-items: stretch;
+      flex-direction: column;
+
+      button {
+        width: 100%;
+      }
+    }
+
+    .relationship-config-list article {
+      grid-template-columns: 1fr;
     }
 
     .node-type-grid {

@@ -147,6 +147,7 @@ export function createStoryRepository(databasePath) {
         playModes: existing.playModes,
         mainCharacterIds: existing.mainCharacterIds,
         characterIds: existing.characterIds,
+        relationships: existing.relationships,
         theme: existing.theme,
         supportedMinigames: existing.supportedMinigames
       });
@@ -290,6 +291,7 @@ function createStoryDocument(input) {
     playModes,
     mainCharacterIds: normalizeMainCharacterIds(input.mainCharacterIds),
     characterIds: normalizeCharacterIds(input.characterIds, input.mainCharacterIds),
+    relationships: normalizeRelationships(input.relationships),
     nodes: startNodes,
     theme: input.theme ?? {
       id: 'default-terminal',
@@ -329,6 +331,7 @@ function normalizeStoryDocument(document) {
     playModes: normalizePlayModes(document.playModes),
     mainCharacterIds: normalizeMainCharacterIds(document.mainCharacterIds),
     characterIds: normalizeCharacterIds(document.characterIds, document.mainCharacterIds),
+    relationships: normalizeRelationships(document.relationships),
     singleplayerInitialSceneId: String(
       document.singleplayerInitialSceneId
         ?? document.initialSceneIds?.p1
@@ -465,6 +468,53 @@ function normalizeCharacterIds(value, mainCharacterIds) {
     .filter(Boolean);
 
   return [...new Set(characterIds)];
+}
+
+function normalizeRelationships(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized = [];
+  const relationshipIds = new Set();
+
+  for (const relationship of value) {
+    const characterId = String(relationship?.characterId ?? '').trim();
+    const id = characterId === 'other-player'
+      ? 'other-player'
+      : characterId;
+
+    if (!id || relationshipIds.has(id)) {
+      continue;
+    }
+
+    const requestedMinimum = Number(relationship?.minimum ?? -5);
+    const requestedMaximum = Number(relationship?.maximum ?? 5);
+    const safeMinimum = Number.isFinite(requestedMinimum) ? requestedMinimum : -5;
+    const safeMaximum = Number.isFinite(requestedMaximum) ? requestedMaximum : 5;
+    const requestedInitialValue = Number(relationship?.initialValue ?? 0);
+    const minimum = Math.min(safeMinimum, safeMaximum);
+    const maximum = Math.max(safeMinimum, safeMaximum);
+    const initialValue = Math.min(
+      maximum,
+      Math.max(
+        minimum,
+        Number.isFinite(requestedInitialValue) ? requestedInitialValue : 0
+      )
+    );
+
+    normalized.push({
+      id,
+      characterId,
+      initialValue,
+      minimum,
+      maximum,
+      visible: relationship?.visible !== false
+    });
+    relationshipIds.add(id);
+  }
+
+  return normalized;
 }
 
 function normalizeOptionalId(value) {

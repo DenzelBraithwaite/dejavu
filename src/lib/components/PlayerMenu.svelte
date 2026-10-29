@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { localPlayer } from '../stores/campaign';
+  import { campaignState, localPlayer } from '../stores/campaign';
+  import { libraryState } from '../stores/library';
   import location from '../stores/location';
 </script>
 
@@ -8,9 +9,13 @@
 
   <div class="player-content">
     <p class="eyebrow">ACTIVE STORY IDENTITY</p>
-    <h1 id="player-menu-title">{$localPlayer?.name ?? 'No player loaded'}</h1>
+    <h1 id="player-menu-title">
+      {$libraryState.activeStoryId && $campaignState?.story && $localPlayer
+        ? $localPlayer.name
+        : 'No player loaded'}
+    </h1>
 
-    {#if $localPlayer}
+    {#if $libraryState.activeStoryId && $campaignState?.story && $localPlayer}
       <div class="player-grid">
         <article class="identity-card">
           <span>STORY PLAYER</span>
