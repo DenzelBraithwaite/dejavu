@@ -6,6 +6,14 @@
   import { Item } from './index';
   import { activeCharacter } from '../stores/characters';
 
+  type NavigationItem = {
+    color: string;
+    description: string;
+    iconType: string;
+    location: string;
+    title: string;
+  };
+
   // props
   export let sidebarExpanded = true;
   export let chatUnreadCount = 0;
@@ -13,7 +21,78 @@
   export let storyModeActive = false;
   export let storyToolsVisible = false;
 
-  const createEvent = createEventDispatcher();
+  const storyNavigationItems: NavigationItem[] = [
+    {
+      color: 'blue-spectrum-1',
+      description: 'View this player’s story stats',
+      iconType: 'player',
+      location: 'player',
+      title: 'Player'
+    },
+    {
+      color: 'blue-spectrum-2',
+      description: 'View story items and effects',
+      iconType: 'bag',
+      location: 'bag',
+      title: 'Bag'
+    },
+    {
+      color: 'blue-spectrum-3',
+      description: 'Review this cartridge’s history',
+      iconType: 'journal',
+      location: 'journal',
+      title: 'Logs'
+    },
+    {
+      color: 'blue-spectrum-4',
+      description: 'Save or restore this story',
+      iconType: 'save',
+      location: 'saves',
+      title: 'Saves'
+    }
+  ];
+  const primaryNavigationItems: NavigationItem[] = [
+    {
+      color: 'green',
+      description: 'Select and load stories',
+      iconType: 'library',
+      location: 'library',
+      title: 'Library'
+    },
+    {
+      color: 'purple',
+      description: 'Browse coded game modules',
+      iconType: 'gamepad',
+      location: 'minigames',
+      title: 'Minigames'
+    },
+    {
+      color: 'pink',
+      description: 'Create and manage the cast',
+      iconType: 'player',
+      location: 'character',
+      title: 'Characters'
+    },
+    {
+      color: 'orange',
+      description: 'Create and manage stories',
+      iconType: 'editor',
+      location: 'editor',
+      title: 'Editor'
+    },
+    {
+      color: 'grey',
+      description: 'Audio and local preferences',
+      iconType: 'settings',
+      location: 'settings',
+      title: 'Settings'
+    }
+  ];
+  const dispatch = createEventDispatcher();
+
+  function selectPage(page: string): void {
+    dispatch('select', page);
+  }
 </script>
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -25,7 +104,9 @@
       class:rotate={!sidebarExpanded}
       type="button"
       aria-label={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-      on:click={() => createEvent('toggle-sidebar')}
+      on:click={() => {
+        dispatch('toggle-sidebar');
+      }}
     >
       <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M19 15V9"/>
@@ -36,29 +117,26 @@
     <div class:story-navigation-group--active={storyModeActive} class="story-navigation-group">
       {#if storyToolsVisible}
         <div class="story-tools" aria-label="Cartridge tools">
-          <Item on:click={() => createEvent('select', 'player')} collapsed={!sidebarExpanded} color={'blue-spectrum-1'} iconType={'player'} label="Player">
-            <span slot="title">Player</span>
-            <span slot="description">View this player’s story stats</span>
-          </Item>
-
-          <Item on:click={() => createEvent('select', 'bag')} collapsed={!sidebarExpanded} color={'blue-spectrum-2'} iconType={'bag'} label="Bag">
-            <span slot="title">Bag</span>
-            <span slot="description">View story items and effects</span>
-          </Item>
-
-          <Item on:click={() => createEvent('select', 'journal')} collapsed={!sidebarExpanded} color={'blue-spectrum-3'} iconType={'journal'} label="Logs">
-            <span slot="title">Logs</span>
-            <span slot="description">Review this cartridge’s history</span>
-          </Item>
-
-          <Item on:click={() => createEvent('select', 'saves')} collapsed={!sidebarExpanded} color={'blue-spectrum-4'} iconType={'save'} label="Saves">
-            <span slot="title">Saves</span>
-            <span slot="description">Save or restore this story</span>
-          </Item>
+          {#each storyNavigationItems as item}
+            <Item
+              on:click={() => {
+                selectPage(item.location);
+              }}
+              collapsed={!sidebarExpanded}
+              color={item.color}
+              iconType={item.iconType}
+              label={item.title}
+            >
+              <span slot="title">{item.title}</span>
+              <span slot="description">{item.description}</span>
+            </Item>
+          {/each}
 
           {#if chatAvailable}
             <Item
-              on:click={() => createEvent('toggle-chat')}
+              on:click={() => {
+                dispatch('toggle-chat');
+              }}
               collapsed={!sidebarExpanded}
               color={'blue-spectrum-5'}
               iconType={'chat'}
@@ -72,7 +150,15 @@
         </div>
       {/if}
 
-      <Item on:click={() => createEvent('select', 'terminal')} collapsed={!sidebarExpanded} color={'blue-spectrum-6'} iconType={'terminal'} label="Cartridge">
+      <Item
+        on:click={() => {
+          selectPage('terminal');
+        }}
+        collapsed={!sidebarExpanded}
+        color="blue-spectrum-6"
+        iconType="terminal"
+        label="Cartridge"
+      >
         <span slot="title">Cartridge</span>
         <span slot="description">Play the inserted story</span>
       </Item>
@@ -82,30 +168,20 @@
       {/if}
     </div>
 
-    <Item on:click={() => createEvent('select', 'library')} collapsed={!sidebarExpanded} color={'green'} iconType={'library'} label="Library">
-      <span slot="title">Library</span>
-      <span slot="description">Select and load stories</span>
-    </Item>
-
-    <Item on:click={() => createEvent('select', 'minigames')} collapsed={!sidebarExpanded} color={'purple'} iconType={'gamepad'} label="Minigames">
-      <span slot="title">Minigames</span>
-      <span slot="description">Browse coded game modules</span>
-    </Item>
-
-    <Item on:click={() => createEvent('select', 'character')} collapsed={!sidebarExpanded} color={'pink'} iconType={'player'} label="Characters">
-      <span slot="title">Characters</span>
-      <span slot="description">Create and manage the cast</span>
-    </Item>
-
-    <Item on:click={() => createEvent('select', 'editor')} collapsed={!sidebarExpanded} color={'orange'} iconType={'editor'} label="Editor">
-      <span slot="title">Editor</span>
-      <span slot="description">Create and manage stories</span>
-    </Item>
-
-    <Item on:click={() => createEvent('select', 'settings')} collapsed={!sidebarExpanded} color={'grey'} iconType={'settings'} label="Settings">
-      <span slot="title">Settings</span>
-      <span slot="description">Audio and local preferences</span>
-    </Item>
+    {#each primaryNavigationItems as item}
+      <Item
+        on:click={() => {
+          selectPage(item.location);
+        }}
+        collapsed={!sidebarExpanded}
+        color={item.color}
+        iconType={item.iconType}
+        label={item.title}
+      >
+        <span slot="title">{item.title}</span>
+        <span slot="description">{item.description}</span>
+      </Item>
+    {/each}
   </div>
 
   {#if $activeCharacter}
@@ -114,7 +190,9 @@
       class:account-summary--collapsed={!sidebarExpanded}
       type="button"
       aria-label={`View or change account: ${$activeCharacter.name}`}
-      on:click={() => createEvent('show-account-selector')}
+      on:click={() => {
+        dispatch('show-account-selector');
+      }}
     >
       {#if $activeCharacter.images.normal}
         <img
@@ -146,8 +224,8 @@
     background-color: $backgroundColor;
     padding: 12px;
     box-shadow: 4px 0 16px var(--box-shadow-color);
-    transition: all 0.5s ease-out; // Match this to .client transition speed (or don't 😅)
-    border-radius: 8px 0 0 8px; // left side only, matches .screen right side border-radius
+    transition: width 0.5s ease-out;
+    border-radius: 8px 0 0 8px;
     overflow: hidden;
 
     display: flex;
@@ -297,7 +375,7 @@
   }
 
   .sidebar-expanded {
-    width: 300px; // fixed for transition... doesn't react to % units
+    width: 300px;
   }
   
   .rotate {

@@ -1694,12 +1694,29 @@
       }
     }
 
-    &--pink { border-color: #ff4e9b; }
-    &--cyan { border-color: #00d7eb; }
-    &--green { border-color: #53e6a1; }
-    &--yellow { border-color: #f2d40e; }
-    &--blue { border-color: #4a98d9; }
-    &--purple { border-color: #9b72ff; }
+    &--pink {
+      border-color: #ff4e9b;
+    }
+
+    &--cyan {
+      border-color: #00d7eb;
+    }
+
+    &--green {
+      border-color: #53e6a1;
+    }
+
+    &--yellow {
+      border-color: #f2d40e;
+    }
+
+    &--blue {
+      border-color: #4a98d9;
+    }
+
+    &--purple {
+      border-color: #9b72ff;
+    }
   }
 
   .result-panel {

@@ -1,9 +1,9 @@
 <script lang="ts">
   // Transitions
-  import { fly, fade, blur } from 'svelte/transition';
+  import { blur } from 'svelte/transition';
 
-  // props
-  export let iconType = 'unkown';
+  // Props
+  export let iconType = 'unknown';
   export let color = 'grey';
   export let collapsed = false;
   export let badge = 0;
@@ -123,7 +123,12 @@
     background-color: #5f5a5a;
     border: 0;
     border-radius: var(--border-radius-small);
-    transition: all 0.2s ease-in-out;
+    transition:
+      border-color 0.2s ease-in-out,
+      box-shadow 0.2s ease-in-out,
+      margin 0.2s ease-in-out,
+      scale 0.2s ease-in-out,
+      transform 0.2s ease-in-out;
     margin-bottom: 8px;
     padding: 2px;
     width: 100%;
@@ -143,7 +148,7 @@
     }
 
     &:active {
-      transition: all 0.1s ease-in-out;
+      transition-duration: 0.1s;
       border: 2px solid var(--yellow);
     }
 

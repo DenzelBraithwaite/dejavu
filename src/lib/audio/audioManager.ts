@@ -1,3 +1,4 @@
+import { clamp } from '../helpers';
 import { audioSettings, getAudioSettings } from '../stores/audio';
 
 export type SceneAudio = {
@@ -29,6 +30,12 @@ type ActiveAudio = {
   startSeconds: number;
   stopSeconds: number | null;
   shouldLoop: boolean;
+};
+
+type TrackPlaybackSettings = {
+  categoryVolume: number;
+  createWhenDisabled: boolean;
+  enabled: boolean;
 };
 
 const activeMusic = new Map<string, ActiveAudio>();
@@ -102,27 +109,17 @@ export function playMusic(cue: SceneAudio): void {
     return;
   }
 
-  const id = cue.audioId?.trim() || cue.music;
-
-  if (activeMusic.has(id)) {
-    return;
-  }
-
   const settings = getAudioSettings();
-  const track = createTrack(cue.music, id, cue);
-  track.element.loop = track.shouldLoop && track.stopSeconds === null;
-  activeMusic.set(id, track);
-  configureSegment(activeMusic, track);
-  scheduleNaturalFadeOut(track, cue.fadeOutSeconds ?? 0);
-  prepareTrack(track, settings.musicVolume, settings.musicEnabled, cue.fadeInSeconds ?? 0);
-
-  track.element.addEventListener('ended', () => {
-    releaseTrack(activeMusic, id);
-  }, { once: true });
-
-  track.element.addEventListener('error', () => {
-    releaseTrack(activeMusic, id);
-  }, { once: true });
+  playTrack(
+    activeMusic,
+    cue.music,
+    cue,
+    {
+      categoryVolume: settings.musicVolume,
+      createWhenDisabled: true,
+      enabled: settings.musicEnabled
+    }
+  );
 }
 
 export function stopMusic(
@@ -147,26 +144,16 @@ export function playSound(cue: SceneAudio): void {
   }
 
   const settings = getAudioSettings();
-  const id = cue.audioId?.trim() || cue.sound;
-
-  if (!settings.soundsEnabled || activeSounds.has(id)) {
-    return;
-  }
-
-  const sound = createTrack(cue.sound, id, cue);
-  sound.element.loop = sound.shouldLoop && sound.stopSeconds === null;
-  activeSounds.set(id, sound);
-  configureSegment(activeSounds, sound);
-  scheduleNaturalFadeOut(sound, cue.fadeOutSeconds ?? 0);
-  prepareTrack(sound, settings.soundsVolume, settings.soundsEnabled, cue.fadeInSeconds ?? 0);
-
-  sound.element.addEventListener('ended', () => {
-    releaseTrack(activeSounds, id);
-  }, { once: true });
-
-  sound.element.addEventListener('error', () => {
-    releaseTrack(activeSounds, id);
-  }, { once: true });
+  playTrack(
+    activeSounds,
+    cue.sound,
+    cue,
+    {
+      categoryVolume: settings.soundsVolume,
+      createWhenDisabled: false,
+      enabled: settings.soundsEnabled
+    }
+  );
 }
 
 export function stopSounds(fadeOutSeconds = 0): void {
@@ -201,6 +188,38 @@ export function resumeStoryAudio(): void {
   }
 }
 
+function playTrack(
+  collection: Map<string, ActiveAudio>,
+  source: string,
+  cue: SceneAudio,
+  settings: TrackPlaybackSettings
+): void {
+  const id = cue.audioId?.trim() || source;
+
+  if ((!settings.enabled && !settings.createWhenDisabled) || collection.has(id)) {
+    return;
+  }
+
+  const track = createTrack(source, id, cue);
+  track.element.loop = track.shouldLoop && track.stopSeconds === null;
+  collection.set(id, track);
+  configureSegment(collection, track);
+  scheduleNaturalFadeOut(track, cue.fadeOutSeconds ?? 0);
+  prepareTrack(
+    track,
+    settings.categoryVolume,
+    settings.enabled,
+    cue.fadeInSeconds ?? 0
+  );
+
+  const release = (): void => {
+    releaseTrack(collection, id);
+  };
+
+  track.element.addEventListener('ended', release, { once: true });
+  track.element.addEventListener('error', release, { once: true });
+}
+
 function createTrack(source: string, id: string, cue: SceneAudio): ActiveAudio {
   const partialRange = cue.audioRangeMode === 'partial';
   const startSeconds = partialRange
@@ -213,8 +232,8 @@ function createTrack(source: string, id: string, cue: SceneAudio): ActiveAudio {
   return {
     element: new Audio(source),
     id,
-    layer: Math.min(10, Math.max(1, Math.round(Number(cue.audioLayer ?? 1)))),
-    volume: Math.min(1, Math.max(0, Number(cue.audioVolume ?? 1))),
+    layer: clamp(Math.round(Number(cue.audioLayer ?? 1)), 1, 10),
+    volume: clamp(Number(cue.audioVolume ?? 1), 0, 1),
     fadeFrame: null,
     startSeconds,
     stopSeconds: configuredStop > startSeconds ? configuredStop : null,

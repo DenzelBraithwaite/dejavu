@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { applySceneAudio, unlockAudioPlayback } from '../audio/audioManager';
+  import { clamp } from '../helpers';
   import { socket } from '../socket';
   import {
     characterLibraryState,
@@ -13,8 +14,7 @@
     libraryState,
     type AudioAsset,
     type StoryDocument,
-    type StoryNode,
-    type StoryRelationship
+    type StoryNode
   } from '../stores/library';
   import location from '../stores/location';
   import { campaignState } from '../stores/campaign';
@@ -401,7 +401,7 @@
   }
 
   function adjustMapZoom(delta: number): void {
-    const nextZoom = Math.min(maximumMapZoom, Math.max(minimumMapZoom, mapZoom + delta));
+    const nextZoom = clamp(mapZoom + delta, minimumMapZoom, maximumMapZoom);
     mapZoom = Number(nextZoom.toFixed(1));
   }
 
@@ -453,7 +453,11 @@
 
     event.preventDefault();
     const delta = event.key === 'ArrowLeft' ? 20 : -20;
-    inspectorWidth = Math.min(maximumInspectorWidth, Math.max(minimumInspectorWidth, inspectorWidth + delta));
+    inspectorWidth = clamp(
+      inspectorWidth + delta,
+      minimumInspectorWidth,
+      maximumInspectorWidth
+    );
   }
 
   onMount(() => {
@@ -1863,7 +1867,7 @@
 
     const input = event.currentTarget as HTMLInputElement;
     const requestedCount = Math.trunc(Number(input.value));
-    const choiceCount = Math.min(5, Math.max(2, requestedCount || 2));
+    const choiceCount = clamp(requestedCount || 2, 2, 5);
     const choices = [...(selectedNode.choices ?? [])];
 
     // Preserve existing routes while adding or trimming only the requested rows.

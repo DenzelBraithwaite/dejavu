@@ -1,4 +1,5 @@
 import { get, writable } from 'svelte/store';
+import { clamp } from '../helpers';
 
 export type AudioSettings = {
   musicEnabled: boolean;
@@ -74,5 +75,5 @@ function normalizeVolume(value: number): number {
     return 0;
   }
 
-  return Math.min(1, Math.max(0, numericValue));
+  return clamp(numericValue, 0, 1);
 }

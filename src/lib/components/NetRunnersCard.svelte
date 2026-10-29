@@ -1,9 +1,6 @@
 <script lang="ts">
-  // Hooks
-  import { createEventDispatcher } from "svelte";
-
   // Stores
-  import { netRunnersGameState, type NetRunnersGameState } from '../stores/netRunnersGameState';
+  import { netRunnersGameState } from '../stores/netRunnersGameState';
 
   // Props
   export let color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string | undefined = undefined;
@@ -13,19 +10,22 @@
   export let canHover = false;
   export let bettingCard = false;
   export let backgroundRepeat = true;
+
+  const cardLetters = {
+    purple: 'PC',
+    pink: 'PM',
+    yellow: 'YM',
+    cyan: 'CS',
+    blue: 'BE'
+  } as const;
   
-  const createEvent = createEventDispatcher();
   $: cardSelected = $netRunnersGameState.p1.colorBet === color;
 
-  // Based on color, determines what letter the card should display in corners.
-  function setCardLetter(color: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string = ''): 'PC' | 'PM' | 'YM' | 'CS' | 'BE' | '**' {
-    if (color === 'purple') return 'PC';
-    if (color === 'pink') return 'PM';
-    if (color === 'yellow') return 'YM';
-    if (color === 'cyan') return 'CS';
-    if (color === 'blue') return 'BE';
-
-    return '**'
+  // Each faction color has a two-letter code displayed in the card corners.
+  function setCardLetter(
+    cardColor: 'pink' | 'purple' | 'yellow' | 'cyan' | 'blue' | string = ''
+  ): 'PC' | 'PM' | 'YM' | 'CS' | 'BE' | '**' {
+    return cardLetters[cardColor as keyof typeof cardLetters] ?? '**';
   }
 </script>
 
@@ -53,10 +53,10 @@
 <style lang="scss">
   @use 'sass:color';
   $purple: #9962ff;
-  $pink: #F837CD;
-  $yellow: #F2D40E;
-  $cyan: #02FBFB;
-  $blue: #0779FC;
+  $pink: #f837cd;
+  $yellow: #f2d40e;
+  $cyan: #02fbfb;
+  $blue: #0779fc;
 
   .card {
     cursor: default;
@@ -67,7 +67,7 @@
     width: 75px;
     padding: 4px;
     border-radius: 4px 20px;
-    transition: all 0.2s ease-in-out;
+    transition: scale 0.2s ease-in-out;
     
     background-position: center;
     background-size: contain;
@@ -80,7 +80,7 @@
 
   .card__purple {
     border: 4px double $purple;
-    background-color: darken($purple, 55%);
+    background-color: color.adjust($purple, $lightness: -55%);
     background-image: url('/purple_cougar.png');
     box-shadow: 0 2px 6px $purple;
   }
@@ -92,7 +92,7 @@
   
   .card__pink {
     border: 4px double $pink;
-    background-color: darken($pink, 45%);
+    background-color: color.adjust($pink, $lightness: -45%);
     background-image: url('/pink_mouse.png');
     box-shadow: 0 2px 6px $pink;
   }
@@ -104,7 +104,7 @@
   
   .card__yellow {
     border: 4px double $yellow;
-    background-color: darken($yellow, 35%);
+    background-color: color.adjust($yellow, $lightness: -35%);
     background-image: url('/yellow_monkey.png');
     box-shadow: 0 2px 6px $yellow;
   }
@@ -116,7 +116,7 @@
   
   .card__cyan {
     border: 4px double $cyan;
-    background-color: darken($cyan, 35%);
+    background-color: color.adjust($cyan, $lightness: -35%);
     background-image: url('/cyan_shark.png');
     box-shadow: 0 2px 6px $cyan;
   }
@@ -128,7 +128,7 @@
   
   .card__blue {
     border: 4px double $blue;
-    background-color: darken($blue, 35%);
+    background-color: color.adjust($blue, $lightness: -35%);
     background-image: url('/blue_eagle.png');
     box-shadow: 0 2px 6px $blue;
   }

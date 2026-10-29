@@ -26,7 +26,10 @@
     font-weight: bold;
     text-align: center;
     border-radius: var(--border-radius-small);
-    transition: all 0.3s ease-out;
+    transition:
+      background-color 0.3s ease-out,
+      border-color 0.3s ease-out,
+      color 0.3s ease-out;
 
     &:hover {
       border: 2px solid var(--slate-900);
@@ -41,7 +44,10 @@
     color: #5bc955;
     background-color: #115a0e;
     border-radius: var(--border-radius-small);
-    transition: all 0.2s ease-out;
+    transition:
+      background-color 0.2s ease-out,
+      color 0.2s ease-out,
+      padding 0.2s ease-out;
     padding: 0.5rem 1rem;
     
     &:hover {

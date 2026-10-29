@@ -4,7 +4,7 @@
   import { socket } from '../socket';
   import { campaignState } from '../stores/campaign';
   import location from '../stores/location';
-  import { sessionState, type PlayerId } from '../stores/session';
+  import { sessionState } from '../stores/session';
   import { traceRaceServerState } from '../stores/traceRaceSession';
   import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { netRunnersGameState } from '../stores/netRunnersGameState';
@@ -56,7 +56,6 @@
   let localPlayerExposure = 0;
   let localCpuExposure = 0;
   let localExposureRevealNodes: number[] = [];
-  let localExposureRevealPosition: number | null = null;
   let localSearchRevealNodes: number[] = [];
   let localTrackers: Tracker[] = [];
   let localTurn = 1;
@@ -191,7 +190,6 @@
     localPlayerExposure = 0;
     localCpuExposure = 0;
     localExposureRevealNodes = [];
-    localExposureRevealPosition = null;
     localSearchRevealNodes = [];
     localTrackers = [];
     localPlayerLastMove = null;
@@ -472,13 +470,11 @@
   function updateLocalExposureReveal(): void {
     if (localCpuExposure < 7) {
       localExposureRevealNodes = [];
-      localExposureRevealPosition = null;
       return;
     }
 
     const nextReveal = createExposureCluster(localCpuPosition);
     localExposureRevealNodes = nextReveal;
-    localExposureRevealPosition = localCpuPosition;
     addLocalIntel(`EXPOSURE LEAK: Rival occupies one of these 2 nodes: ${formatNodeList(nextReveal)}.`);
   }
 

@@ -160,10 +160,6 @@
     }
   }
 
-  function updateWager(amount: number): void {
-    wager = Math.min(activeBalance, Math.max(0, wager + amount));
-  }
-
   function lockWager(): void {
     if (wager < 0 || wager > activeBalance) {
       return;

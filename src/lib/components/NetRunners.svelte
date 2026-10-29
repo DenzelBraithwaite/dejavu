@@ -294,7 +294,7 @@
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.fullDeck = [...fullDeckCopy];
       $netRunnersGameState.cardsDrawn = [...$netRunnersGameState.cardsDrawn, card]; // looks better this way
-      AdvanceColor(card);
+      advanceColor(card);
 
       return $netRunnersGameState
     });
@@ -305,7 +305,7 @@
   }
   
   // Moves any card if their color matches the flipped card's color.
-  function AdvanceColor(card: CardColor): void {
+  function advanceColor(card: CardColor): void {
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.points[card as 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue'] += 1;
       if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
@@ -317,19 +317,15 @@
     });
   }
 
-  // Checks each turn if someone has reached the end
-  function hasPlayerFinishedRace(): boolean {
-    const playerPoints = [$netRunnersGameState.p1.points, $netRunnersGameState.p2.points, $netRunnersGameState.p3.points, $netRunnersGameState.p4.points];
-    return playerPoints.some(p => p === 7);
-  }
-
   // Checks each turn if any color (even if nobody bet on it) has reached the end
   function hasColorFinishedRace(): boolean {
-    return Object.values($netRunnersGameState.points).some(points => points === 7);
+    return Object.values($netRunnersGameState.points).some((points) => points === 7);
   }
 
   function returnWinningColor(): CardColor {
-    const winningColor = Object.entries($netRunnersGameState.points).find(([color, points]) => points === 7);
+    const winningColor = Object.entries($netRunnersGameState.points).find(
+      ([, points]) => points === 7
+    );
 
     return winningColor?.[0] ?? '';
   }
@@ -561,16 +557,6 @@
     netRunnersGameState.set({...$netRunnersGameState, lastWinningColor: ''});
   }
 
-  // Handles user setting their bet amount, +/- amount.
-  function updateBetAmount(amount: 1 | 10 | 100 | 1000 | -1 | -10 | -100 | -1000): void {
-    netRunnersGameState.update($netRunnersGameState => {
-      $netRunnersGameState.p1.amountBet += amount;
-      if ($netRunnersGameState.p1.amountBet <= 0) $netRunnersGameState.p1.amountBet = 0;
-      if ($netRunnersGameState.p1.amountBet > $netRunnersGameState.p1.money) $netRunnersGameState.p1.amountBet = $netRunnersGameState.p1.money;
-      return $netRunnersGameState
-    });
-  }
-
   // Determines who has lost and won, this greys out the losing bets.
   function setLosers(): void {
     netRunnersGameState.update($netRunnersGameState => {
@@ -663,10 +649,6 @@
 
   function showColorOdds(): void {
     netRunnersGameState.set({...$netRunnersGameState, colorOddsVisible: true});
-  }
-  
-  function hideColorOdds(): void {
-    netRunnersGameState.set({...$netRunnersGameState, colorOddsVisible: false});
   }
   
   function showAllColorsProgress(): void {
@@ -996,6 +978,7 @@
 
 <style lang="scss">
   @use 'sass:color';
+
   $terminalBg: #241c55;
   $purple: #9962ff;
   $pink: #F837CD;
@@ -1030,14 +1013,14 @@
     height: 100%;
     max-height: 100%;
     width: 100%;
-    max-width: 1100px; // 
+    max-width: 1100px;
     border: 2px solid $yellow;
     border-top-width: 0;
     border-bottom-width: 4px;
     border-radius: var(--border-radius-small);
     padding: 20px;
     overflow-wrap: break-word;
-    transition: all 0.5s ease-out;
+    transition: border-color 0.5s ease-out, box-shadow 0.5s ease-out;
     margin-bottom: 0;
     box-shadow: 0 0 20px color.scale($yellow, $alpha: -50%);
     z-index: 0;
@@ -1384,7 +1367,7 @@
 
   .lane {
     border-radius: 0 32px 32px 0;
-    transition: all 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out;
   }
 
   .lane__purple {
@@ -1721,31 +1704,31 @@
   
   .progress-circle__purple {
     border: 1px solid $purple;
-    background-color: darken($purple, 20%);
+    background-color: color.adjust($purple, $lightness: -20%);
     box-shadow: 0 0 6px color.scale($purple, $alpha: -5%);
   }
 
   .progress-circle__pink {
     border: 1px solid $pink;
-    background-color: darken($pink, 20%);
+    background-color: color.adjust($pink, $lightness: -20%);
     box-shadow: 0 0 6px color.scale($pink, $alpha: -5%);
   }
 
   .progress-circle__yellow {
     border: 1px solid $yellow;
-    background-color: darken($yellow, 20%);
+    background-color: color.adjust($yellow, $lightness: -20%);
     box-shadow: 0 0 6px color.scale($yellow, $alpha: -5%);
   }
 
   .progress-circle__cyan {
     border: 1px solid $cyan;
-    background-color: darken($cyan, 20%);
+    background-color: color.adjust($cyan, $lightness: -20%);
     box-shadow: 0 0 6px color.scale($cyan, $alpha: -5%);
   }
 
   .progress-circle__blue {
     border: 1px solid $blue;
-    background-color: darken($blue, 20%);
+    background-color: color.adjust($blue, $lightness: -20%);
     box-shadow: 0 0 6px color.scale($blue, $alpha: -5%);
   }
 

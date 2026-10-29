@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { clamp } from '../helpers';
   import { campaignState, localPlayer } from '../stores/campaign';
   import { characterLibraryState } from '../stores/characters';
   import { libraryState, type StoryRelationship } from '../stores/library';
@@ -85,10 +86,7 @@
       return 50;
     }
 
-    return Math.min(100, Math.max(
-      0,
-      ((value - relationship.minimum) / range) * 100
-    ));
+    return clamp(((value - relationship.minimum) / range) * 100, 0, 100);
   }
 </script>
 

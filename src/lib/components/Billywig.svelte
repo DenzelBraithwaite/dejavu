@@ -58,7 +58,6 @@
   let bankScore = 0;
   let playerCards: number[] = [];
   let bankCards: number[] = [];
-  let lastPlayerCard: number | null = null;
   let nextCard: number | null = null;
   let statusLine = '';
   let tip = tips[0];
@@ -82,17 +81,12 @@
     bankScore = randomInteger(6, 9);
     playerCards = [];
     bankCards = [];
-    lastPlayerCard = null;
     nextCard = null;
     statusLine = '';
     result = null;
     waitingForPartner = false;
     completionError = '';
     tip = tips[Math.floor(Math.random() * tips.length)];
-  }
-
-  function updateBet(amount: number): void {
-    bet = Math.min(balance, Math.max(0, bet + amount));
   }
 
   function confirmBet(): void {
@@ -115,7 +109,6 @@
     }
 
     const card = drawFrom(playerDeck);
-    lastPlayerCard = card;
     playerCards = [...playerCards, card];
     playerScore += card;
 

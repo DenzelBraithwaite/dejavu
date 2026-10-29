@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { clamp } from '../helpers';
 
   export let wager = 0;
   export let balance = 0;
@@ -11,7 +12,7 @@
 
   function adjust(amount: number): void {
     const availableBalance = Math.max(0, balance);
-    wager = Math.min(availableBalance, Math.max(0, wager + amount));
+    wager = clamp(wager + amount, 0, availableBalance);
   }
 </script>
 
