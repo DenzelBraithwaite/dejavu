@@ -4511,12 +4511,7 @@
       </p>
 
       <div class="editor-workspace" style={`--inspector-width: ${inspectorWidth}px`}>
-        <div
-          class="flow-canvas"
-          class:selecting-route={Boolean(linkSelection)}
-          aria-label="Story flow"
-          bind:this={flowCanvasElement}
-        >
+        <div class="flow-panel">
           {#if linkSelection}
             <div class="link-mode-banner" role="status">
               <span>Select a destination for {linkSelection.label.toLowerCase()}.</span>
@@ -4547,10 +4542,16 @@
           </div>
 
           <div
-            class="flow-lanes"
-            class:singleplayer-map={activeStoryMap === 'singleplayer'}
-            style={`zoom: ${mapZoom}`}
+            class="flow-canvas"
+            class:selecting-route={Boolean(linkSelection)}
+            aria-label="Story flow"
+            bind:this={flowCanvasElement}
           >
+            <div
+              class="flow-lanes"
+              class:singleplayer-map={activeStoryMap === 'singleplayer'}
+              style={`zoom: ${mapZoom}`}
+            >
             {#each lanes as lane (`${lane.id}:${storyRevision}`)}
               {@const laneGraph = getLaneGraph(lane.id)}
               <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -4735,6 +4736,7 @@
                 </button>
               </section>
             {/each}
+            </div>
           </div>
         </div>
 
@@ -7348,24 +7350,32 @@
     font-size: 1.2rem;
   }
 
-  .flow-canvas {
+  .flow-panel {
     position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .flow-canvas {
+    width: 100%;
+    height: 100%;
     padding: 18px;
+    box-sizing: border-box;
     overflow: auto;
     background-color: #050912;
     background-image:
       linear-gradient(#1472bf18 1px, transparent 1px),
       linear-gradient(90deg, #1472bf18 1px, transparent 1px);
     background-size: 24px 24px;
-
   }
 
   .map-zoom-controls {
-    position: sticky;
+    position: absolute;
     z-index: 7;
-    top: 0;
+    top: 18px;
+    right: 18px;
     width: max-content;
-    margin: 0 0 10px auto;
     padding: 4px;
     background: #07111dee;
     border: 1px solid #334155;
@@ -7375,7 +7385,7 @@
     gap: 4px;
 
     &.link-active {
-      top: 64px;
+      top: 82px;
     }
 
     button {
@@ -7393,10 +7403,15 @@
 
   .flow-lanes {
     min-width: max-content;
+    padding-top: 50px;
 
     display: flex;
     gap: clamp(28px, 4vw, 64px);
     align-items: stretch;
+  }
+
+  .flow-canvas.selecting-route .flow-lanes {
+    padding-top: 114px;
   }
 
   // A solo graph has one usable lane, so keep it visually balanced on desktop.
@@ -7415,10 +7430,11 @@
   }
 
   .link-mode-banner {
-    position: sticky;
+    position: absolute;
     z-index: 10;
-    top: 0;
-    margin-bottom: 14px;
+    top: 18px;
+    right: 18px;
+    left: 18px;
     padding: 10px 12px;
     color: #07111d;
     background: #02fbfb;
