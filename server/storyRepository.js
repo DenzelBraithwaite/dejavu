@@ -482,7 +482,7 @@ function normalizeRelationships(value) {
       ? 'other-player'
       : characterId;
 
-    if (!id || relationshipIds.has(id)) {
+    if (!id) {
       continue;
     }
 
@@ -501,15 +501,28 @@ function normalizeRelationships(value) {
       )
     );
 
-    normalized.push({
-      id,
-      characterId,
-      initialValue,
-      minimum,
-      maximum,
-      visible: relationship?.visible !== false
-    });
-    relationshipIds.add(id);
+    const playerIds = ['p1', 'p2'].includes(relationship?.playerId)
+      ? [relationship.playerId]
+      : ['p1', 'p2'];
+
+    for (const playerId of playerIds) {
+      const relationshipKey = `${playerId}:${id}`;
+
+      if (relationshipIds.has(relationshipKey)) {
+        continue;
+      }
+
+      normalized.push({
+        id,
+        characterId,
+        playerId,
+        initialValue,
+        minimum,
+        maximum,
+        visible: relationship?.visible !== false
+      });
+      relationshipIds.add(relationshipKey);
+    }
   }
 
   return normalized;

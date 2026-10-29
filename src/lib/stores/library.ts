@@ -110,6 +110,7 @@ export type EditorHandoff = {
 export type StoryRelationship = {
   id: string;
   characterId: string;
+  playerId: PlayerId;
   initialValue: number;
   minimum: number;
   maximum: number;

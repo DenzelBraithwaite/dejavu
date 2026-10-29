@@ -65,12 +65,14 @@ export function createCampaignState(story = null, options = {}) {
     },
     players: {
       p1: createPlayerState(
+        'p1',
         playerCharacters.p1,
         'Nova',
         DEFAULT_STATS.p1,
         relationshipDefinitions
       ),
       p2: createPlayerState(
+        sessionMode === 'singleplayer' ? 'p1' : 'p2',
         playerCharacters.p2,
         'Avona',
         DEFAULT_STATS.p2,
@@ -130,7 +132,13 @@ export function createCampaignState(story = null, options = {}) {
   return state;
 }
 
-function createPlayerState(character, fallbackName, fallbackStats, relationshipDefinitions) {
+function createPlayerState(
+  playerId,
+  character,
+  fallbackName,
+  fallbackStats,
+  relationshipDefinitions
+) {
   const defaultName = character?.name ?? fallbackName;
 
   return {
@@ -147,10 +155,14 @@ function createPlayerState(character, fallbackName, fallbackStats, relationshipD
     knownCharacters: [],
     statusEffects: [],
     relationships: Object.fromEntries(
-      relationshipDefinitions.map((relationship) => [
-        relationship.id,
-        Number(relationship.initialValue ?? 0)
-      ])
+      relationshipDefinitions
+        .filter((relationship) => (
+          !relationship.playerId || relationship.playerId === playerId
+        ))
+        .map((relationship) => [
+          relationship.id,
+          Number(relationship.initialValue ?? 0)
+        ])
     )
   };
 }
@@ -239,6 +251,10 @@ export function restoreCampaignState(candidate) {
   });
 
   for (const playerId of PLAYER_IDS) {
+    const relationshipPlayerId = restored.sessionMode === 'singleplayer'
+      ? 'p1'
+      : playerId;
+
     restored.players[playerId].relationships ??= {};
     restored.players[playerId].itemImages ??= {};
     restored.players[playerId].defaultName ??= restored.players[playerId].name;
@@ -246,7 +262,10 @@ export function restoreCampaignState(candidate) {
     restored.players[playerId].name = restored.players[playerId].customName
       || restored.players[playerId].defaultName;
 
-    for (const relationship of restored.relationshipDefinitions) {
+    for (const relationship of restored.relationshipDefinitions.filter(
+      (definition) => !definition.playerId
+        || definition.playerId === relationshipPlayerId
+    )) {
       restored.players[playerId].relationships[relationship.id]
         ??= Number(relationship.initialValue ?? 0);
     }
@@ -890,7 +909,11 @@ function applyAttachedCompanions(state, playerId, scene) {
   const applied = new Set(state.appliedCompanions?.[playerId] ?? []);
   const companions = state.story?.nodes.filter(
     (node) => node.attachedTo === scene.id
-      && (node.audience === 'both' || node.audience === playerId)
+      && (
+        node.audience === 'both'
+        || node.audience === playerId
+        || (state.sessionMode === 'singleplayer' && node.audience === 'p1')
+      )
   ) ?? [];
 
   for (const companion of companions) {
@@ -1180,9 +1203,13 @@ function applyEffects(state, playerId, effects) {
         ) + Number(value ?? 0);
         break;
       case 'adjust-relationship': {
+        const relationshipPlayerId = state.sessionMode === 'singleplayer'
+          ? 'p1'
+          : playerId;
         state.players[playerId].relationships ??= {};
         const relationship = state.relationshipDefinitions?.find(
           (definition) => definition.id === effect.key
+            && (!definition.playerId || definition.playerId === relationshipPlayerId)
         );
         const nextRelationshipValue = Number(
           state.players[playerId].relationships[effect.key] ?? 0

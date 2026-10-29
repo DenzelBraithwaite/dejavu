@@ -389,6 +389,7 @@
   let knownStoryFlags: string[] = [];
   let storySettingsOpen = false;
   let unprotectConfirmationOpen = false;
+  let relationshipSettingsPlayer: PlayerId = 'p1';
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -399,6 +400,10 @@
   }
 
   function openStorySettings(): void {
+    if (!editingStory?.playModes.multiplayer) {
+      relationshipSettingsPlayer = 'p1';
+    }
+
     storySettingsOpen = true;
     unprotectConfirmationOpen = false;
   }
@@ -440,7 +445,9 @@
     inspectorExpanded = true;
 
     tick().then(() => {
-      inspectorElement?.scrollTo({ top: 0 });
+      inspectorElement
+        ?.querySelector<HTMLElement>('.inspector-scroll-content')
+        ?.scrollTo({ top: 0 });
     });
   }
 
@@ -1081,7 +1088,22 @@
       }
     };
     prepared.characterIds ??= [];
-    prepared.relationships ??= [];
+    prepared.relationships = (prepared.relationships ?? []).flatMap((relationship) => {
+      if (relationship.playerId) {
+        return [relationship];
+      }
+
+      return [
+        {
+          ...relationship,
+          playerId: 'p1' as PlayerId
+        },
+        {
+          ...relationship,
+          playerId: 'p2' as PlayerId
+        }
+      ];
+    });
     prepared.protected ??= false;
     prepared.unavailableReason ??= '';
     prepared.singleplayerInitialSceneId ??= '';
@@ -2304,6 +2326,10 @@
       selectStoryMap(otherMap);
     }
 
+    if (!editingStory.playModes.multiplayer) {
+      relationshipSettingsPlayer = 'p1';
+    }
+
     refreshStory();
   }
 
@@ -2313,7 +2339,10 @@
     }
 
     const selectedIds = new Set(editingStory.relationships
-      .filter((_relationship, index) => index !== currentIndex)
+      .filter((relationship, index) => (
+        index !== currentIndex
+        && relationship.playerId === relationshipSettingsPlayer
+      ))
       .map((relationship) => relationship.characterId));
     const targets = speakerCharacters
       .filter((character) => !selectedIds.has(character.id))
@@ -2350,6 +2379,7 @@
       {
         id: target.id,
         characterId: target.id,
+        playerId: relationshipSettingsPlayer,
         initialValue: 0,
         minimum: -5,
         maximum: 5,
@@ -2416,6 +2446,42 @@
 
     return speakerCharacters.find((character) => character.id === relationshipId)?.name
       ?? relationshipId;
+  }
+
+  function configuredRelationshipsForPlayer(playerId: PlayerId): Array<{
+    relationship: StoryDocument['relationships'][number];
+    index: number;
+  }> {
+    return editingStory?.relationships.flatMap((relationship, index) => (
+      relationship.playerId === playerId
+        ? [{ relationship, index }]
+        : []
+    )) ?? [];
+  }
+
+  function relationshipsForNode(node: StoryNode | null): StoryDocument['relationships'] {
+    if (!editingStory || !node) {
+      return [];
+    }
+
+    const audience = node.map === 'singleplayer'
+      ? 'p1'
+      : node.audience ?? 'both';
+
+    if (audience === 'p1' || audience === 'p2') {
+      return editingStory.relationships.filter(
+        (relationship) => relationship.playerId === audience
+      );
+    }
+
+    const playerOneIds = new Set(editingStory.relationships
+      .filter((relationship) => relationship.playerId === 'p1')
+      .map((relationship) => relationship.id));
+
+    return editingStory.relationships.filter((relationship) => (
+      relationship.playerId === 'p2'
+      && playerOneIds.has(relationship.id)
+    ));
   }
 
   function nodeOrdinal(node: StoryNode): string {
@@ -3268,7 +3334,7 @@
     }
 
     if (['relationship-at-least', 'relationship-at-most'].includes(type)) {
-      return editingStory?.relationships[0]?.id ?? '';
+      return relationshipsForNode(selectedNode)[0]?.id ?? '';
     }
 
     if (type === 'decision-made') {
@@ -3453,7 +3519,7 @@
       'adjust-stat': { key: 'luck', value: 1 },
       'set-player-name': { key: '', value: '' },
       'discover-character': { key: '' },
-      'adjust-relationship': { key: editingStory?.relationships[0]?.id ?? '', value: 1 },
+      'adjust-relationship': { key: relationshipsForNode(selectedNode)[0]?.id ?? '', value: 1 },
       'install-mod': { key: 'neuro-link-chat' },
       'remove-mod': { key: 'neuro-link-chat' }
     };
@@ -3537,7 +3603,9 @@
   async function uploadImage(event: Event): Promise<void> {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
-    const previousScrollTop = inspectorElement?.scrollTop ?? 0;
+    const inspectorScrollElement = inspectorElement
+      ?.querySelector<HTMLElement>('.inspector-scroll-content');
+    const previousScrollTop = inspectorScrollElement?.scrollTop ?? 0;
 
     if (!file || !selectedNode || !['image', 'dialogue'].includes(selectedNode.type)) {
       return;
@@ -3579,8 +3647,8 @@
         refreshStory();
         await tick();
 
-        if (inspectorElement) {
-          inspectorElement.scrollTop = previousScrollTop;
+        if (inspectorScrollElement) {
+          inspectorScrollElement.scrollTop = previousScrollTop;
         }
 
         statusMessage = 'Image uploaded to the story host.';
@@ -4122,17 +4190,69 @@
             ⓘ Guide
           </button>
           <button type="button" on:click={openStorySettings}>
-            Story settings
+            Settings
           </button>
           <button type="button" disabled={saveInFlight || Boolean(storyStartIssue(editingStory))} on:click={requestPlaytest}>
             ▶ Play
           </button>
           <button class="primary-button" type="button" disabled={saveInFlight} on:click={() => saveStory()}>
-            {saveInFlight ? 'Saving…' : 'Save story'}
+            {saveInFlight ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
 
+      {#if storySettingsOpen}
+        <div class="node-picker-backdrop story-settings-backdrop" role="presentation" on:click|self={closeStorySettings}>
+          <section class="story-settings-modal" role="dialog" aria-modal="true" aria-labelledby="story-settings-title">
+            <header>
+              <div>
+                <p>CARTRIDGE CONFIGURATION</p>
+                <h2 id="story-settings-title">Story settings</h2>
+              </div>
+              <button type="button" aria-label="Close story settings" on:click={closeStorySettings}>×</button>
+            </header>
+
+            <div class="story-settings-content">
+              <section class="settings-section metadata-settings">
+                <div class="settings-section-heading">
+                  <div>
+                    <span>01</span>
+                    <h3>Story details</h3>
+                  </div>
+                  <label class="mode-checkbox story-protection-toggle">
+                    <input
+                      type="checkbox"
+                      checked={editingStory.protected}
+                      on:change={(event) => requestProtectionChange(event.currentTarget.checked)}
+                    >
+                    Protect from deletion
+                  </label>
+                </div>
+                <p class="field-help">Protection prevents deletion but never blocks editing.</p>
+                <div class="metadata-settings-grid">
+                  <label>
+                    <span>Story title</span>
+                    <input bind:value={editingStory.title} maxlength="80">
+                  </label>
+                  <label>
+                    <span>Author</span>
+                    <input bind:value={editingStory.author} maxlength="80">
+                  </label>
+                  <label class="description-field">
+                    <span>Description</span>
+                    <textarea bind:value={editingStory.description} maxlength="500" rows="4"></textarea>
+                  </label>
+                </div>
+              </section>
+
+              <section class="settings-section map-settings-section">
+                <div class="settings-section-heading">
+                  <div>
+                    <span>02</span>
+                    <h3>Maps and cast</h3>
+                  </div>
+                  <small>Choose the map you are configuring and its playable characters.</small>
+                </div>
       <div class="map-toolbar">
         <div class="map-tabs" aria-label="Story map">
           {#if editingStory.playModes.singleplayer}
@@ -4202,10 +4322,11 @@
           {/if}
         </div>
       </div>
+              </section>
 
-      <details class="start-settings" open>
+      <details class="start-settings settings-section" open>
         <summary>
-          <span>Story start</span>
+          <span><i>03</i> Story start</span>
           <strong>{storyStartIssue(editingStory) || 'Ready to play'}</strong>
         </summary>
         <div class="start-settings-content">
@@ -4279,15 +4400,31 @@
         </div>
       </details>
 
-      <details class="relationship-settings">
-        <summary>
-          <span>Relationships</span>
-          <strong>{editingStory.relationships.length} configured</strong>
-        </summary>
+      <section class="relationship-settings settings-section">
+        <div class="settings-section-heading relationship-section-heading">
+          <div>
+            <span>04</span>
+            <h3>Relationships</h3>
+          </div>
+          <div class="relationship-player-tabs" aria-label="Relationship player">
+            <button
+              class:active={relationshipSettingsPlayer === 'p1'}
+              type="button"
+              on:click={() => relationshipSettingsPlayer = 'p1'}
+            >Player 1</button>
+            <button
+              class:active={relationshipSettingsPlayer === 'p2'}
+              type="button"
+              disabled={!editingStory.playModes.multiplayer}
+              on:click={() => relationshipSettingsPlayer = 'p2'}
+            >Player 2</button>
+          </div>
+        </div>
         <div class="relationship-settings-content">
           <div class="relationship-settings-heading">
             <p>
-              Configure one named score per character. Player State nodes change these meters and Condition nodes check them.
+              Configure {relationshipSettingsPlayer === 'p1' ? 'Player 1' : 'Player 2'}’s starting relationship meters.
+              Player State nodes in that player’s lane change these values; shared nodes change both players when both have that relationship configured.
             </p>
             <button
               type="button"
@@ -4298,11 +4435,13 @@
             </button>
           </div>
 
-          {#if editingStory.relationships.length === 0}
-            <p class="relationship-empty">No relationship meters are configured for this story.</p>
+          {#if configuredRelationshipsForPlayer(relationshipSettingsPlayer).length === 0}
+            <p class="relationship-empty">No relationship meters are configured for this player.</p>
           {:else}
             <div class="relationship-config-list">
-              {#each editingStory.relationships as relationship, index}
+              {#each configuredRelationshipsForPlayer(relationshipSettingsPlayer) as entry}
+                {@const relationship = entry.relationship}
+                {@const index = entry.index}
                 <article>
                   <label>
                     <span>Character</span>
@@ -4319,7 +4458,7 @@
                     <span>Starting value</span>
                     <input
                       type="number"
-                      bind:value={relationship.initialValue}
+                      bind:value={editingStory.relationships[index].initialValue}
                       on:change={() => normalizeRelationship(index)}
                     >
                   </label>
@@ -4327,7 +4466,7 @@
                     <span>Minimum</span>
                     <input
                       type="number"
-                      bind:value={relationship.minimum}
+                      bind:value={editingStory.relationships[index].minimum}
                       on:change={() => normalizeRelationship(index)}
                     >
                   </label>
@@ -4335,12 +4474,12 @@
                     <span>Maximum</span>
                     <input
                       type="number"
-                      bind:value={relationship.maximum}
+                      bind:value={editingStory.relationships[index].maximum}
                       on:change={() => normalizeRelationship(index)}
                     >
                   </label>
                   <label class="relationship-visible-toggle">
-                    <input type="checkbox" bind:checked={relationship.visible}>
+                    <input type="checkbox" bind:checked={editingStory.relationships[index].visible}>
                     <span>Visible to player</span>
                   </label>
                   <button
@@ -4356,7 +4495,16 @@
             </div>
           {/if}
         </div>
-      </details>
+      </section>
+
+            </div>
+            <footer>
+              <span>{storyStartIssue(editingStory) || 'Cartridge configuration is playable.'}</span>
+              <button class="primary-button" type="button" on:click={closeStorySettings}>Done</button>
+            </footer>
+          </section>
+        </div>
+      {/if}
 
       <p class="graph-position-help">
         Routes control rows. Select a node to edit its previous and next connections in the inspector.
@@ -4618,6 +4766,16 @@
           bind:this={inspectorElement}
         >
           {#if selectedNode}
+            {#if inspectorExpanded}
+              <button
+                class="inspector-modal-x"
+                type="button"
+                aria-label="Close expanded node properties"
+                on:click={closeExpandedInspector}
+              >×</button>
+            {/if}
+
+            <div class="inspector-scroll-content">
             <div class="inspector-heading">
               <div>
                 <p>NODE INSPECTOR</p>
@@ -5061,7 +5219,7 @@
                         {:else if choice.condition.type.startsWith('relationship-')}
                           <select aria-label="Relationship target" bind:value={choice.condition.key}>
                             <option value="">Choose a configured relationship</option>
-                            {#each editingStory.relationships as relationship}
+                            {#each relationshipsForNode(selectedNode) as relationship}
                               <option value={relationship.id}>{relationshipTargetName(relationship.id)}</option>
                             {/each}
                           </select>
@@ -5363,7 +5521,7 @@
                 <label for="relationship-id">With</label>
                 <select id="relationship-id" bind:value={selectedNode.effects[0].key}>
                   <option value="">Choose a configured relationship</option>
-                  {#each editingStory.relationships as relationship}
+                  {#each relationshipsForNode(selectedNode) as relationship}
                     <option value={relationship.id}>{relationshipTargetName(relationship.id)}</option>
                   {/each}
                 </select>
@@ -5385,10 +5543,12 @@
                   bind:value={selectedNode.playerMessage}
                   placeholder="Ajax appreciated your honesty."
                 >
-                {#if editingStory.relationships.length === 0}
-                  <p class="inspector-help">Configure a relationship in Story Relationships before changing one.</p>
+                {#if relationshipsForNode(selectedNode).length === 0}
+                  <p class="inspector-help">
+                    Configure this player’s relationship in Settings first. Shared nodes only list relationships configured for both players.
+                  </p>
                 {:else}
-                  {@const relationshipDefinition = editingStory.relationships.find(
+                  {@const relationshipDefinition = relationshipsForNode(selectedNode).find(
                     (relationship) => relationship.id === selectedNode.effects[0].key
                   )}
                   <div class="effect-preview">
@@ -5476,7 +5636,7 @@
                 <label for="condition-relationship">Relationship with</label>
                 <select id="condition-relationship" bind:value={selectedNode.condition.key}>
                   <option value="">Choose a configured relationship</option>
-                  {#each editingStory.relationships as relationship}
+                  {#each relationshipsForNode(selectedNode) as relationship}
                     <option value={relationship.id}>{relationshipTargetName(relationship.id)}</option>
                   {/each}
                 </select>
@@ -5814,11 +5974,14 @@
                 Delete node
               </button>
             </div>
+            </div>
 
             {#if inspectorExpanded}
-              <button class="inspector-modal-close" type="button" on:click={closeExpandedInspector}>
-                × Close expanded view
-              </button>
+              <footer class="inspector-modal-footer">
+                <button class="inspector-modal-close" type="button" on:click={closeExpandedInspector}>
+                  Close expanded view
+                </button>
+              </footer>
             {/if}
           {:else}
             <p class="empty-inspector">Select a node from the flow canvas.</p>
@@ -5914,46 +6077,6 @@
         </div>
       {/if}
 
-      {#if storySettingsOpen}
-        <div class="node-picker-backdrop" role="presentation" on:click|self={closeStorySettings}>
-          <section class="story-settings-modal" role="dialog" aria-modal="true" aria-labelledby="story-settings-title">
-            <header>
-              <div>
-                <p>CARTRIDGE METADATA</p>
-                <h2 id="story-settings-title">Story settings</h2>
-              </div>
-              <button type="button" aria-label="Close story settings" on:click={closeStorySettings}>×</button>
-            </header>
-
-            <label>
-              <span>Story title</span>
-              <input bind:value={editingStory.title} maxlength="80">
-            </label>
-            <label>
-              <span>Author</span>
-              <input bind:value={editingStory.author} maxlength="80">
-            </label>
-            <label>
-              <span>Description</span>
-              <textarea bind:value={editingStory.description} maxlength="500" rows="6"></textarea>
-            </label>
-            <label class="mode-checkbox story-protection-toggle">
-              <input
-                type="checkbox"
-                checked={editingStory.protected}
-                on:change={(event) => requestProtectionChange(event.currentTarget.checked)}
-              >
-              Protect this story from deletion
-            </label>
-            <p class="field-help">Protection does not prevent editing. It only prevents accidental deletion.</p>
-
-            <footer>
-              <button class="primary-button" type="button" on:click={closeStorySettings}>Done</button>
-            </footer>
-          </section>
-        </div>
-      {/if}
-
       {#if unprotectConfirmationOpen}
         <div class="node-picker-backdrop protection-confirmation-backdrop" role="presentation">
           <section class="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="unprotect-title">
@@ -6003,8 +6126,9 @@
               <p class="tutorial-section-label">WORKFLOW</p>
               <h3 id="workflow-guide-title">Build and connect a path</h3>
               <ol>
-                <li><strong>Story settings</strong> edits the title, author, description, and deletion protection after creation.</li>
+                <li><strong>Settings</strong> contains cartridge details, deletion protection, maps, playable modes, the cast, start nodes, and relationships.</li>
                 <li><strong>Story start</strong> chooses a solo opening, one Shared multiplayer opening, or separate Player 1 and Player 2 openings. Missing starts save as an unavailable draft.</li>
+                <li><strong>Relationships</strong> are configured separately for Player 1 and Player 2. A Player State node in a private lane changes that player’s meter; a Shared node changes both players when both meters exist.</li>
                 <li><strong>Add to Player</strong> appends a node to that lane. It auto-connects only when the previous node has an unused normal route.</li>
                 <li><strong>+ next, + yes, or + no</strong> creates a node directly on that route. Use <strong>Select node</strong> to connect an existing node instead.</li>
                 <li><strong>Select previous node</strong> makes an existing node lead into the selected node. Red nodes are missing a required or valid connection.</li>
@@ -6656,7 +6780,7 @@
     height: calc(100% - 38px);
 
     display: grid;
-    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
   }
 
   .editor-story-title {
@@ -6719,7 +6843,9 @@
   .start-settings {
     background: #09111e;
     border-bottom: 1px solid #2c3b54;
+  }
 
+  .start-settings {
     summary {
       min-height: 36px;
       padding: 8px 14px;
@@ -7086,9 +7212,14 @@
   }
 
   .node-inspector {
-    padding: 14px;
-    overflow-y: auto;
+    position: relative;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
     background: #09111e;
+
+    display: flex;
+    flex-direction: column;
 
     h2 {
       margin-bottom: 14px;
@@ -7109,8 +7240,7 @@
       bottom: clamp(16px, 4vh, 40px);
       left: 50%;
       width: min(760px, calc(100% - 40px));
-      padding: clamp(20px, 3vw, 38px);
-      padding-bottom: 92px;
+      padding: 0;
       box-sizing: border-box;
       border: 1px solid #ff8a32;
       box-shadow: 0 24px 80px #000000bb, 0 0 34px #ff8a3244;
@@ -7124,6 +7254,19 @@
         min-height: 110px;
       }
     }
+  }
+
+  .inspector-scroll-content {
+    min-height: 0;
+    padding: 14px;
+    overflow-y: auto;
+
+    flex: 1 1 auto;
+  }
+
+  .node-inspector.expanded .inspector-scroll-content {
+    padding: clamp(20px, 3vw, 38px);
+    padding-top: 54px;
   }
 
   .inspector-resizer {
@@ -7176,16 +7319,33 @@
   }
 
   .inspector-modal-close {
-    position: fixed;
-    z-index: 64;
-    bottom: clamp(24px, 5vh, 52px);
-    left: 50%;
-    width: min(680px, calc(100% - 72px));
+    width: 100%;
     color: #ffd5b5;
     background: #35170a;
     border-color: #ff8a32;
-    box-shadow: 0 8px 24px #000000aa;
-    transform: translateX(-50%);
+  }
+
+  .inspector-modal-footer {
+    padding: 12px clamp(20px, 3vw, 38px);
+    background: #160d08;
+    border-top: 1px solid #ff8a32;
+    box-shadow: 0 -8px 22px #00000066;
+
+    flex: 0 0 auto;
+  }
+
+  .inspector-modal-x {
+    position: absolute;
+    z-index: 4;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    min-height: 36px;
+    padding: 4px;
+    color: #ffd5b5;
+    background: #35170a;
+    border-color: #ff8a32;
+    font-size: 1.2rem;
   }
 
   .flow-canvas {
@@ -7284,13 +7444,17 @@
 
   .start-node-badge {
     width: fit-content;
-    padding: 2px 6px;
-    color: #120a07;
-    background: #f8e69a;
-    border: 1px solid #ffffff;
-    font-size: 0.55rem;
+    padding: 3px 10px 3px 7px;
+    color: #9fffd1;
+    background: linear-gradient(90deg, #0c352c, #071a20);
+    border: 1px solid #43e5a7;
+    clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%);
+    box-shadow: inset 3px 0 #43e5a7, 0 0 12px #43e5a744;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.5rem;
     font-weight: 900;
-    letter-spacing: 0.8px;
+    letter-spacing: 1px;
+    text-shadow: 0 0 7px #43e5a7;
   }
 
   .flow-lane {
@@ -7675,7 +7839,8 @@
   }
 
   .node-is-start {
-    border-left: 7px solid #55f09a !important;
+    border-left-color: #43e5a7 !important;
+    box-shadow: inset 4px 0 #43e5a7, 0 0 18px #43e5a726 !important;
   }
 
   .node-shape-dialogue {
@@ -7820,8 +7985,8 @@
   .node-inspector {
     border-left: 1px solid #2c3b54;
 
-    > label,
-    > .route-label,
+    .inspector-scroll-content > label,
+    .inspector-scroll-content > .route-label,
     .field-grid label {
       display: block;
       margin: 13px 0 6px;
@@ -7830,9 +7995,9 @@
       text-transform: uppercase;
     }
 
-    > input,
-    > textarea,
-    > select {
+    .inspector-scroll-content > input,
+    .inspector-scroll-content > textarea,
+    .inspector-scroll-content > select {
       width: 100%;
     }
   }
@@ -8337,39 +8502,180 @@
   }
 
   .story-settings-modal {
-    width: min(640px, 100%);
-    padding: 22px;
+    width: min(1120px, 100%);
+    max-height: min(90vh, 920px);
+    padding: 0;
+    overflow: hidden;
     background: #120c08;
     border: 1px solid #ff8a32;
     box-shadow: 0 20px 60px #000000aa;
 
-    display: grid;
-    gap: 12px;
+    display: flex;
+    flex-direction: column;
 
     > header {
-      padding-bottom: 12px;
+      padding: 16px 20px;
+      background: #1d1009;
       border-bottom: 1px solid #5b321c;
 
       display: flex;
       justify-content: space-between;
       align-items: start;
+
+      p {
+        color: #ff8a32;
+        font-size: 0.62rem;
+        letter-spacing: 1.5px;
+      }
+
+      h2 {
+        margin-top: 3px;
+        font-family: "Orbitron", "Space Mono", sans-serif;
+      }
     }
 
-    > label:not(.mode-checkbox) {
+    > footer {
+      padding: 12px 20px;
+      background: #1d1009;
+      border-top: 1px solid #5b321c;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+
+      span {
+        color: #c7a58d;
+        font-size: 0.7rem;
+      }
+    }
+  }
+
+  .story-settings-backdrop {
+    z-index: 30;
+    inset: 38px 0 0;
+  }
+
+  .story-settings-content {
+    min-height: 0;
+    padding: 18px;
+    overflow-y: auto;
+
+    display: grid;
+    gap: 16px;
+  }
+
+  .settings-section {
+    padding: 16px;
+    background: #0d1019;
+    border: 1px solid #394456;
+    border-left: 4px solid #ff8a32;
+  }
+
+  .settings-section-heading {
+    margin-bottom: 12px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+
+    > div:first-child {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      > span {
+        color: #ff8a32;
+        font-size: 0.65rem;
+        font-weight: 900;
+      }
+    }
+
+    h3 {
+      color: #f5e8dd;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.9rem;
+    }
+
+    small {
+      color: #8ea5bd;
+      font-size: 0.66rem;
+    }
+  }
+
+  .metadata-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+
+    label {
       color: #ffbd8b;
 
       display: grid;
       gap: 6px;
     }
 
-    footer {
-      display: flex;
-      justify-content: flex-end;
+    .description-field {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .story-settings-modal .map-toolbar {
+    padding: 0;
+    background: transparent;
+    border: 0;
+
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .story-settings-modal .start-settings,
+  .story-settings-modal .relationship-settings {
+    background: #0d1019;
+    border-bottom: 1px solid #394456;
+    border-left: 4px solid #ff8a32;
+  }
+
+  .story-settings-modal .start-settings summary {
+    padding: 0;
+    color: #f5e8dd;
+
+    span {
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.9rem;
+      letter-spacing: 0;
+
+      i {
+        margin-right: 10px;
+        color: #ff8a32;
+        font-size: 0.65rem;
+        font-style: normal;
+      }
+    }
+  }
+
+  .story-settings-modal .start-settings-content,
+  .story-settings-modal .relationship-settings-content {
+    max-height: none;
+    padding: 14px 0 0;
+    border-top-color: #394456;
+  }
+
+  .relationship-player-tabs {
+    display: flex;
+    gap: 6px;
+
+    button.active {
+      color: #08111d;
+      background: #5ab4f6;
+      border-color: #a8ddff;
+      box-shadow: 0 0 14px #5ab4f655;
     }
   }
 
   .protection-confirmation-backdrop {
-    z-index: 24;
+    z-index: 35;
   }
 
   .node-search {
@@ -9092,7 +9398,7 @@
       bottom: 10px;
       left: 50%;
       width: calc(100% - 20px);
-      padding: 18px;
+      padding: 0;
       transform: translateX(-50%);
     }
 
@@ -9115,10 +9421,7 @@
     }
 
     .editor-toolbar.mobile-collapsed > :not(.mobile-toolbar-toggle),
-    .editor-toolbar.mobile-collapsed + .map-toolbar,
-    .editor-toolbar.mobile-collapsed + .map-toolbar + .start-settings,
-    .editor-toolbar.mobile-collapsed + .map-toolbar + .start-settings + .relationship-settings,
-    .editor-toolbar.mobile-collapsed + .map-toolbar + .start-settings + .relationship-settings + .graph-position-help {
+    .editor-toolbar.mobile-collapsed + .graph-position-help {
       display: none;
     }
 
@@ -9130,6 +9433,38 @@
       overflow-x: auto;
       align-items: flex-start;
       flex-direction: column;
+    }
+
+    .story-settings-modal {
+      max-height: calc(100vh - 58px);
+    }
+
+    .story-settings-content {
+      padding: 10px;
+    }
+
+    .settings-section-heading,
+    .relationship-settings-heading,
+    .story-settings-modal > footer {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .metadata-settings-grid,
+    .start-node-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .metadata-settings-grid .description-field {
+      grid-column: auto;
+    }
+
+    .relationship-player-tabs {
+      width: 100%;
+
+      button {
+        flex: 1 1 50%;
+      }
     }
 
     .map-tabs,

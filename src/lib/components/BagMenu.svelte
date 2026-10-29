@@ -21,6 +21,12 @@
     : $sessionState.playerId;
   $: relationshipDefinitions = $campaignState?.story?.relationships?.filter(
     (relationship) => relationship.visible
+      && (
+        !relationship.playerId
+        || relationship.playerId === (
+          $libraryState.activeStoryMode === 'singleplayer' ? 'p1' : storyPlayerId
+        )
+      )
   ) ?? [];
 
   function openItem(name: string, image: string): void {
