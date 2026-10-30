@@ -22,7 +22,7 @@
  * @property {'singleplayer' | 'multiplayer'} [map]
  * @property {string} [speaker]
  * @property {string} [characterId]
- * @property {'normal' | 'shocked' | 'angry' | 'sad' | 'happy'} [expression]
+ * @property {'normal' | 'shocked' | 'angry' | 'sad' | 'happy' | 'confused' | 'dead'} [expression]
  * @property {string} [portrait]
  * @property {string} [portraitAlt]
  * @property {string} [text]

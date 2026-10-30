@@ -144,7 +144,7 @@
             <button type="submit" disabled={!newCharacterName.trim()}>Create and select</button>
             <button type="button" on:click={closeCreator}>Cancel</button>
           </div>
-          <p>You can set stats, wallet, notes, and all five expressions in the Characters screen.</p>
+          <p>You can set stats, wallet, notes, and all seven expressions in the Characters screen.</p>
         </form>
       {:else}
         <button class="create-button" type="button" on:click={openCreator}>

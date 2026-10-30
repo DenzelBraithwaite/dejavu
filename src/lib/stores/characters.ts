@@ -1,7 +1,14 @@
 import { derived, writable } from 'svelte/store';
 import { sessionState, type PlayerId } from './session';
 
-export type CharacterExpression = 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
+export type CharacterExpression =
+  | 'normal'
+  | 'shocked'
+  | 'angry'
+  | 'sad'
+  | 'happy'
+  | 'confused'
+  | 'dead';
 export type CharacterType = 'account' | 'playable' | 'npc';
 
 export type CharacterRecord = {

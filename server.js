@@ -210,10 +210,9 @@ app.get('/api/story-assets/images', async (_request, response) => {
       .map((entry) => `/uploads/stories/${entry.name}`);
     const characterImages = characterEntries
       .filter((entry) => entry.isFile())
-      .filter((entry) => /_(neutral|angry|shocked|happy|sad)\.png$/i.test(entry.name))
+      .filter((entry) => /_(neutral|angry|shocked|happy|sad|confused|dead)\.png$/i.test(entry.name))
       .map((entry) => `/media/characters/portraits/${entry.name}`);
     const builtInStoryImages = [
-      '/media/story/audience-chamber.png',
       '/media/story/raid_lab.png',
       '/media/story/raid_lab_kat.png',
       '/media/story/raid_guard_hallway.png',

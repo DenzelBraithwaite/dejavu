@@ -1320,6 +1320,14 @@
           )) {
           node.fallbackChoiceId = enabledFallback?.id ?? node.choices[0].id;
         }
+
+        if (node.type === 'choice' && node.timed) {
+          const durationMs = Number(node.durationMs);
+
+          node.durationMs = Number.isFinite(durationMs)
+            ? Math.max(0, durationMs)
+            : 0;
+        }
       }
 
       if (node.type === 'dice-check') {
@@ -5082,6 +5090,8 @@
                     <option value="angry">Angry</option>
                     <option value="sad">Sad</option>
                     <option value="happy">Happy</option>
+                    <option value="confused">Confused</option>
+                    <option value="dead">Dead</option>
                   </select>
                   {@const dialogueCharacter = $characterLibraryState.characters.find(
                     (character) => character.id === selectedNode.characterId
@@ -5269,6 +5279,8 @@
                     <option value="angry">Angry</option>
                     <option value="sad">Sad</option>
                     <option value="happy">Happy</option>
+                    <option value="confused">Confused</option>
+                    <option value="dead">Dead</option>
                   </select>
 
                   {#if selectedNode.type === 'input'}
@@ -5319,7 +5331,7 @@
               {/if}
               {#if selectedNode.type === 'choice' && selectedNode.timed}
                 <label for="choice-duration">Timer in milliseconds</label>
-                <input id="choice-duration" type="number" min="1000" bind:value={selectedNode.durationMs}>
+                <input id="choice-duration" type="number" min="0" bind:value={selectedNode.durationMs}>
                 <label class="choice-disabled-toggle">
                   <input type="checkbox" bind:checked={selectedNode.showCountdown}>
                   Show countdown text to the player

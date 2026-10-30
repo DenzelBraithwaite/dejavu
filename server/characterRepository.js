@@ -20,7 +20,9 @@ const DEFAULT_IMAGES = {
   shocked: '',
   angry: '',
   sad: '',
-  happy: ''
+  happy: '',
+  confused: '',
+  dead: ''
 };
 
 const DEFAULT_IMAGE_POSITIONS = {
@@ -28,7 +30,9 @@ const DEFAULT_IMAGE_POSITIONS = {
   shocked: { x: 50, y: 50 },
   angry: { x: 50, y: 50 },
   sad: { x: 50, y: 50 },
-  happy: { x: 50, y: 50 }
+  happy: { x: 50, y: 50 },
+  confused: { x: 50, y: 50 },
+  dead: { x: 50, y: 50 }
 };
 
 const CHARACTER_TYPES = new Set(['account', 'playable', 'npc']);
@@ -527,14 +531,17 @@ function createNpcSeed(name) {
 }
 
 function createSinglePortraitImages(fileStem) {
-  const portrait = `/media/characters/portraits/${fileStem}_neutral.png`;
+  const basePath = '/media/characters/portraits';
+  const portrait = `${basePath}/${fileStem}_neutral.png`;
 
   return {
     normal: portrait,
     shocked: portrait,
     angry: portrait,
     sad: portrait,
-    happy: portrait
+    happy: portrait,
+    confused: `${basePath}/${fileStem}_confused.png`,
+    dead: `${basePath}/${fileStem}_dead.png`
   };
 }
 
@@ -546,6 +553,8 @@ function createBuiltInImages(fileStem) {
     shocked: `${basePath}/${fileStem}_shocked.png`,
     angry: `${basePath}/${fileStem}_angry.png`,
     sad: `${basePath}/${fileStem}_sad.png`,
-    happy: `${basePath}/${fileStem}_happy.png`
+    happy: `${basePath}/${fileStem}_happy.png`,
+    confused: `${basePath}/${fileStem}_confused.png`,
+    dead: `${basePath}/${fileStem}_dead.png`
   };
 }

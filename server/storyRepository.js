@@ -343,6 +343,15 @@ function normalizeLegacyStoryNodes(nodes) {
       delete choice.playerMode;
     }
 
+    if (migratedNode?.type === 'timed-choice'
+      || (migratedNode?.type === 'choice' && migratedNode.timed)) {
+      const durationMs = Number(migratedNode.durationMs);
+
+      migratedNode.durationMs = Number.isFinite(durationMs)
+        ? Math.max(0, durationMs)
+        : 0;
+    }
+
     return migratedNode;
   });
 

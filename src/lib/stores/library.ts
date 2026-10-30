@@ -7,7 +7,7 @@ export type StoryNode = {
   audience?: 'both' | PlayerId;
   speaker?: string;
   characterId?: string;
-  expression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
+  expression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy' | 'confused' | 'dead';
   portrait?: string;
   portraitAlt?: string;
   portraitPosition?: {
@@ -25,7 +25,7 @@ export type StoryNode = {
   inputKey?: string;
   saveInput?: boolean;
   showPlayerPortrait?: boolean;
-  playerExpression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
+  playerExpression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy' | 'confused' | 'dead';
   next?: string;
   choices?: Array<{
     id: string;

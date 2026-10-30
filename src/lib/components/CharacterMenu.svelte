@@ -16,7 +16,9 @@
     { id: 'shocked', label: 'Shocked' },
     { id: 'angry', label: 'Angry' },
     { id: 'sad', label: 'Sad' },
-    { id: 'happy', label: 'Happy' }
+    { id: 'happy', label: 'Happy' },
+    { id: 'confused', label: 'Confused' },
+    { id: 'dead', label: 'Dead' }
   ];
 
   let editingCharacter: CharacterRecord | null = null;
@@ -60,14 +62,18 @@
         shocked: '',
         angry: '',
         sad: '',
-        happy: ''
+        happy: '',
+        confused: '',
+        dead: ''
       },
       imagePositions: {
         normal: { x: 50, y: 50 },
         shocked: { x: 50, y: 50 },
         angry: { x: 50, y: 50 },
         sad: { x: 50, y: 50 },
-        happy: { x: 50, y: 50 }
+        happy: { x: 50, y: 50 },
+        confused: { x: 50, y: 50 },
+        dead: { x: 50, y: 50 }
       },
       notes: '',
       type,
