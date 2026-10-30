@@ -1,7 +1,6 @@
 <script lang="ts">
-  // Types
   import type { PolyhedralDice } from '../stores/dice';
-  // Props
+
   export let dice: PolyhedralDice;
 </script>
 
@@ -10,10 +9,7 @@
   role="img"
   aria-label="One {dice.numOfSides}-sided die"
 ></div>
-<!-- PROMPT I USE FOR GENERATING DICE WITH COPILOT
- A single orange 20 sided-sided die with the color code #d6a74152, isolated on a plain background. The die should be centered in the image, well-lit, and clearly show its faces with numbers.
- No other objects or background elements should be present. The style should be clean and realistic, suitable for use as artwork in a dice roll app.
--->
+
 <style lang="scss">
   .dice {
     height: 200px;
@@ -24,7 +20,7 @@
     background-position: center;
     background-size: 100%;
   }
-  
+
   .dice-d4 {
     background-image: url('/media/minigames/dice/d4-dice.png');
     background-color: #9dffa652;
