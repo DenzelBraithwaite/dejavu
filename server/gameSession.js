@@ -624,19 +624,31 @@ function handleConversation(state, playerId, scene, action) {
 
 function handleDiceCheck(state, playerId, scene, action) {
   const pendingRoll = state.pendingDice[playerId];
+  const spectatorRoll = state.sessionMode === 'multiplayer'
+    && scene.spectatorRoll === true
+    && ['p1', 'p2'].includes(scene.audience);
 
   if (action.type === 'close-dice') {
     if (!pendingRoll || pendingRoll.sceneId !== scene.id) {
       return actionError('Roll the dice before closing the dice terminal.');
     }
 
-    archiveSceneForPlayer(
-      state,
-      playerId,
-      scene,
-      formatDiceResult(pendingRoll)
-    );
-    setPlayerScene(state, playerId, pendingRoll.nextSceneId);
+    const participants = spectatorRoll
+      ? PLAYER_IDS.filter(
+        (participantId) => state.currentScene[participantId] === scene.id
+      )
+      : [playerId];
+
+    for (const participantId of participants) {
+      archiveSceneForPlayer(
+        state,
+        participantId,
+        scene,
+        formatDiceResult(pendingRoll)
+      );
+      setPlayerScene(state, participantId, pendingRoll.nextSceneId);
+    }
+
     delete state.pendingDice[playerId];
 
     return actionSuccess();
@@ -712,6 +724,15 @@ function handleVote(state, playerId, scene, action) {
   }
 
   const votes = state.votes[scene.id] ?? {};
+
+  // Never reuse a response from an earlier visit to this vote. Both players
+  // must be caught up on this exact shared scene before it can resolve.
+  for (const participantId of PLAYER_IDS) {
+    if (state.currentScene[participantId] !== scene.id) {
+      delete votes[participantId];
+    }
+  }
+
   votes[playerId] = choice.id;
   state.votes[scene.id] = votes;
 
@@ -743,6 +764,7 @@ function handleVote(state, playerId, scene, action) {
     );
   }
 
+  delete state.votes[scene.id];
   setSharedScene(state, selectedChoice.next);
 
   return actionSuccess();

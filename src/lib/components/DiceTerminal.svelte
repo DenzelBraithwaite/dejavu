@@ -16,6 +16,8 @@
   export let luck: number;
   export let threshold: number;
   export let result: DiceRollResult | undefined = undefined;
+  export let spectator = false;
+  export let rollerName = 'Player';
 
   const dispatch = createEventDispatcher<{
     roll: void;
@@ -45,7 +47,7 @@
   });
 
   function beginRoll(): void {
-    if (!briefingComplete || rolling || result) {
+    if (spectator || !briefingComplete || rolling || result) {
       return;
     }
 
@@ -57,11 +59,11 @@
 
   function createBriefingSegments(): TypewriterSegment[] {
     const segments: TypewriterSegment[] = [
-      { text: 'You are rolling a ' },
+      { text: spectator ? `${rollerName} is rolling a ` : 'You are rolling a ' },
       { text: `D${die}`, className: 'dice-value' },
-      { text: ' die for your ' },
+      { text: spectator ? ' die for their ' : ' die for your ' },
       { text: stat, className: 'stat-value' },
-      { text: ' stat.\n\nYour ' },
+      { text: spectator ? ` stat.\n\n${rollerName}’s ` : ' stat.\n\nYour ' },
       { text: stat, className: 'stat-value' },
       { text: ' base stat is ' },
       { text: String(base), className: 'stat-value' },
@@ -70,7 +72,7 @@
 
     if (stat !== 'luck') {
       segments.push(
-        { text: 'Your ' },
+        { text: spectator ? `${rollerName}’s ` : 'Your ' },
         { text: 'luck', className: 'luck-value' },
         { text: ' stat is ' },
         { text: String(luck), className: 'luck-value' },
@@ -89,7 +91,7 @@
 
   function createResultSegments(rollResult: DiceRollResult): TypewriterSegment[] {
     const segments: TypewriterSegment[] = [
-      { text: 'You roll the die and get a ' },
+      { text: spectator ? `${rollerName} rolls the die and gets a ` : 'You roll the die and get a ' },
       { text: String(rollResult.roll), className: 'roll-value' },
       { text: '!\n\n' },
       { text: String(rollResult.roll), className: 'roll-value' },
@@ -111,9 +113,13 @@
       { text: String(rollResult.total), className: 'total-value' },
       { text: '.\n\n' },
       {
-        text: rollResult.successful
-          ? 'You were successful.'
-          : 'You were unsuccessful.',
+        text: spectator
+          ? rollResult.successful
+            ? `${rollerName} was successful.`
+            : `${rollerName} was unsuccessful.`
+          : rollResult.successful
+            ? 'You were successful.'
+            : 'You were unsuccessful.',
         className: rollResult.successful ? 'outcome-success' : 'outcome-failure'
       }
     );
@@ -170,7 +176,11 @@
     </div>
 
     <footer class="dice-terminal-controls">
-      {#if result}
+      {#if spectator}
+        <button type="button" disabled>
+          {result ? `Waiting for ${rollerName} to continue` : `Watching ${rollerName} roll`}
+        </button>
+      {:else if result}
         <button
           type="button"
           disabled={!resultTypingComplete}

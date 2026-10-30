@@ -50,6 +50,8 @@ export type StoryNode = {
   durationMs?: number;
   fallbackChoiceId?: string;
   timed?: boolean;
+  showCountdown?: boolean;
+  spectatorRoll?: boolean;
   decisionSeverity?: 'none' | 'minor' | 'major';
   src?: string;
   alt?: string;

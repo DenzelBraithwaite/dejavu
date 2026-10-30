@@ -104,7 +104,7 @@
           name: 'Dialogue',
           type: 'dialogue',
           description: 'Displays typed story text with an optional character, expression, or custom speaker.',
-          usage: 'Write the dialogue, select its speaker and expression, then connect Next. Enable Timed to force a scene-length wait before it advances.'
+          usage: 'Write the dialogue, select its speaker and expression, then connect Next. Enable Timed to force a scene-length wait; its visible countdown can be hidden for a natural pause.'
         },
         {
           name: 'Player input',
@@ -128,13 +128,13 @@
           name: 'Choice',
           type: 'choice',
           description: 'Shows two to five labelled buttons with optional timing, locks, and remembered decisions.',
-          usage: 'Set labels and destinations, optionally enable a timer, and mark the decision Minor or Major when future conditions should remember it.'
+          usage: 'Set labels and destinations, optionally enable a visible or hidden timer, and mark the decision Minor or Major when future conditions should remember it.'
         },
         {
           name: 'Dice',
           type: 'dice-check',
           description: 'Rolls a selected die against a character stat and target value.',
-          usage: 'Choose the die, stat, and target, then connect both Success and Failure.'
+          usage: 'Choose the die, stat, and target, then connect both Success and Failure. In multiplayer, a private-lane Dice node can let the other player spectate when reached from a Shared Vote.'
         },
         {
           name: 'Condition',
@@ -1201,6 +1201,7 @@
 
       if (node.type === 'dialogue') {
         node.continueLabel ??= 'Continue';
+        node.showCountdown ??= true;
       }
 
       if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
@@ -1209,6 +1210,7 @@
           node.timed = true;
         }
 
+        node.showCountdown ??= true;
         node.choices ??= [];
 
         while (node.choices.length < 2) {
@@ -1233,6 +1235,10 @@
           )) {
           node.fallbackChoiceId = enabledFallback?.id ?? node.choices[0].id;
         }
+      }
+
+      if (node.type === 'dice-check') {
+        node.spectatorRoll ??= false;
       }
 
       if (node.type === 'screen-effect') {
@@ -2868,8 +2874,13 @@
       return true;
     }
 
+    const routesSharedVoteToSpectatorRoll = source.type === 'vote'
+      && destination.type === 'dice-check'
+      && destination.spectatorRoll === true
+      && ['p1', 'p2'].includes(destinationLane);
+
     return sourceLane === 'both'
-      ? destinationLane === 'both'
+      ? destinationLane === 'both' || routesSharedVoteToSpectatorRoll
       : destinationLane === sourceLane || destinationLane === 'both';
   }
 
@@ -3043,8 +3054,15 @@
           || destination.type === 'label'
           || !canLinkToNode(node.id, destination));
     });
+    const hasInvalidSpectatorLane = node.type === 'dice-check'
+      && nodeMap(node) === 'multiplayer'
+      && node.spectatorRoll === true
+      && !['p1', 'p2'].includes(node.audience ?? 'both');
 
-    return (!isStartNode && !hasIncomingRoute) || hasMissingRoute || hasBrokenRoute;
+    return (!isStartNode && !hasIncomingRoute)
+      || hasMissingRoute
+      || hasBrokenRoute
+      || hasInvalidSpectatorLane;
   }
 
   function nodeHasBranches(node: StoryNode): boolean {
@@ -3681,7 +3699,8 @@
           expression: 'normal',
           portrait: '',
           portraitAlt: '',
-          continueLabel: 'Continue'
+          continueLabel: 'Continue',
+          showCountdown: true
         };
       case 'choice':
       case 'vote':
@@ -3700,6 +3719,7 @@
             }
           ],
           timed: false,
+          showCountdown: true,
           decisionSeverity: 'none'
         };
       case 'checkpoint':
@@ -3731,6 +3751,7 @@
           die: 6,
           stat: 'luck',
           threshold: 10,
+          spectatorRoll: false,
           success: '',
           failure: ''
         };
@@ -5009,6 +5030,10 @@
                   step="100"
                   bind:value={selectedNode.durationMs}
                 >
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.showCountdown}>
+                  Show countdown text to the player
+                </label>
               {/if}
             {/if}
 
@@ -5035,6 +5060,21 @@
                   <input id="dice-target" type="number" bind:value={selectedNode.threshold}>
                 </div>
               </div>
+              {#if activeStoryMap === 'multiplayer'}
+                <label class="choice-disabled-toggle">
+                  <input
+                    type="checkbox"
+                    bind:checked={selectedNode.spectatorRoll}
+                    disabled={!selectedNode.spectatorRoll
+                      && !['p1', 'p2'].includes(selectedNode.audience ?? 'both')}
+                  >
+                  Let the other player spectate this roll
+                </label>
+                <p class="inspector-help">
+                  Put this Dice node in the rolling player’s lane, then route a Shared Vote option into it.
+                  Both players enter the dice terminal, but only the selected player can roll or close it.
+                </p>
+              {/if}
               <div class="route-label">Success node</div>
               <div class="route-control">
                 <button class="route-node-link" type="button" disabled={!selectedNode.success} on:click={() => selectConnectedNode(selectedNode.success)}>{routeLabel(selectedNode, 'success')}</button>
@@ -5111,6 +5151,10 @@
               {#if selectedNode.type === 'choice' && selectedNode.timed}
                 <label for="choice-duration">Timer in milliseconds</label>
                 <input id="choice-duration" type="number" min="1000" bind:value={selectedNode.durationMs}>
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.showCountdown}>
+                  Show countdown text to the player
+                </label>
               {/if}
               <label for="choice-count">Number of buttons</label>
               <input

@@ -11,7 +11,7 @@
     unlockAudioPlayback
   } from '../audio/audioManager';
   import { socket } from '../socket';
-  import { campaignState } from '../stores/campaign';
+  import { campaignState, type CampaignPlayer } from '../stores/campaign';
   import { editorHandoff, libraryState } from '../stores/library';
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
@@ -49,6 +49,10 @@
   let storyAudioVisible = false;
   let lastStoryAudioVisible = false;
   let lastStoryEnded = false;
+  let lastDiceSceneKey = '';
+  let diceRollerId: 'p1' | 'p2' | null = null;
+  let diceSpectator = false;
+  let dicePlayer: CampaignPlayer | null = null;
 
   $: connectionPlayerId = $sessionState.playerId;
   $: playerId = $libraryState.activeStoryMode === 'multiplayer'
@@ -59,6 +63,7 @@
   $: sceneId = playerId && $campaignState
     ? $campaignState.currentScene[playerId]
     : '';
+  $: diceSceneKey = `${$campaignState?.campaignId ?? ''}:${sceneId}`;
   $: scene = sceneId
     ? $campaignState?.story?.nodes.find((candidate) => candidate.id === sceneId)
     : undefined;
@@ -139,11 +144,28 @@
   $: player = playerId && $campaignState
     ? $campaignState.players[playerId]
     : null;
+  $: diceRollerId = scene?.type === 'dice-check'
+    && scene.spectatorRoll
+    && $campaignState?.sessionMode === 'multiplayer'
+    && ['p1', 'p2'].includes(scene.audience ?? '')
+    ? scene.audience as 'p1' | 'p2'
+    : playerId ?? null;
+  $: diceSpectator = Boolean(
+    scene?.type === 'dice-check'
+      && scene.spectatorRoll
+      && $campaignState?.sessionMode === 'multiplayer'
+      && playerId
+      && diceRollerId
+      && playerId !== diceRollerId
+  );
+  $: dicePlayer = diceRollerId && $campaignState
+    ? $campaignState.players[diceRollerId]
+    : null;
   $: terminalEntries = playerId && $campaignState
     ? $campaignState.terminalOutput[playerId]
     : [];
-  $: pendingDice = playerId && $campaignState
-    ? $campaignState.pendingDice[playerId]
+  $: pendingDice = diceRollerId && $campaignState
+    ? $campaignState.pendingDice[diceRollerId]
     : undefined;
   $: storyEnded = Boolean(
     playerId && $campaignState?.endedPlayers?.includes(playerId)
@@ -241,11 +263,16 @@
     applySceneAudio(sceneAudioCues);
   }
 
-  $: if (sceneId) {
+  $: if (sceneId && diceSceneKey !== lastDiceSceneKey) {
+    lastDiceSceneKey = diceSceneKey;
     typingComplete = false;
     inputValue = '';
     errorMessage = '';
-    diceTerminalOpen = false;
+    diceTerminalOpen = Boolean(
+      scene?.type === 'dice-check'
+        && scene.spectatorRoll
+        && $campaignState?.sessionMode === 'multiplayer'
+    );
   }
 
   $: if (pendingDice) {
@@ -783,13 +810,16 @@
           >
             {buttonLabel(scene.continueLabel?.trim() || 'Continue', 'primary', scene.hoverText)}
           </button>
-        {:else if remainingMs}
+        {:else if remainingMs && scene.showCountdown !== false}
           <p class="timer" aria-live="polite">
             CONTINUING IN {remainingSeconds}s
           </p>
         {/if}
       {:else if scene.type === 'choice' || scene.type === 'timed-choice'}
-        {#if (scene.type === 'timed-choice' || scene.timed) && typingComplete && remainingMs}
+        {#if (scene.type === 'timed-choice' || scene.timed)
+          && scene.showCountdown !== false
+          && typingComplete
+          && remainingMs}
           <p class="timer" aria-live="polite">
             AUTO-SELECT IN {remainingSeconds}s
           </p>
@@ -939,14 +969,16 @@
     </div>
   {/if}
 
-  {#if diceTerminalOpen && scene?.type === 'dice-check' && player}
+  {#if diceTerminalOpen && scene?.type === 'dice-check' && dicePlayer}
     <DiceTerminal
       die={scene.die ?? 20}
       stat={scene.stat ?? 'unknown'}
-      base={Number(player.stats[scene.stat ?? ''] ?? 0)}
-      luck={Number(player.stats.luck ?? 0)}
+      base={Number(dicePlayer.stats[scene.stat ?? ''] ?? 0)}
+      luck={Number(dicePlayer.stats.luck ?? 0)}
       threshold={scene.threshold ?? 0}
       result={pendingDice}
+      spectator={diceSpectator}
+      rollerName={dicePlayer.name}
       on:roll={rollDice}
       on:close={closeDiceTerminal}
     />
