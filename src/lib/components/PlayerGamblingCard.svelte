@@ -6,7 +6,7 @@
 
 <div class="player-gambling-card player-gambling-card__{player.colorBet}">
   <div class="avatar-wrapper">
-    <img class="avatar" src="/hacker_{player.colorBet}.png" alt="hacker in black sweater">
+    <img class="avatar" src="/media/minigames/netrunners/hacker_{player.colorBet}.png" alt="hacker in black sweater">
     <div class="name-money-wrapper">
       <p class="player-name">{player.name}</p>
       <p class="player-money">{player.money}<span class="color-green">₭</span></p>

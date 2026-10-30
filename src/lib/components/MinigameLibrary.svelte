@@ -170,7 +170,7 @@
         <article>
           <div class="module-art module-art--{minigame.artwork}" aria-hidden="true">
             {#if minigame.artwork === 'netrunners'}
-              <img src="/neon_animals.png" alt="">
+              <img src="/media/minigames/lohi/neon_animals.png" alt="">
             {:else if minigame.artwork === 'billywig'}
               <div class="billywig-card billywig-card--left">09</div>
               <div class="billywig-card billywig-card--center">26</div>
@@ -224,9 +224,9 @@
             {:else}
               {#if minigame.artwork === 'lo-hi'}
                 <div class="lohi-preview">
-                  <span class="lohi-card lohi-card--left"><small>YM</small><strong>03</strong><img src="/yellow_monkey.png" alt=""></span>
-                  <span class="lohi-card lohi-card--center"><small>BE</small><strong>07</strong><img src="/blue_eagle.png" alt=""></span>
-                  <span class="lohi-card lohi-card--right"><small>PC</small><strong>10</strong><img src="/purple_cougar.png" alt=""></span>
+                  <span class="lohi-card lohi-card--left"><small>YM</small><strong>03</strong><img src="/media/minigames/lohi/yellow_monkey.png" alt=""></span>
+                  <span class="lohi-card lohi-card--center"><small>BE</small><strong>07</strong><img src="/media/minigames/lohi/blue_eagle.png" alt=""></span>
+                  <span class="lohi-card lohi-card--right"><small>PC</small><strong>10</strong><img src="/media/minigames/lohi/purple_cougar.png" alt=""></span>
                 </div>
               {:else if minigame.artwork === 'chopsticks'}
                 <div class="ram-preview">

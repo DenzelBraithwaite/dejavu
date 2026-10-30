@@ -1044,7 +1044,7 @@
       height: 100%;
       width: 100%;
       opacity: 0.05;
-      background: url('/neon_animals.png');
+      background: url('/media/minigames/lohi/neon_animals.png');
       background-repeat: no-repeat;
       background-position: center;
       background-size: cover;

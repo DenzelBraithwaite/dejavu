@@ -26,32 +26,32 @@
   }
   
   .dice-d4 {
-    background-image: url('/d4-dice.png');
+    background-image: url('/media/minigames/dice/d4-dice.png');
     background-color: #9dffa652;
   }
 
   .dice-d6 {
-    background-image: url('/d6-dice.png');
+    background-image: url('/media/minigames/dice/d6-dice.png');
     background-color: #6dc2fb52;
   }
 
   .dice-d8 {
-    background-image: url('/d8-dice.png');
+    background-image: url('/media/minigames/dice/d8-dice.png');
     background-color: #fb716d52;
   }
 
   .dice-d10 {
-    background-image: url('/d10-dice.png');
+    background-image: url('/media/minigames/dice/d10-dice.png');
     background-color: #ff75fd52;
   }
 
   .dice-d12 {
-    background-image: url('/d12-dice.png');
+    background-image: url('/media/minigames/dice/d12-dice.png');
     background-color: #9962ff52;
   }
 
   .dice-d20 {
-    background-image: url('/d20-dice.png');
+    background-image: url('/media/minigames/dice/d20-dice.png');
     background-color: #d6a74152;
   }
 </style>

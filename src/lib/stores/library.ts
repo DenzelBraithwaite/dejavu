@@ -24,6 +24,8 @@ export type StoryNode = {
   placeholder?: string;
   inputKey?: string;
   saveInput?: boolean;
+  showPlayerPortrait?: boolean;
+  playerExpression?: 'normal' | 'shocked' | 'angry' | 'sad' | 'happy';
   next?: string;
   choices?: Array<{
     id: string;

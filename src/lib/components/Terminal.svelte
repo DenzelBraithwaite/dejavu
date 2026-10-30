@@ -11,7 +11,11 @@
     unlockAudioPlayback
   } from '../audio/audioManager';
   import { socket } from '../socket';
-  import { campaignState, type CampaignPlayer } from '../stores/campaign';
+  import {
+    campaignState,
+    type CampaignPlayer,
+    type VoteResolution
+  } from '../stores/campaign';
   import { editorHandoff, libraryState } from '../stores/library';
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
@@ -53,6 +57,10 @@
   let diceRollerId: 'p1' | 'p2' | null = null;
   let diceSpectator = false;
   let dicePlayer: CampaignPlayer | null = null;
+  let voteResolution: VoteResolution | null = null;
+  let voteResolutionIsFinal = false;
+  let voteHighlightedChoiceId = '';
+  let voteResolutionChoiceLabel = '';
 
   $: connectionPlayerId = $sessionState.playerId;
   $: playerId = $libraryState.activeStoryMode === 'multiplayer'
@@ -207,6 +215,22 @@
   $: vote = scene?.type === 'vote' && $campaignState
     ? $campaignState.votes[scene.id]
     : null;
+  $: voteResolution = scene?.type === 'vote' && $campaignState
+    ? $campaignState.voteResolutions?.[scene.id] ?? null
+    : null;
+  $: voteResolutionIsFinal = Boolean(
+    voteResolution
+      && (!voteResolution.disagreed
+        || now - serverClockOffsetMs >= voteResolution.revealAt)
+  );
+  $: voteHighlightedChoiceId = voteResolution
+    ? voteResolutionIsFinal
+      ? voteResolution.selectedChoiceId
+      : voteAnimationChoiceId(scene, voteResolution, now - serverClockOffsetMs)
+    : '';
+  $: voteResolutionChoiceLabel = scene?.choices?.find(
+    (choice) => choice.id === voteResolution?.selectedChoiceId
+  )?.label ?? '';
   $: remainingMs = playerId && $campaignState?.deadlines[playerId]
     ? Math.max(
       0,
@@ -521,6 +545,22 @@
     }
   }
 
+  function voteAnimationChoiceId(
+    voteScene: StoryNode | undefined,
+    resolution: VoteResolution,
+    synchronizedNow: number
+  ): string {
+    const choices = voteScene?.choices?.filter((choice) => !choice.disabled) ?? [];
+
+    if (choices.length === 0) {
+      return resolution.selectedChoiceId;
+    }
+
+    const elapsedMs = Math.max(0, synchronizedNow - resolution.startedAt);
+    const choiceIndex = Math.floor(elapsedMs / 180) % choices.length;
+    return choices[choiceIndex].id;
+  }
+
   function launchMinigame(): void {
     if (!scene) {
       return;
@@ -779,10 +819,23 @@
 
         <div class="conversation-log" aria-label="Current conversation">
           {#each conversation.messages as message}
-            <p>
-              <strong>{message.playerName}:</strong>
-              {message.text}
-            </p>
+            <article
+              class="conversation-message"
+              class:conversation-message--portrait={Boolean(message.portrait)}
+            >
+              {#if message.portrait}
+                <img
+                  class="history-portrait"
+                  src={message.portrait}
+                  alt={message.portraitAlt ?? ''}
+                  style:object-position={`${message.portraitPosition?.x ?? 50}% ${message.portraitPosition?.y ?? 50}%`}
+                >
+              {/if}
+              <p>
+                <strong>{message.playerName}:</strong>
+                {message.text}
+              </p>
+            </article>
           {/each}
         </div>
       {/if}
@@ -920,7 +973,25 @@
           {buttonLabel(`Prepare D${scene.die} roll`, 'primary', scene.hoverText)}
         </button>
       {:else if scene.type === 'vote'}
-        {#if playerId && vote?.[playerId]}
+        {#if voteResolution}
+          <p class="vote-resolution-status" aria-live="assertive">
+            {voteResolutionIsFinal
+              ? `SELECTED: ${voteResolutionChoiceLabel}`
+              : 'VOTES DISAGREE — RANDOMIZING…'}
+          </p>
+          {#each scene.choices ?? [] as choice}
+            <button
+              class="vote-resolution-button"
+              class:vote-resolution-highlight={choice.id === voteHighlightedChoiceId}
+              class:vote-resolution-final={voteResolutionIsFinal
+                && choice.id === voteResolution.selectedChoiceId}
+              type="button"
+              disabled
+            >
+              {choice.label}
+            </button>
+          {/each}
+        {:else if playerId && vote?.[playerId]}
           <button type="button" disabled>
             Vote submitted — waiting for partner
           </button>
@@ -1288,13 +1359,24 @@
     border-top: 1px dashed #334155;
 
     p {
-      margin-bottom: 10px;
+      margin: 0;
       line-height: 1.5;
     }
 
     strong {
       color: #ff75fd;
     }
+  }
+
+  .conversation-message {
+    margin-bottom: 14px;
+  }
+
+  .conversation-message--portrait {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 13px;
+    align-items: start;
   }
 
   .conversation-status {
@@ -1394,6 +1476,51 @@
     font-family: "Orbitron", "Space Mono", sans-serif;
     font-size: 0.8rem;
     text-align: center;
+  }
+
+  .vote-resolution-status {
+    margin: 0;
+    padding: 10px 12px;
+    color: #f2d40e;
+    background: #2a2208;
+    border: 1px solid #8f7c16;
+    font-family: "Orbitron", "Space Mono", sans-serif;
+    font-size: 0.76rem;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  .terminal-controls .vote-resolution-button:disabled {
+    opacity: 0.38;
+    transition:
+      color 100ms ease,
+      background-color 100ms ease,
+      border-color 100ms ease,
+      box-shadow 100ms ease,
+      transform 100ms ease;
+  }
+
+  .terminal-controls .vote-resolution-highlight:disabled {
+    color: #151005;
+    background: #f2d40e;
+    border-color: #fff4a3;
+    box-shadow: 0 0 22px #f2d40e99;
+    opacity: 1;
+    transform: scale(1.015);
+  }
+
+  .terminal-controls .vote-resolution-final:disabled {
+    animation: vote-result-pulse 480ms ease-in-out infinite alternate;
+  }
+
+  @keyframes vote-result-pulse {
+    from {
+      box-shadow: 0 0 14px #f2d40e77;
+    }
+
+    to {
+      box-shadow: 0 0 30px #f2d40ecc;
+    }
   }
 
   .dice-summary {

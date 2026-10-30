@@ -81,7 +81,7 @@
   .card__purple {
     border: 4px double $purple;
     background-color: color.adjust($purple, $lightness: -55%);
-    background-image: url('/purple_cougar.png');
+    background-image: url('/media/minigames/lohi/purple_cougar.png');
     box-shadow: 0 2px 6px $purple;
   }
   
@@ -93,7 +93,7 @@
   .card__pink {
     border: 4px double $pink;
     background-color: color.adjust($pink, $lightness: -45%);
-    background-image: url('/pink_mouse.png');
+    background-image: url('/media/minigames/lohi/pink_mouse.png');
     box-shadow: 0 2px 6px $pink;
   }
 
@@ -105,7 +105,7 @@
   .card__yellow {
     border: 4px double $yellow;
     background-color: color.adjust($yellow, $lightness: -35%);
-    background-image: url('/yellow_monkey.png');
+    background-image: url('/media/minigames/lohi/yellow_monkey.png');
     box-shadow: 0 2px 6px $yellow;
   }
 
@@ -117,7 +117,7 @@
   .card__cyan {
     border: 4px double $cyan;
     background-color: color.adjust($cyan, $lightness: -35%);
-    background-image: url('/cyan_shark.png');
+    background-image: url('/media/minigames/lohi/cyan_shark.png');
     box-shadow: 0 2px 6px $cyan;
   }
 
@@ -129,7 +129,7 @@
   .card__blue {
     border: 4px double $blue;
     background-color: color.adjust($blue, $lightness: -35%);
-    background-image: url('/blue_eagle.png');
+    background-image: url('/media/minigames/lohi/blue_eagle.png');
     box-shadow: 0 2px 6px $blue;
   }
 

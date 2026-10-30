@@ -30,7 +30,7 @@
   let rollTimer: number;
   let lastResultKey = '';
 
-  $: dice = new PolyhedralDice(die, `/d${die}-dice.png`);
+  $: dice = new PolyhedralDice(die, `/media/minigames/dice/d${die}-dice.png`);
   $: briefingSegments = createBriefingSegments();
   $: resultSegments = result ? createResultSegments(result) : [];
   $: resultKey = result
@@ -236,7 +236,7 @@
       position: absolute;
       z-index: -1;
       inset: 38px 0 0;
-      background-image: url('/dice.png');
+      background-image: url('/media/minigames/dice/dice.png');
       background-position: center;
       background-repeat: repeat;
       opacity: 0.035;

@@ -110,13 +110,13 @@
           name: 'Player input',
           type: 'input',
           description: 'Collects a free-form response without changing the player character.',
-          usage: 'Enable Store response when the answer matters later. Give it a key, then insert that value in future text or use Player state → Set player name to create a session-only custom name.'
+          usage: 'Enable Store response when the answer matters later. Give it a key, then insert that value in future text or use Player state → Set player name to create a session-only custom name. Optionally show the responding player’s active character portrait and expression beside their answer.'
         },
         {
           name: 'Open floor',
           type: 'conversation',
           description: 'Runs a turn-based, face-to-face text conversation between the two players.',
-          usage: 'Choose the first speaker and each player’s turn count, then connect the shared Next route.'
+          usage: 'Choose the first speaker and each player’s turn count, then connect the shared Next route. Enable player portraits to show each speaker’s active character and selected expression to both players.'
         }
       ]
     },
@@ -146,7 +146,7 @@
           name: 'Shared vote',
           type: 'vote',
           description: 'Collects a button choice from both players and resolves the shared result.',
-          usage: 'Create two to five options and connect every enabled result. Use it only on the Shared lane.'
+          usage: 'Create two to five options and connect every enabled result. Use it only on the Shared lane. Matching votes briefly flash the chosen result; opposing votes animate the random selection before the story continues.'
         }
       ]
     },
@@ -3734,12 +3734,16 @@
           placeholder: 'Type your response…',
           inputKey: `INPUT_${id.replace(/[^a-z0-9]+/gi, '_').toUpperCase()}`,
           saveInput: true,
+          showPlayerPortrait: false,
+          playerExpression: 'normal',
           maxLength: 200
         };
       case 'conversation':
         return {
           ...baseNode,
           firstPlayer: 'random',
+          showPlayerPortrait: false,
+          playerExpression: 'normal',
           messagesPerPlayer: {
             p1: 2,
             p2: 2
@@ -5129,6 +5133,26 @@
               </div>
             {/if}
 
+            {#if ['input', 'conversation'].includes(selectedNode.type)}
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.showPlayerPortrait}>
+                Show the speaking player’s character portrait
+              </label>
+              {#if selectedNode.showPlayerPortrait}
+                <label for="player-message-expression">Player portrait expression</label>
+                <select id="player-message-expression" bind:value={selectedNode.playerExpression}>
+                  <option value="normal">Normal</option>
+                  <option value="shocked">Shocked</option>
+                  <option value="angry">Angry</option>
+                  <option value="sad">Sad</option>
+                  <option value="happy">Happy</option>
+                </select>
+                <p class="inspector-help">
+                  Each message uses the speaking player’s current story character. This also follows Change Character nodes.
+                </p>
+              {/if}
+            {/if}
+
             {#if ['choice', 'vote'].includes(selectedNode.type)}
               {#if selectedNode.type === 'choice'}
                 <fieldset class="decision-severity">
@@ -6312,7 +6336,7 @@
                   </button>
                 {:else}
                   <span class="asset-built-in">
-                    {imagePath.startsWith('/character_imgs/') ? 'BUILT-IN PORTRAIT' : 'BUILT-IN IMAGE'}
+                    {imagePath.startsWith('/media/characters/portraits/') ? 'BUILT-IN PORTRAIT' : 'BUILT-IN IMAGE'}
                   </span>
                 {/if}
               </article>
@@ -8825,7 +8849,10 @@
 
   .image-library-backdrop {
     position: absolute;
-    z-index: 40;
+
+    // Asset pickers can be opened from the expanded inspector, so they must
+    // sit above both its backdrop (60) and its dialog (61).
+    z-index: 70;
     inset: 38px 0 0;
     padding: 24px;
     background: #020617e8;
@@ -8921,7 +8948,8 @@
   }
 
   .asset-warning-backdrop {
-    z-index: 45;
+    // Destructive asset confirmations belong above the asset picker itself.
+    z-index: 75;
   }
 
   .asset-warning {

@@ -12,6 +12,7 @@ import {
   handleCampaignAction,
   initializeDeadlines,
   resolveExpiredTimedChoices,
+  resolveExpiredVoteResolutions,
   restoreCampaignState
 } from './server/gameSession.js';
 import {
@@ -74,7 +75,14 @@ const savesDirectory = join(__dirname, 'data', 'saves');
 const storyDatabasePath = join(__dirname, 'data', 'dejavu.sqlite');
 const storyImageDirectory = join(__dirname, 'public', 'uploads', 'stories');
 const characterImageDirectory = join(__dirname, 'public', 'uploads', 'characters');
-const builtInCharacterImageDirectory = join(__dirname, 'public', 'character_imgs');
+const builtInCharacterImageDirectory = join(
+  __dirname,
+  'public',
+  'media',
+  'characters',
+  'portraits'
+);
+const builtInStoryImageDirectory = join(__dirname, 'public', 'media', 'story');
 const musicDirectory = join(__dirname, 'public', 'audio', 'music');
 const soundDirectory = join(__dirname, 'public', 'audio', 'sounds');
 const reconnectGraceMs = 60_000;
@@ -202,9 +210,13 @@ app.get('/api/story-assets/images', async (_request, response) => {
       .map((entry) => `/uploads/stories/${entry.name}`);
     const characterImages = characterEntries
       .filter((entry) => entry.isFile())
-      .filter((entry) => /_(normal|angry|shocked|happy|sad)\.png$/i.test(entry.name))
-      .map((entry) => `/character_imgs/${entry.name}`);
-    const builtInStoryImages = ['/images/vespas-city-map.png'];
+      .filter((entry) => /_(neutral|angry|shocked|happy|sad)\.png$/i.test(entry.name))
+      .map((entry) => `/media/characters/portraits/${entry.name}`);
+    const builtInStoryImages = [
+      '/media/story/audience-chamber.png',
+      '/media/story/spoofs-base-map.png',
+      '/media/story/vespas-city-map.png'
+    ];
     const images = [...builtInStoryImages, ...storyImages, ...characterImages]
       .sort((left, right) => left.localeCompare(right));
 
@@ -346,6 +358,25 @@ app.post(
   }
 );
 
+// Keep old saved stories and character records working after the media cleanup.
+app.get('/character_imgs/:fileName', (request, response, next) => {
+  const requestedName = basename(request.params.fileName);
+  const replacementName = requestedName
+    .replace(/^female_player_/i, 'avona_')
+    .replace(/^male_player_/i, 'nova_')
+    .replace(/^judik_turned_/i, 'judik_');
+  const currentName = replacementName.replace(/_normal\.png$/i, '_neutral.png');
+
+  response.sendFile(
+    join(builtInCharacterImageDirectory, currentName),
+    (error) => {
+      if (error) {
+        next();
+      }
+    }
+  );
+});
+app.use('/images', express.static(builtInStoryImageDirectory));
 app.use(express.static(join(__dirname, 'public')));
 
 app.get('/', (_request, response) => {
@@ -1508,7 +1539,9 @@ io.on('connection', (socket) => {
 });
 
 setInterval(() => {
-  const campaignChanged = resolveExpiredTimedChoices(campaignState);
+  const timedChoiceChanged = resolveExpiredTimedChoices(campaignState);
+  const voteResolutionChanged = resolveExpiredVoteResolutions(campaignState);
+  const campaignChanged = timedChoiceChanged || voteResolutionChanged;
   const netRunnersChanged = updateNetRunners(netRunnersState);
 
   if (campaignChanged) {

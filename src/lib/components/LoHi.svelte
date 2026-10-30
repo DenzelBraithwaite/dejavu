@@ -11,11 +11,11 @@
   import WagerPanel from './WagerPanel.svelte';
 
   const factions = [
-    { id: 'purple', name: 'Purple Cougar', short: 'PC', image: '/purple_cougar.png' },
-    { id: 'pink', name: 'Pink Mouse', short: 'PM', image: '/pink_mouse.png' },
-    { id: 'yellow', name: 'Yellow Monkey', short: 'YM', image: '/yellow_monkey.png' },
-    { id: 'cyan', name: 'Cyan Shark', short: 'CS', image: '/cyan_shark.png' },
-    { id: 'blue', name: 'Blue Eagle', short: 'BE', image: '/blue_eagle.png' }
+    { id: 'purple', name: 'Purple Cougar', short: 'PC', image: '/media/minigames/lohi/purple_cougar.png' },
+    { id: 'pink', name: 'Pink Mouse', short: 'PM', image: '/media/minigames/lohi/pink_mouse.png' },
+    { id: 'yellow', name: 'Yellow Monkey', short: 'YM', image: '/media/minigames/lohi/yellow_monkey.png' },
+    { id: 'cyan', name: 'Cyan Shark', short: 'CS', image: '/media/minigames/lohi/cyan_shark.png' },
+    { id: 'blue', name: 'Blue Eagle', short: 'BE', image: '/media/minigames/lohi/blue_eagle.png' }
   ];
   const suits = factions.map((faction) => faction.id);
   type Mode = 'menu' | 'instructions' | 'solo' | 'multi';

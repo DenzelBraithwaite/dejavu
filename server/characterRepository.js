@@ -45,12 +45,12 @@ const NPC_NAMES = [
   'David',
   'Desmond',
   'Drift',
-  'Female Player',
+  'Gaze',
   'Grade',
   'Gritt',
+  'Judik',
   'Kat',
   'Link',
-  'Male Player',
   'Milton',
   'Neuro',
   'Riot',
@@ -60,6 +60,7 @@ const NPC_NAMES = [
   'Trinity',
   'Vex',
   'Vex No Mask',
+  'Vex Partial Mask',
   'Watts',
   'Zara',
   'Zee'
@@ -89,7 +90,8 @@ const SEEDED_CHARACTERS = [
       cred: 15,
       luck: 2,
       hacking: 17
-    }
+    },
+    images: createBuiltInImages('nova')
   },
   {
     id: 'avona',
@@ -106,7 +108,8 @@ const SEEDED_CHARACTERS = [
       cred: 13,
       luck: 4,
       hacking: 6
-    }
+    },
+    images: createBuiltInImages('avona')
   },
   ...NPC_NAMES.map(createNpcSeed)
 ];
@@ -305,6 +308,13 @@ export function createCharacterRepository(databasePath) {
 }
 
 function seedCharacters(database) {
+  // These templates were replaced by the named Avona and Nova playable characters.
+  database.prepare(`
+    DELETE FROM characters
+    WHERE built_in = 1
+      AND id IN ('npc-female-player', 'npc-male-player')
+  `).run();
+
   const insert = database.prepare(`
     INSERT OR IGNORE INTO characters (
       id,
@@ -354,6 +364,27 @@ function seedCharacters(database) {
       now,
       now
     );
+
+    if (character.images) {
+      const storedRow = database.prepare(`
+        SELECT images_json AS imagesJson
+        FROM characters
+        WHERE id = ?
+      `).get(character.id);
+      const storedImages = storedRow
+        ? JSON.parse(storedRow.imagesJson)
+        : {};
+      const updatedImages = {
+        ...character.images,
+        _positions: storedImages._positions ?? DEFAULT_IMAGE_POSITIONS
+      };
+
+      database.prepare(`
+        UPDATE characters
+        SET images_json = ?, updated_at = ?
+        WHERE id = ? AND built_in = 1
+      `).run(JSON.stringify(updatedImages), now, character.id);
+    }
   }
 }
 
@@ -487,12 +518,18 @@ function createNpcSeed(name) {
     wallet: 0,
     stats: NPC_STATS,
     notes: 'Built-in dialogue NPC.',
-    images: {
-      normal: `/character_imgs/${fileStem}_normal.png`,
-      shocked: `/character_imgs/${fileStem}_shocked.png`,
-      angry: `/character_imgs/${fileStem}_angry.png`,
-      sad: `/character_imgs/${fileStem}_sad.png`,
-      happy: `/character_imgs/${fileStem}_happy.png`
-    }
+    images: createBuiltInImages(fileStem)
+  };
+}
+
+function createBuiltInImages(fileStem) {
+  const basePath = '/media/characters/portraits';
+
+  return {
+    normal: `${basePath}/${fileStem}_neutral.png`,
+    shocked: `${basePath}/${fileStem}_shocked.png`,
+    angry: `${basePath}/${fileStem}_angry.png`,
+    sad: `${basePath}/${fileStem}_sad.png`,
+    happy: `${basePath}/${fileStem}_happy.png`
   };
 }

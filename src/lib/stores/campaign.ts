@@ -34,6 +34,15 @@ export type DiceRollResult = {
   successful: boolean;
 };
 
+export type VoteResolution = {
+  sceneId: string;
+  selectedChoiceId: string;
+  disagreed: boolean;
+  startedAt: number;
+  revealAt: number;
+  resolvesAt: number;
+};
+
 export type TerminalOutputEntry = {
   kind?: 'text' | 'image';
   sceneId: string;
@@ -79,10 +88,17 @@ export type CampaignState = {
       playerId: PlayerId;
       playerName: string;
       text: string;
+      portrait?: string;
+      portraitAlt?: string;
+      portraitPosition?: {
+        x: number;
+        y: number;
+      };
       createdAt: string;
     }>;
   }>;
   votes: Record<string, Partial<Record<PlayerId, string>>>;
+  voteResolutions: Record<string, VoteResolution>;
   minigames: Record<string, {
     readyPlayers: PlayerId[];
   }>;

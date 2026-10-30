@@ -2,20 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 const PLAYER_IDS = ['p1', 'p2'];
 const DEFAULT_TIMED_CHOICE_DURATION_MS = 20_000;
+const AGREED_VOTE_REVEAL_MS = 1_500;
+const DISAGREED_VOTE_REVEAL_MS = 3_500;
+const FINAL_VOTE_RESULT_MS = 1_000;
 
 const DEFAULT_STATS = {
   p1: {
-    muscles: 11,
-    toughness: 10,
-    speed: 9,
-    stealth: 8,
-    smarts: 12,
-    ocuware: 10,
-    cred: 15,
-    luck: 2,
-    hacking: 17
-  },
-  p2: {
     muscles: 8,
     toughness: 9,
     speed: 10,
@@ -25,6 +17,17 @@ const DEFAULT_STATS = {
     cred: 13,
     luck: 4,
     hacking: 6
+  },
+  p2: {
+    muscles: 11,
+    toughness: 10,
+    speed: 9,
+    stealth: 8,
+    smarts: 12,
+    ocuware: 10,
+    cred: 15,
+    luck: 2,
+    hacking: 17
   }
 };
 
@@ -67,14 +70,14 @@ export function createCampaignState(story = null, options = {}) {
       p1: createPlayerState(
         'p1',
         playerCharacters.p1,
-        'Nova',
+        'Avona',
         DEFAULT_STATS.p1,
         relationshipDefinitions
       ),
       p2: createPlayerState(
         sessionMode === 'singleplayer' ? 'p1' : 'p2',
         playerCharacters.p2,
-        'Avona',
+        'Nova',
         DEFAULT_STATS.p2,
         relationshipDefinitions
       )
@@ -93,6 +96,7 @@ export function createCampaignState(story = null, options = {}) {
     checkpoints: {},
     conversations: {},
     votes: {},
+    voteResolutions: {},
     minigames: {},
     activeMinigame: null,
     pendingDice: {},
@@ -242,6 +246,7 @@ export function restoreCampaignState(candidate) {
       p2: candidate.currentScene?.p2 ?? ''
     },
     pendingDice: candidate.pendingDice ?? {},
+    voteResolutions: candidate.voteResolutions ?? {},
     appliedCompanions: candidate.appliedCompanions ?? {
       p1: [],
       p2: []
@@ -521,6 +526,7 @@ function handleInput(state, playerId, scene, action) {
   }
 
   const value = String(action.value ?? '').trim().slice(0, scene.maxLength ?? 200);
+  const playerPresentation = getPlayerMessagePresentation(state, playerId, scene);
 
   if (!value) {
     return actionError('Enter a value before continuing.');
@@ -533,7 +539,13 @@ function handleInput(state, playerId, scene, action) {
     state.inputs[playerId] ??= {};
     state.inputs[playerId][inputKey] = value;
   }
-  archiveSceneForPlayer(state, playerId, scene, `> ${value}`);
+  archiveSceneForPlayer(
+    state,
+    playerId,
+    scene,
+    `> ${value}`,
+    playerPresentation
+  );
   setPlayerScene(state, playerId, scene.next);
 
   return actionSuccess();
@@ -582,6 +594,7 @@ function handleConversation(state, playerId, scene, action) {
   }
 
   const message = String(action.value ?? '').trim().slice(0, 300);
+  const playerPresentation = getPlayerMessagePresentation(state, playerId, scene);
 
   if (!message) {
     return actionError('Enter a message before sending.');
@@ -591,6 +604,7 @@ function handleConversation(state, playerId, scene, action) {
     playerId,
     playerName: state.players[playerId].name,
     text: message,
+    ...playerPresentation,
     createdAt: new Date().toISOString()
   });
   conversation.messageCounts[playerId] += 1;
@@ -606,7 +620,10 @@ function handleConversation(state, playerId, scene, action) {
         appendTerminalEntry(state, participantId, {
           sceneId: scene.id,
           speaker: conversationMessage.playerName,
-          text: conversationMessage.text
+          text: conversationMessage.text,
+          portrait: conversationMessage.portrait ?? '',
+          portraitAlt: conversationMessage.portraitAlt ?? '',
+          portraitPosition: conversationMessage.portraitPosition ?? { x: 50, y: 50 }
         });
       }
     }
@@ -723,6 +740,10 @@ function handleVote(state, playerId, scene, action) {
     return actionError('That vote is not available.');
   }
 
+  if (state.voteResolutions?.[scene.id]) {
+    return actionSuccess();
+  }
+
   const votes = state.votes[scene.id] ?? {};
 
   // Never reuse a response from an earlier visit to this vote. Both players
@@ -743,31 +764,86 @@ function handleVote(state, playerId, scene, action) {
   const selectedId = votes.p1 === votes.p2
     ? votes.p1
     : [votes.p1, votes.p2][Math.floor(Math.random() * 2)];
-  const selectedChoice = scene.choices.find((candidate) => candidate.id === selectedId);
+  const disagreed = votes.p1 !== votes.p2;
+  const startedAt = Date.now();
+  const durationMs = disagreed
+    ? DISAGREED_VOTE_REVEAL_MS
+    : AGREED_VOTE_REVEAL_MS;
 
-  applyEffects(state, 'p1', selectedChoice.effects ?? []);
-  recordDecision(
-    state,
-    'both',
-    scene.id,
-    selectedChoice.id,
-    selectedChoice.label,
-    votes.p1 !== votes.p2
-  );
-
-  for (const participantId of PLAYER_IDS) {
-    archiveSceneForPlayer(
-      state,
-      participantId,
-      scene,
-      `> ${selectedChoice.label}${votes.p1 !== votes.p2 ? ' (randomly selected)' : ''}`
-    );
-  }
-
-  delete state.votes[scene.id];
-  setSharedScene(state, selectedChoice.next);
+  state.voteResolutions ??= {};
+  state.voteResolutions[scene.id] = {
+    sceneId: scene.id,
+    selectedChoiceId: selectedId,
+    disagreed,
+    startedAt,
+    revealAt: startedAt + durationMs - FINAL_VOTE_RESULT_MS,
+    resolvesAt: startedAt + durationMs
+  };
 
   return actionSuccess();
+}
+
+export function resolveExpiredVoteResolutions(state, now = Date.now()) {
+  let changed = false;
+
+  for (const [sceneId, resolution] of Object.entries(state.voteResolutions ?? {})) {
+    if (resolution.resolvesAt > now) {
+      continue;
+    }
+
+    const scene = getScene(state, sceneId);
+    const playersAreStillVoting = PLAYER_IDS.every(
+      (playerId) => state.currentScene[playerId] === sceneId
+    );
+
+    if (!scene || scene.type !== 'vote' || !playersAreStillVoting) {
+      delete state.voteResolutions[sceneId];
+      delete state.votes[sceneId];
+      changed = true;
+      continue;
+    }
+
+    const selectedChoice = scene.choices?.find(
+      (choice) => choice.id === resolution.selectedChoiceId
+    );
+
+    if (!selectedChoice) {
+      delete state.voteResolutions[sceneId];
+      delete state.votes[sceneId];
+      changed = true;
+      continue;
+    }
+
+    applyEffects(state, 'p1', selectedChoice.effects ?? []);
+    recordDecision(
+      state,
+      'both',
+      scene.id,
+      selectedChoice.id,
+      selectedChoice.label,
+      resolution.disagreed
+    );
+
+    for (const participantId of PLAYER_IDS) {
+      archiveSceneForPlayer(
+        state,
+        participantId,
+        scene,
+        `> ${selectedChoice.label}${resolution.disagreed ? ' (randomly selected)' : ''}`
+      );
+    }
+
+    delete state.voteResolutions[sceneId];
+    delete state.votes[sceneId];
+    setSharedScene(state, selectedChoice.next);
+    changed = true;
+  }
+
+  if (changed) {
+    state.updatedAt = new Date().toISOString();
+  }
+
+  return changed;
 }
 
 export function resolveExpiredTimedChoices(state, now = Date.now()) {
@@ -1133,7 +1209,13 @@ function markPlayerEnded(state, playerId) {
   delete state.deadlines[playerId];
 }
 
-function archiveSceneForPlayer(state, playerId, scene, response = '') {
+function archiveSceneForPlayer(
+  state,
+  playerId,
+  scene,
+  response = '',
+  responsePresentation = {}
+) {
   const text = scene.text ?? scene.prompt ?? '';
   const character = state.characters.find(
     (candidate) => candidate.id === scene.characterId
@@ -1159,9 +1241,33 @@ function archiveSceneForPlayer(state, playerId, scene, response = '') {
     appendTerminalEntry(state, playerId, {
       sceneId: scene.id,
       speaker: state.players[playerId].name,
-      text: response
+      text: response,
+      ...responsePresentation
     });
   }
+}
+
+function getPlayerMessagePresentation(state, playerId, scene) {
+  if (!scene.showPlayerPortrait) {
+    return {};
+  }
+
+  const expression = scene.playerExpression ?? 'normal';
+  const player = state.players[playerId];
+  const character = state.characters.find(
+    (candidate) => candidate.id === player.characterId
+  );
+  const portrait = character?.images?.[expression] ?? '';
+
+  if (!portrait) {
+    return {};
+  }
+
+  return {
+    portrait,
+    portraitAlt: `${player.name}, ${expression} expression`,
+    portraitPosition: character?.imagePositions?.[expression] ?? { x: 50, y: 50 }
+  };
 }
 
 function appendTerminalEntry(state, playerId, entry) {
