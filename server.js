@@ -214,6 +214,9 @@ app.get('/api/story-assets/images', async (_request, response) => {
       .map((entry) => `/media/characters/portraits/${entry.name}`);
     const builtInStoryImages = [
       '/media/story/audience-chamber.png',
+      '/media/story/raid_lab.png',
+      '/media/story/raid_lab_kat.png',
+      '/media/story/raid_guard_hallway.png',
       '/media/story/spoofs-base-map.png',
       '/media/story/vespas-city-map.png'
     ];

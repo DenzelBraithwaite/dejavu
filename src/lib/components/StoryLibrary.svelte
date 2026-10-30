@@ -65,6 +65,11 @@
     nodes: TutorialNode[];
   };
 
+  type PlayerPortraitPreview = {
+    roleLabel: string;
+    character?: CharacterRecord;
+  };
+
   const flowNodeTypes = [
     { type: 'dialogue', label: 'Dialogue' },
     { type: 'input', label: 'Player input' },
@@ -361,6 +366,8 @@
   let nodeSearch = '';
   let recentNodeTypes: string[] = [];
   let playtestWarningOpen = false;
+  let playtestSeatPickerOpen = false;
+  let pendingPlaytestSeat: PlayerId | null = null;
   let saveInFlight = false;
   let savePulse = false;
   let lastSavedStoryKey = '';
@@ -378,6 +385,7 @@
   let mobileToolbarCollapsed = false;
   let playableCharacters: CharacterRecord[] = [];
   let speakerCharacters: CharacterRecord[] = [];
+  let playerPortraitPreviews: PlayerPortraitPreview[] = [];
   let seatPickerStoryId = '';
   let partnerSeatPickerOpen = false;
   let storedInputNodes: StoryNode[] = [];
@@ -532,6 +540,21 @@
   $: speakerCharacters = $characterLibraryState.characters.filter(
     (character) => character.type !== 'account'
   );
+  $: playerPortraitPreviews = editingStory
+    ? activeStoryMap === 'singleplayer'
+      ? [{
+          roleLabel: 'Player',
+          character: playableCharacters.find(
+            (character) => character.id === editingStory?.mainCharacterIds.singleplayer
+          )
+        }]
+      : (['p1', 'p2'] as PlayerId[]).map((storyPlayerId) => ({
+          roleLabel: storyPlayerId === 'p1' ? 'Player 1' : 'Player 2',
+          character: playableCharacters.find(
+            (character) => character.id === editingStory?.mainCharacterIds.multiplayer[storyPlayerId]
+          )
+        }))
+    : [];
   $: storedInputNodes = editingStory?.nodes.filter(
     (node) => node.type === 'input' && node.saveInput !== false && node.inputKey
   ) ?? [];
@@ -753,6 +776,20 @@
     });
   }
 
+  function playSelectedCartridge(): void {
+    clearMessages();
+
+    if (!localSelection
+      || localSelection !== $libraryState.activeStoryId
+      || localSelectionMode !== $libraryState.activeStoryMode) {
+      errorMessage = 'Both players must finish inserting the same cartridge before playing.';
+      return;
+    }
+
+    unlockAudioPlayback();
+    location.set('terminal');
+  }
+
   function storySeatClaimedByOther(seat: PlayerId): boolean {
     const ownerId = $libraryState.seatClaims[seat];
 
@@ -971,8 +1008,13 @@
       return;
     }
 
-    if (activeStoryMap === 'multiplayer' && !localStorySeat) {
-      errorMessage = 'Choose Player 1 or Player 2 from the Library before playtesting a multiplayer map.';
+    const ownsSeatForEditorStory = localSelection === editingStory.id
+      && localSelectionMode === 'multiplayer'
+      && Boolean(localStorySeat);
+
+    if (activeStoryMap === 'multiplayer' && !ownsSeatForEditorStory) {
+      pendingPlaytestSeat = null;
+      playtestSeatPickerOpen = true;
       return;
     }
 
@@ -984,6 +1026,31 @@
     startPlaytest();
   }
 
+  function continuePlaytestWithSeat(): void {
+    if (!editingStory || !pendingPlaytestSeat) {
+      return;
+    }
+
+    playtestSeatPickerOpen = false;
+
+    if ($libraryState.activeStoryId && $libraryState.activeStoryId !== editingStory.id) {
+      playtestWarningOpen = true;
+      return;
+    }
+
+    startPlaytest();
+  }
+
+  function cancelPlaytestSeatPicker(): void {
+    playtestSeatPickerOpen = false;
+    pendingPlaytestSeat = null;
+  }
+
+  function cancelPlaytestWarning(): void {
+    playtestWarningOpen = false;
+    pendingPlaytestSeat = null;
+  }
+
   function startPlaytest(): void {
     if (!editingStory) {
       return;
@@ -992,10 +1059,27 @@
     unlockAudioPlayback();
     primePlaytestAudio();
 
+    const playtestSeat = pendingPlaytestSeat
+      ?? (
+        localSelection === editingStory.id
+          && localSelectionMode === 'multiplayer'
+          ? localStorySeat
+          : null
+      );
+
     const launch = (): void => {
+      const ownsSelectedPlaytestSeat = activeStoryMap === 'singleplayer'
+        || (
+          localSelection === editingStory?.id
+          && localSelectionMode === 'multiplayer'
+          && localStorySeat === playtestSeat
+        );
+
       if ($libraryState.activeStoryId === editingStory?.id
-        && $libraryState.activeStoryMode === activeStoryMap) {
+        && $libraryState.activeStoryMode === activeStoryMap
+        && ownsSelectedPlaytestSeat) {
         playtestWarningOpen = false;
+        pendingPlaytestSeat = null;
         location.set('terminal');
         return;
       }
@@ -1003,7 +1087,7 @@
       socket.emit('library:select-story', {
         storyId: editingStory?.id,
         mode: activeStoryMap,
-        seat: activeStoryMap === 'multiplayer' ? localStorySeat : undefined
+        seat: activeStoryMap === 'multiplayer' ? playtestSeat : undefined
       }, (result: { ok: boolean; error?: string }) => {
         if (!result.ok) {
           errorMessage = result.error ?? 'Could not stage the playtest.';
@@ -1011,6 +1095,7 @@
         }
 
         playtestWarningOpen = false;
+        pendingPlaytestSeat = null;
         location.set('terminal');
       });
     };
@@ -4007,6 +4092,15 @@
               : 'LINK ESTABLISHED — CARTRIDGE READY'
             : 'WAITING FOR MATCHING CARTRIDGES'}
         </p>
+        {#if localSelection
+          && localSelection === partnerSelection
+          && localSelection === $libraryState.activeStoryId
+          && localSelectionMode === 'multiplayer'
+          && localStorySeat}
+          <button class="selection-play-button primary-button" type="button" on:click={playSelectedCartridge}>
+            Play cartridge
+          </button>
+        {/if}
       </div>
 
       <div class="story-grid">
@@ -4962,55 +5056,76 @@
             {/if}
 
             {#if supportsSpeakerProperties(selectedNode)}
-              <label for="node-speaker">Speaker</label>
-              <select id="node-speaker" bind:value={selectedNode.characterId}>
-                <option value="">Custom speaker</option>
-                {#each speakerCharacters as character}
-                  <option value={character.id}>{character.name}</option>
-                {/each}
-              </select>
+              <div class:inspector-property-group={selectedNode.type === 'input'}>
+                {#if selectedNode.type === 'input'}
+                  <h3>Question presentation</h3>
+                  <p class="inspector-help">
+                    Controls who presents the question above the player’s input field.
+                  </p>
+                {/if}
 
-              {#if selectedNode.characterId}
-                <label for="speaker-expression">Expression</label>
-                <select id="speaker-expression" bind:value={selectedNode.expression}>
-                  <option value="normal">Normal</option>
-                  <option value="shocked">Shocked</option>
-                  <option value="angry">Angry</option>
-                  <option value="sad">Sad</option>
-                  <option value="happy">Happy</option>
+                <label for="node-speaker">
+                  {selectedNode.type === 'input' ? 'Prompt speaker' : 'Speaker'}
+                </label>
+                <select id="node-speaker" bind:value={selectedNode.characterId}>
+                  <option value="">Custom speaker</option>
+                  {#each speakerCharacters as character}
+                    <option value={character.id}>{character.name}</option>
+                  {/each}
                 </select>
-                {@const dialogueCharacter = $characterLibraryState.characters.find(
-                  (character) => character.id === selectedNode.characterId
-                )}
-                {#if dialogueCharacter && characterExpressionImage(dialogueCharacter, selectedNode.expression)}
-                  <div class="image-preview image-preview--portrait">
-                    <img
-                      src={characterExpressionImage(dialogueCharacter, selectedNode.expression)}
-                      alt={`${dialogueCharacter.name} ${selectedNode.expression ?? 'normal'} expression`}
-                      style:object-position={`${characterExpressionPosition(dialogueCharacter, selectedNode.expression).x}% ${characterExpressionPosition(dialogueCharacter, selectedNode.expression).y}%`}
-                    >
-                    <span>{dialogueCharacter.name} · {selectedNode.expression ?? 'normal'}</span>
-                  </div>
+
+                {#if selectedNode.characterId}
+                  <label for="speaker-expression">Expression</label>
+                  <select id="speaker-expression" bind:value={selectedNode.expression}>
+                    <option value="normal">Normal</option>
+                    <option value="shocked">Shocked</option>
+                    <option value="angry">Angry</option>
+                    <option value="sad">Sad</option>
+                    <option value="happy">Happy</option>
+                  </select>
+                  {@const dialogueCharacter = $characterLibraryState.characters.find(
+                    (character) => character.id === selectedNode.characterId
+                  )}
+                  {#if dialogueCharacter && characterExpressionImage(dialogueCharacter, selectedNode.expression)}
+                    <div class="image-preview image-preview--portrait">
+                      <img
+                        src={characterExpressionImage(dialogueCharacter, selectedNode.expression)}
+                        alt={`${dialogueCharacter.name} ${selectedNode.expression ?? 'normal'} expression`}
+                        style:object-position={`${characterExpressionPosition(dialogueCharacter, selectedNode.expression).x}% ${characterExpressionPosition(dialogueCharacter, selectedNode.expression).y}%`}
+                      >
+                      <span>{dialogueCharacter.name} · {selectedNode.expression ?? 'normal'}</span>
+                    </div>
+                  {:else}
+                    <p class="inspector-help">This expression has no image yet. Add it in Characters.</p>
+                  {/if}
                 {:else}
-                  <p class="inspector-help">This expression has no image yet. Add it in Characters.</p>
+                  <label for="custom-speaker-name">
+                    {selectedNode.type === 'input' ? 'Custom prompt speaker name' : 'Custom speaker name'}
+                  </label>
+                  <input id="custom-speaker-name" bind:value={selectedNode.speaker}>
+                  <span class="inspector-label">
+                    {selectedNode.type === 'input' ? 'Custom prompt speaker image' : 'Custom speaker image'}
+                  </span>
+                  {#if selectedNode.portrait}
+                    <div class="image-preview image-preview--portrait">
+                      <img src={selectedNode.portrait} alt={selectedNode.portraitAlt ?? ''}>
+                      <span>{selectedNode.portrait.split('/').at(-1)}</span>
+                    </div>
+                  {/if}
+                  <button type="button" on:click={() => openImageLibrary('portrait')}>
+                    {selectedNode.type === 'input' ? 'Select prompt speaker image' : 'Select speaker image'}
+                  </button>
+                  {#if selectedNode.portrait}
+                    <button type="button" on:click={removeCustomSpeakerPortrait}>
+                      {selectedNode.type === 'input' ? 'Remove prompt speaker image' : 'Remove speaker image'}
+                    </button>
+                    <label for="custom-speaker-image-alt">
+                      {selectedNode.type === 'input' ? 'Prompt speaker image description' : 'Speaker image description'}
+                    </label>
+                    <input id="custom-speaker-image-alt" bind:value={selectedNode.portraitAlt} placeholder="Describe the speaker portrait">
+                  {/if}
                 {/if}
-              {:else}
-                <label for="custom-speaker-name">Custom speaker name</label>
-                <input id="custom-speaker-name" bind:value={selectedNode.speaker}>
-                <span class="inspector-label">Custom speaker image</span>
-                {#if selectedNode.portrait}
-                  <div class="image-preview image-preview--portrait">
-                    <img src={selectedNode.portrait} alt={selectedNode.portraitAlt ?? ''}>
-                    <span>{selectedNode.portrait.split('/').at(-1)}</span>
-                  </div>
-                {/if}
-                <button type="button" on:click={() => openImageLibrary('portrait')}>Select speaker image</button>
-                {#if selectedNode.portrait}
-                  <button type="button" on:click={removeCustomSpeakerPortrait}>Remove speaker image</button>
-                  <label for="custom-speaker-image-alt">Speaker image description</label>
-                  <input id="custom-speaker-image-alt" bind:value={selectedNode.portraitAlt} placeholder="Describe the speaker portrait">
-                {/if}
-              {/if}
+              </div>
             {/if}
 
             {#if selectedNode.type === 'dialogue'}
@@ -5134,23 +5249,53 @@
             {/if}
 
             {#if ['input', 'conversation'].includes(selectedNode.type)}
-              <label class="choice-disabled-toggle">
-                <input type="checkbox" bind:checked={selectedNode.showPlayerPortrait}>
-                Show the speaking player’s character portrait
-              </label>
-              {#if selectedNode.showPlayerPortrait}
-                <label for="player-message-expression">Player portrait expression</label>
-                <select id="player-message-expression" bind:value={selectedNode.playerExpression}>
-                  <option value="normal">Normal</option>
-                  <option value="shocked">Shocked</option>
-                  <option value="angry">Angry</option>
-                  <option value="sad">Sad</option>
-                  <option value="happy">Happy</option>
-                </select>
-                <p class="inspector-help">
-                  Each message uses the speaking player’s current story character. This also follows Change Character nodes.
-                </p>
-              {/if}
+              <div class:inspector-property-group={selectedNode.type === 'input'}>
+                {#if selectedNode.type === 'input'}
+                  <h3>Player response presentation</h3>
+                  <p class="inspector-help">
+                    Controls how the player’s submitted answer appears beneath the question.
+                  </p>
+                {/if}
+
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.showPlayerPortrait}>
+                  Show the speaking player’s character portrait
+                </label>
+                {#if selectedNode.showPlayerPortrait}
+                  <label for="player-message-expression">Player portrait expression</label>
+                  <select id="player-message-expression" bind:value={selectedNode.playerExpression}>
+                    <option value="normal">Normal</option>
+                    <option value="shocked">Shocked</option>
+                    <option value="angry">Angry</option>
+                    <option value="sad">Sad</option>
+                    <option value="happy">Happy</option>
+                  </select>
+
+                  {#if selectedNode.type === 'input'}
+                    <div class="player-portrait-previews" aria-label="Player response portrait previews">
+                      {#each playerPortraitPreviews as preview}
+                        <div class="player-portrait-preview">
+                          <strong>{preview.roleLabel}</strong>
+                          {#if preview.character && characterExpressionImage(preview.character, selectedNode.playerExpression)}
+                            <img
+                              src={characterExpressionImage(preview.character, selectedNode.playerExpression)}
+                              alt={`${preview.character.name} ${selectedNode.playerExpression ?? 'normal'} expression`}
+                              style:object-position={`${characterExpressionPosition(preview.character, selectedNode.playerExpression).x}% ${characterExpressionPosition(preview.character, selectedNode.playerExpression).y}%`}
+                            >
+                            <span>{preview.character.name} · {selectedNode.playerExpression ?? 'normal'}</span>
+                          {:else}
+                            <span>No configured portrait</span>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <p class="inspector-help">
+                    Each response uses the speaking player’s current story character. A Change Character node can replace the previewed character during play.
+                  </p>
+                {/if}
+              </div>
             {/if}
 
             {#if ['choice', 'vote'].includes(selectedNode.type)}
@@ -6172,8 +6317,53 @@
               “{storyTitle($libraryState.activeStoryId)}” is currently loaded. Playing from the editor will replace it with “{editingStory.title}”.
             </p>
             <div>
-              <button type="button" on:click={() => playtestWarningOpen = false}>Cancel</button>
+              <button type="button" on:click={cancelPlaytestWarning}>Cancel</button>
               <button class="primary-button" type="button" disabled={saveInFlight} on:click={startPlaytest}>Save and play</button>
+            </div>
+          </section>
+        </div>
+      {/if}
+
+      {#if playtestSeatPickerOpen}
+        <div
+          class="node-picker-backdrop"
+          role="presentation"
+          on:click|self={cancelPlaytestSeatPicker}
+        >
+          <section class="confirmation-dialog playtest-seat-dialog" role="dialog" aria-modal="true" aria-labelledby="playtest-seat-title">
+            <p>MULTIPLAYER ROLE</p>
+            <h2 id="playtest-seat-title">Who are you playing as?</h2>
+            <p>Select an available role, then start the playtest.</p>
+
+            <div class="playtest-seat-options">
+              <button
+                class:selected={pendingPlaytestSeat === 'p1'}
+                type="button"
+                disabled={storySeatClaimedByOther('p1')}
+                on:click={() => pendingPlaytestSeat = 'p1'}
+              >
+                {storySeatClaimedByOther('p1') ? 'Player 1 · claimed' : 'Player 1'}
+              </button>
+              <button
+                class:selected={pendingPlaytestSeat === 'p2'}
+                type="button"
+                disabled={storySeatClaimedByOther('p2')}
+                on:click={() => pendingPlaytestSeat = 'p2'}
+              >
+                {storySeatClaimedByOther('p2') ? 'Player 2 · claimed' : 'Player 2'}
+              </button>
+            </div>
+
+            <div class="playtest-seat-actions">
+              <button type="button" on:click={cancelPlaytestSeatPicker}>Cancel</button>
+              <button
+                class="primary-button"
+                type="button"
+                disabled={!pendingPlaytestSeat || saveInFlight}
+                on:click={continuePlaytestWithSeat}
+              >
+                Play
+              </button>
             </div>
           </section>
         </div>
@@ -6638,6 +6828,13 @@
       color: #f8e69a;
       font-size: 0.72rem;
       text-align: center;
+    }
+
+    .selection-play-button {
+      grid-column: 1 / -1;
+      min-height: 44px;
+      justify-self: center;
+      width: min(280px, 100%);
     }
   }
 
@@ -8208,6 +8405,80 @@
     }
   }
 
+  .inspector-property-group {
+    margin-top: 18px;
+    padding: 14px;
+    background: #081321;
+    border: 1px solid #294668;
+
+    display: grid;
+    gap: 9px;
+
+    h3 {
+      margin: 0;
+      color: #8dd8ff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.78rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+    > label:not(.choice-disabled-toggle),
+    > .inspector-label {
+      margin-top: 5px;
+      color: #6dc2fb;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+    }
+
+    > input,
+    > select {
+      width: 100%;
+    }
+
+    .inspector-help {
+      margin: 0;
+    }
+  }
+
+  .player-portrait-previews {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px;
+  }
+
+  .player-portrait-preview {
+    min-width: 0;
+    padding: 8px;
+    background: #050b14;
+    border: 1px solid #243a52;
+
+    display: grid;
+    gap: 6px;
+
+    strong {
+      color: #67e8f9;
+      font-size: 0.65rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    img {
+      width: 100%;
+      height: 108px;
+      object-fit: cover;
+      background: #020617;
+    }
+
+    span {
+      overflow: hidden;
+      color: #94a3b8;
+      font-size: 0.62rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
   .choice-editor {
     margin-top: 18px;
     padding-top: 14px;
@@ -8803,6 +9074,33 @@
     > div {
       margin-top: 20px;
 
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+  }
+
+  .playtest-seat-dialog {
+    width: min(430px, 100%);
+
+    .playtest-seat-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+
+      button {
+        min-height: 52px;
+      }
+
+      button.selected {
+        color: #07111d;
+        background: #02fbfb;
+        border-color: #8fffff;
+        box-shadow: 0 0 18px #02fbfb55;
+      }
+    }
+
+    .playtest-seat-actions {
       display: flex;
       justify-content: flex-end;
       gap: 8px;

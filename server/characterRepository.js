@@ -53,6 +53,7 @@ const NPC_NAMES = [
   'Link',
   'Milton',
   'Neuro',
+  'RAID Guard',
   'Riot',
   'Strix',
   'Switch',
@@ -510,6 +511,9 @@ function normalizeCharacterType(value) {
 
 function createNpcSeed(name) {
   const fileStem = name.toLowerCase().replaceAll(' ', '_');
+  const images = name === 'RAID Guard'
+    ? createSinglePortraitImages(fileStem)
+    : createBuiltInImages(fileStem);
 
   return {
     id: `npc-${fileStem.replaceAll('_', '-')}`,
@@ -518,7 +522,19 @@ function createNpcSeed(name) {
     wallet: 0,
     stats: NPC_STATS,
     notes: 'Built-in dialogue NPC.',
-    images: createBuiltInImages(fileStem)
+    images
+  };
+}
+
+function createSinglePortraitImages(fileStem) {
+  const portrait = `/media/characters/portraits/${fileStem}_neutral.png`;
+
+  return {
+    normal: portrait,
+    shocked: portrait,
+    angry: portrait,
+    sad: portrait,
+    happy: portrait
   };
 }
 

@@ -19,7 +19,7 @@
   import { editorHandoff, libraryState } from '../stores/library';
   import type { StoryNode } from '../stores/library';
   import location from '../stores/location';
-  import { sessionState } from '../stores/session';
+  import { sessionState, type PlayerId } from '../stores/session';
   import { storyMinigameView } from '../stores/minigameSessions';
   import { interpolateSceneText } from '../story/sceneTypes.js';
   import DiceTerminal from './DiceTerminal.svelte';
@@ -61,6 +61,8 @@
   let voteResolutionIsFinal = false;
   let voteHighlightedChoiceId = '';
   let voteResolutionChoiceLabel = '';
+  let cartridgeSelectionInFlight = false;
+  let partnerConnectionId: PlayerId = 'p2';
 
   $: connectionPlayerId = $sessionState.playerId;
   $: playerId = $libraryState.activeStoryMode === 'multiplayer'
@@ -247,6 +249,11 @@
   $: partnerStoryId = connectionPlayerId
     ? $libraryState.selections[connectionPlayerId === 'p1' ? 'p2' : 'p1']
     : null;
+  $: partnerConnectionId = connectionPlayerId === 'p1' ? 'p2' : 'p1';
+  $: partnerSelectionMode = $libraryState.selectionModes[partnerConnectionId];
+  $: partnerOffersMultiplayerCartridge = !localStoryId
+    && Boolean(partnerStoryId)
+    && partnerSelectionMode === 'multiplayer';
   $: localStoryTitle = getStoryTitle(localStoryId);
   $: partnerStoryTitle = getStoryTitle(partnerStoryId);
   $: soloSpectator = $libraryState.activeStoryMode === 'singleplayer'
@@ -581,6 +588,34 @@
     });
   }
 
+  function storySeatClaimedByOther(seat: PlayerId): boolean {
+    const ownerId = $libraryState.seatClaims[seat];
+
+    return Boolean(ownerId && ownerId !== connectionPlayerId);
+  }
+
+  function loadPartnerCartridge(seat: PlayerId): void {
+    if (!partnerStoryId || cartridgeSelectionInFlight) {
+      return;
+    }
+
+    errorMessage = '';
+    cartridgeSelectionInFlight = true;
+    unlockAudioPlayback();
+
+    socket.emit('library:select-story', {
+      storyId: partnerStoryId,
+      mode: 'multiplayer',
+      seat
+    }, (result: { ok: boolean; error?: string }) => {
+      cartridgeSelectionInFlight = false;
+
+      if (!result.ok) {
+        errorMessage = result.error ?? 'The partner cartridge could not be inserted.';
+      }
+    });
+  }
+
   function handleInputKeydown(event: KeyboardEvent, submit: () => void): void {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -677,7 +712,28 @@
         <p class="scene-id">STORY CARTRIDGE REQUIRED</p>
         <h1>Cartridge is offline</h1>
 
-        {#if !localStoryId}
+        {#if partnerOffersMultiplayerCartridge}
+          <p>
+            Your partner inserted <strong>{partnerStoryTitle}</strong>. Choose an
+            available role to insert the same multiplayer cartridge.
+          </p>
+          <div class="cartridge-role-options">
+            <button
+              type="button"
+              disabled={cartridgeSelectionInFlight || storySeatClaimedByOther('p1')}
+              on:click={() => loadPartnerCartridge('p1')}
+            >
+              {storySeatClaimedByOther('p1') ? 'Player 1 · claimed' : 'Insert as Player 1'}
+            </button>
+            <button
+              type="button"
+              disabled={cartridgeSelectionInFlight || storySeatClaimedByOther('p2')}
+              on:click={() => loadPartnerCartridge('p2')}
+            >
+              {storySeatClaimedByOther('p2') ? 'Player 2 · claimed' : 'Insert as Player 2'}
+            </button>
+          </div>
+        {:else if !localStoryId}
           <p>Open Library and select a story cartridge to stage it.</p>
         {:else if !partnerStoryId}
           <p>
@@ -696,6 +752,10 @@
               <dd>{partnerStoryTitle}</dd>
             </div>
           </dl>
+        {/if}
+
+        {#if errorMessage}
+          <p class="error-message" role="alert">{errorMessage}</p>
         {/if}
 
         <button type="button" on:click={() => location.set('library')}>
@@ -1593,6 +1653,23 @@
       font: inherit;
       font-weight: 800;
       cursor: pointer;
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+    }
+
+    .cartridge-role-options {
+      margin-top: 24px;
+
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+
+      button {
+        margin-top: 0;
+      }
     }
   }
 
