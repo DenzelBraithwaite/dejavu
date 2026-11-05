@@ -69,6 +69,37 @@
     roleLabel: string;
     character?: CharacterRecord;
   };
+  type RouteOverlayConnection = {
+    id: string;
+    path: string;
+    kind: 'flow' | 'companion';
+    selected: boolean;
+  };
+  type MinimapNode = {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    companion: boolean;
+    selected: boolean;
+  };
+  type MinimapViewport = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  type StoryValidationIssue = {
+    id: string;
+    title: string;
+    message: string;
+    fix: string;
+    nodeId?: string;
+    map?: StoryPlayMode;
+    blocksSave: boolean;
+    blocksPlay: boolean;
+  };
 
   const flowNodeTypes = [
     { type: 'dialogue', label: 'Dialogue' },
@@ -169,7 +200,7 @@
           name: 'Image',
           type: 'image',
           description: 'Displays uploaded artwork as a routed step inside the terminal.',
-          usage: 'Select and position an image, write its Log text for the cartridge log, and connect Next.'
+          usage: 'Select and position an image, write its Log text, customize its Continue button, or enable a timer to advance automatically.'
         },
         {
           name: 'Minigame',
@@ -205,7 +236,7 @@
           name: 'Terminal effect',
           type: 'screen-effect',
           description: 'Changes terminal color or applies animated presentation effects when its host becomes active.',
-          usage: 'Choose a color, shake, blink, mirror, spin, glow, or scan effect, configure it, then attach it.'
+          usage: 'Choose a custom color, shake, blink, mirror, spin, glow, or scan effect. Glow can appear inside the screen, behind the full terminal, or in both places.'
         }
       ]
     },
@@ -281,7 +312,16 @@
   const mapZoomStep = 0.1;
   const minimumInspectorWidth = 280;
   const maximumInspectorWidth = 720;
-  const terminalThemes = ['blue', 'red', 'purple', 'green', 'amber', 'pink', 'cyan', 'white'];
+  const terminalThemeColors: Record<string, string> = {
+    blue: '#19488e',
+    red: '#ef5b67',
+    purple: '#b77aff',
+    green: '#55f09a',
+    amber: '#f0b94f',
+    pink: '#ff75c8',
+    cyan: '#02fbfb',
+    white: '#e8edf6'
+  };
   const characterStats = [
     'muscles',
     'toughness',
@@ -361,7 +401,11 @@
     references: Array<{ id: string; title: string }>;
   } | null = null;
   let toastTimer: number | undefined;
+  let colorCopyTimer: number | undefined;
+  let copiedColorKey = '';
   let lastToastKey = '';
+  let validationIssues: StoryValidationIssue[] = [];
+  let validationDetailsOpen = false;
   let lastLocation = '';
   let nodeSearch = '';
   let recentNodeTypes: string[] = [];
@@ -375,6 +419,16 @@
   let savePulseTimer: number | undefined;
   let inspectorElement: HTMLElement;
   let flowCanvasElement: HTMLElement;
+  let flowPanelElement: HTMLElement;
+  let graphPresentationFrame: number | undefined;
+  let routeOverlayConnections: RouteOverlayConnection[] = [];
+  let minimapNodes: MinimapNode[] = [];
+  let minimapViewport: MinimapViewport = {
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100
+  };
   let editorLockStoryId = '';
   let inspectorExpanded = false;
   let inspectorWidth = 340;
@@ -472,6 +526,214 @@
     mapZoom = 1;
   }
 
+  function scheduleGraphPresentationForState(
+    _revision: number,
+    _zoom: number,
+    _sidebarWidth: number,
+    _selectedId: string,
+    _storyMap: StoryPlayMode,
+    storyAvailable: boolean
+  ): void {
+    if (storyAvailable && flowCanvasElement && flowPanelElement) {
+      scheduleGraphPresentation();
+    }
+  }
+
+  function scheduleGraphPresentation(): void {
+    window.cancelAnimationFrame(graphPresentationFrame ?? 0);
+    graphPresentationFrame = window.requestAnimationFrame(() => {
+      void tick().then(updateGraphPresentation);
+    });
+  }
+
+  function updateGraphPresentation(): void {
+    if (!editingStory || !flowCanvasElement || !flowPanelElement) {
+      routeOverlayConnections = [];
+      minimapNodes = [];
+      return;
+    }
+
+    const panelRect = flowPanelElement.getBoundingClientRect();
+    const canvasRect = flowCanvasElement.getBoundingClientRect();
+    const nodeElements = new Map<string, HTMLElement>();
+
+    for (const element of flowCanvasElement.querySelectorAll<HTMLElement>('[data-node-id]')) {
+      const nodeId = element.dataset.nodeId;
+
+      if (nodeId) {
+        nodeElements.set(nodeId, element);
+      }
+    }
+
+    routeOverlayConnections = buildRouteOverlayConnections(nodeElements, panelRect);
+    minimapNodes = buildMinimapNodes(nodeElements, canvasRect);
+    minimapViewport = {
+      x: percentage(flowCanvasElement.scrollLeft, flowCanvasElement.scrollWidth),
+      y: percentage(flowCanvasElement.scrollTop, flowCanvasElement.scrollHeight),
+      width: percentage(flowCanvasElement.clientWidth, flowCanvasElement.scrollWidth),
+      height: percentage(flowCanvasElement.clientHeight, flowCanvasElement.scrollHeight)
+    };
+  }
+
+  function buildRouteOverlayConnections(
+    nodeElements: Map<string, HTMLElement>,
+    panelRect: DOMRect
+  ): RouteOverlayConnection[] {
+    if (!editingStory) {
+      return [];
+    }
+
+    const connections: RouteOverlayConnection[] = [];
+
+    for (const node of editingStory.nodes) {
+      for (const field of routeFields(node)) {
+        const destinationId = getRouteValue(node, field);
+
+        if (!destinationId) {
+          continue;
+        }
+
+        const path = connectionPath(
+          nodeElements.get(node.id),
+          nodeElements.get(destinationId),
+          panelRect,
+          false
+        );
+
+        if (path) {
+          connections.push({
+            id: `${node.id}:${field}:${destinationId}`,
+            path,
+            kind: 'flow',
+            selected: selectedNodeId === node.id || selectedNodeId === destinationId
+          });
+        }
+      }
+
+      if (!isCompanionNode(node) || !node.attachedTo) {
+        continue;
+      }
+
+      const path = connectionPath(
+        nodeElements.get(node.attachedTo),
+        nodeElements.get(node.id),
+        panelRect,
+        true
+      );
+
+      if (path) {
+        connections.push({
+          id: `${node.attachedTo}:companion:${node.id}`,
+          path,
+          kind: 'companion',
+          selected: selectedNodeId === node.id || selectedNodeId === node.attachedTo
+        });
+      }
+    }
+
+    return connections;
+  }
+
+  function connectionPath(
+    sourceElement: HTMLElement | undefined,
+    destinationElement: HTMLElement | undefined,
+    panelRect: DOMRect,
+    companion: boolean
+  ): string {
+    if (!sourceElement || !destinationElement) {
+      return '';
+    }
+
+    const sourceRect = sourceElement.getBoundingClientRect();
+    const destinationRect = destinationElement.getBoundingClientRect();
+    const sourceX = companion
+      ? sourceRect.right - panelRect.left
+      : sourceRect.left + (sourceRect.width / 2) - panelRect.left;
+    const sourceY = companion
+      ? sourceRect.top + (sourceRect.height / 2) - panelRect.top
+      : sourceRect.bottom - panelRect.top;
+    const destinationX = companion
+      ? destinationRect.left - panelRect.left
+      : destinationRect.left + (destinationRect.width / 2) - panelRect.left;
+    const destinationY = companion
+      ? destinationRect.top + (destinationRect.height / 2) - panelRect.top
+      : destinationRect.top - panelRect.top;
+
+    if (companion) {
+      const middleX = sourceX + ((destinationX - sourceX) / 2);
+
+      return `M ${sourceX} ${sourceY} H ${middleX} V ${destinationY} H ${destinationX}`;
+    }
+
+    if (destinationY >= sourceY) {
+      const middleY = sourceY + ((destinationY - sourceY) / 2);
+
+      return `M ${sourceX} ${sourceY} V ${middleY} H ${destinationX} V ${destinationY}`;
+    }
+
+    const loopOffset = sourceX <= destinationX ? 42 : -42;
+    const loopX = sourceX + loopOffset;
+
+    return `M ${sourceX} ${sourceY} V ${sourceY + 24} H ${loopX} V ${destinationY - 24} H ${destinationX} V ${destinationY}`;
+  }
+
+  function buildMinimapNodes(
+    nodeElements: Map<string, HTMLElement>,
+    canvasRect: DOMRect
+  ): MinimapNode[] {
+    if (!editingStory) {
+      return [];
+    }
+
+    return editingStory.nodes.flatMap((node) => {
+      const element = nodeElements.get(node.id);
+
+      if (!element) {
+        return [];
+      }
+
+      const rect = element.getBoundingClientRect();
+      const contentX = rect.left - canvasRect.left + flowCanvasElement.scrollLeft;
+      const contentY = rect.top - canvasRect.top + flowCanvasElement.scrollTop;
+
+      return [{
+        id: node.id,
+        x: percentage(contentX, flowCanvasElement.scrollWidth),
+        y: percentage(contentY, flowCanvasElement.scrollHeight),
+        width: Math.max(1.5, percentage(rect.width, flowCanvasElement.scrollWidth)),
+        height: Math.max(1.5, percentage(rect.height, flowCanvasElement.scrollHeight)),
+        companion: isCompanionNode(node),
+        selected: selectedNodeId === node.id
+      }];
+    });
+  }
+
+  function percentage(value: number, total: number): number {
+    if (total <= 0) {
+      return 0;
+    }
+
+    return clamp((value / total) * 100, 0, 100);
+  }
+
+  function navigateFromMinimap(event: MouseEvent): void {
+    if (!flowCanvasElement) {
+      return;
+    }
+
+    const minimap = event.currentTarget as HTMLElement;
+    const stage = minimap.querySelector<HTMLElement>('.story-minimap-stage');
+    const rect = stage?.getBoundingClientRect() ?? minimap.getBoundingClientRect();
+    const horizontalProgress = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const verticalProgress = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+
+    flowCanvasElement.scrollTo({
+      left: (horizontalProgress * flowCanvasElement.scrollWidth) - (flowCanvasElement.clientWidth / 2),
+      top: (verticalProgress * flowCanvasElement.scrollHeight) - (flowCanvasElement.clientHeight / 2),
+      behavior: 'smooth'
+    });
+  }
+
   function beginInspectorResize(event: PointerEvent): void {
     if (inspectorExpanded || window.innerWidth <= 800) {
       return;
@@ -531,6 +793,7 @@
         saveStory('auto');
       }
     }, 120_000);
+    window.addEventListener('resize', scheduleGraphPresentation);
   });
 
   $: playerId = $sessionState.playerId;
@@ -596,6 +859,14 @@
   $: selectedNode = editingStory?.nodes.find(
     (node) => node.id === selectedNodeId
   ) ?? null;
+  $: scheduleGraphPresentationForState(
+    storyRevision,
+    mapZoom,
+    inspectorWidth,
+    selectedNodeId,
+    activeStoryMap,
+    Boolean(editingStory)
+  );
   $: newStoryHasCharacters = (
     !newPlayModes.singleplayer
       || Boolean(newMainCharacterIds.singleplayer)
@@ -627,13 +898,13 @@
     openEditor(handoff.storyId, handoff.nodeId, handoff.map);
   }
   $: {
-    const toastKey = `${statusMessage}|${errorMessage}`;
+    const toastKey = `${statusMessage}|${errorMessage}|${validationIssues.length}`;
 
     if (toastKey !== lastToastKey) {
       lastToastKey = toastKey;
       window.clearTimeout(toastTimer);
 
-      if (statusMessage || errorMessage) {
+      if ((statusMessage || errorMessage) && validationIssues.length === 0) {
         toastTimer = window.setTimeout(clearMessages, 4200);
       }
     }
@@ -641,12 +912,57 @@
 
   onDestroy(() => {
     window.clearTimeout(toastTimer);
+    window.clearTimeout(colorCopyTimer);
     window.clearTimeout(savePulseTimer);
     window.clearInterval(autosaveTimer);
+    window.cancelAnimationFrame(graphPresentationFrame ?? 0);
+    window.removeEventListener('resize', scheduleGraphPresentation);
     finishInspectorResize();
     socket.emit('library:release-story');
     editorLockStoryId = '';
   });
+
+  async function copyPropertyColor(key: string, value: string | undefined): Promise<void> {
+    const color = String(value ?? '').trim().toUpperCase();
+
+    if (!color) {
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(color);
+      } else {
+        copyTextWithFallback(color);
+      }
+
+      showCopiedColorFeedback(key);
+    } catch {
+      copyTextWithFallback(color);
+      showCopiedColorFeedback(key);
+    }
+  }
+
+  function showCopiedColorFeedback(key: string): void {
+    copiedColorKey = key;
+    window.clearTimeout(colorCopyTimer);
+    colorCopyTimer = window.setTimeout(() => {
+      copiedColorKey = '';
+    }, 1600);
+  }
+
+  function copyTextWithFallback(value: string): void {
+    const copyField = document.createElement('textarea');
+
+    copyField.value = value;
+    copyField.setAttribute('readonly', '');
+    copyField.style.position = 'fixed';
+    copyField.style.opacity = '0';
+    document.body.appendChild(copyField);
+    copyField.select();
+    document.execCommand('copy');
+    copyField.remove();
+  }
 
   function storyTitle(storyId: string | null): string {
     if (!storyId) {
@@ -686,6 +1002,8 @@
   function clearMessages(): void {
     statusMessage = '';
     errorMessage = '';
+    validationIssues = [];
+    validationDetailsOpen = false;
   }
 
   function characterExpressionImage(
@@ -930,8 +1248,19 @@
       return;
     }
 
-    clearMessages();
     synchronizeStoryCharacterIds();
+    const issues = storyValidationIssues(editingStory);
+    const saveBlockingIssues = issues.filter((issue) => issue.blocksSave);
+
+    if (saveBlockingIssues.length > 0) {
+      if (source === 'manual') {
+        showValidationReport(issues, 'save');
+      }
+
+      return;
+    }
+
+    clearMessages();
     const submittedStory = structuredClone(editingStory);
     const submittedKey = storyContentKey(submittedStory);
     const selectedBeforeSave = selectedNodeId;
@@ -945,7 +1274,11 @@
       error?: string;
     }) => {
       if (!result.ok || !result.story) {
-        errorMessage = result.error ?? 'Could not save the story.';
+        showValidationReport(
+          storyValidationIssues(submittedStory),
+          'save',
+          result.error ?? 'Could not save the story.'
+        );
         saveInFlight = false;
         return;
       }
@@ -1001,10 +1334,12 @@
       return;
     }
 
-    const startIssue = storyStartIssue(editingStory);
+    synchronizeStoryCharacterIds();
+    const issues = storyValidationIssues(editingStory);
+    const playBlockingIssues = issues.filter((issue) => issue.blocksPlay);
 
-    if (startIssue) {
-      errorMessage = `Unavailable: ${startIssue}`;
+    if (playBlockingIssues.length > 0) {
+      showValidationReport(issues, 'play');
       return;
     }
 
@@ -1230,9 +1565,11 @@
       if (node.type === 'background') {
         node.type = 'screen-effect';
         node.screenEffect = 'color';
-        node.backgroundTheme ??= terminalThemes.includes(String(node.background))
+        node.backgroundTheme ??= terminalThemeColors[String(node.background)]
           ? node.background as StoryNode['backgroundTheme']
           : 'blue';
+        node.effectColor = terminalThemeColors[String(node.backgroundTheme)]
+          ?? terminalThemeColors.blue;
       }
 
       if (node.type === 'music') {
@@ -1278,10 +1615,14 @@
 
       if (node.type === 'image') {
         node.text ??= '';
+        node.continueLabel ??= 'Continue';
         node.imagePositionX ??= 50;
         node.imagePositionY ??= 50;
         node.logText ??= node.alt ?? '';
         node.imageBorderColor ??= '#1472bf';
+        node.timed ??= false;
+        node.durationMs ??= 3_000;
+        node.showCountdown ??= true;
       }
 
       if (node.type === 'dialogue') {
@@ -1338,10 +1679,17 @@
         node.effectDurationSeconds ??= node.screenEffect === 'blink' ? 0.75 : 0.6;
         node.effectIterations ??= 1;
         node.effectLoop ??= false;
+        node.glowTarget ??= 'inner';
         node.mirrorAxis ??= 'horizontal';
         node.spinDirection ??= 'clockwise';
         node.effectColor ??= '#39ff88';
         node.scanDirection ??= 'left-to-right';
+
+        if (node.screenEffect === 'color'
+          && (!node.effectColor || node.effectColor === '#39ff88')) {
+          node.effectColor = terminalThemeColors[String(node.backgroundTheme)]
+            ?? terminalThemeColors.blue;
+        }
       }
 
       if (node.type === 'input') {
@@ -1490,9 +1838,11 @@
 
     if (requestedEffect === 'glow') {
       selectedNode.effectLoop = true;
+      selectedNode.glowTarget ??= 'inner';
     } else if (requestedEffect === 'color') {
       selectedNode.effectLoop = false;
-      selectedNode.backgroundTheme ??= 'blue';
+      selectedNode.effectColor = terminalThemeColors[String(selectedNode.backgroundTheme)]
+        ?? terminalThemeColors.blue;
     }
 
     refreshStory();
@@ -1659,6 +2009,426 @@
     editingStory.initialSceneIds.p1 = nodeId;
     editingStory.initialSceneIds.p2 = nodeId;
     refreshStory();
+  }
+
+  function storyValidationIssues(story: StoryDocument): StoryValidationIssue[] {
+    const issues: StoryValidationIssue[] = [];
+    const nodesById = new Map(story.nodes.map((node) => [node.id, node]));
+    const charactersById = new Map(
+      $characterLibraryState.characters.map((character) => [character.id, character])
+    );
+    const enabledStartIds: string[] = [];
+
+    if (!story.playModes.singleplayer && !story.playModes.multiplayer) {
+      issues.push({
+        id: 'story:no-play-mode',
+        title: 'No playable map enabled',
+        message: 'The cartridge has neither a single-player nor multiplayer map enabled.',
+        fix: 'Open Story Settings and enable at least one playable map.',
+        blocksSave: true,
+        blocksPlay: true
+      });
+    }
+
+    if (story.playModes.singleplayer) {
+      addPlayableCharacterIssue(
+        issues,
+        charactersById,
+        story.mainCharacterIds.singleplayer,
+        'Single-player character',
+        'singleplayer'
+      );
+      addStartIssue(
+        issues,
+        nodesById,
+        story.singleplayerInitialSceneId,
+        'Single-player start',
+        'singleplayer',
+        'p1'
+      );
+      enabledStartIds.push(story.singleplayerInitialSceneId);
+    }
+
+    if (story.playModes.multiplayer) {
+      addPlayableCharacterIssue(
+        issues,
+        charactersById,
+        story.mainCharacterIds.multiplayer.p1,
+        'Player 1 character',
+        'multiplayer'
+      );
+      addPlayableCharacterIssue(
+        issues,
+        charactersById,
+        story.mainCharacterIds.multiplayer.p2,
+        'Player 2 character',
+        'multiplayer'
+      );
+
+      if (story.mainCharacterIds.multiplayer.p1
+        && story.mainCharacterIds.multiplayer.p1 === story.mainCharacterIds.multiplayer.p2) {
+        issues.push({
+          id: 'story:duplicate-multiplayer-character',
+          title: 'Players share the same character',
+          message: 'Player 1 and Player 2 cannot use the same main character.',
+          fix: 'Open Story Settings and select a different playable character for either player.',
+          map: 'multiplayer',
+          blocksSave: true,
+          blocksPlay: true
+        });
+      }
+
+      if (story.multiplayerStartMode === 'shared') {
+        const sharedStartId = story.initialSceneIds.p1 === story.initialSceneIds.p2
+          ? story.initialSceneIds.p1
+          : '';
+
+        addStartIssue(
+          issues,
+          nodesById,
+          sharedStartId,
+          'Shared multiplayer start',
+          'multiplayer',
+          'both'
+        );
+        enabledStartIds.push(sharedStartId);
+      } else {
+        addStartIssue(
+          issues,
+          nodesById,
+          story.initialSceneIds.p1,
+          'Player 1 start',
+          'multiplayer',
+          'p1'
+        );
+        addStartIssue(
+          issues,
+          nodesById,
+          story.initialSceneIds.p2,
+          'Player 2 start',
+          'multiplayer',
+          'p2'
+        );
+        enabledStartIds.push(story.initialSceneIds.p1, story.initialSceneIds.p2);
+      }
+    }
+
+    const reachableNodeIds = collectReachableNodeIds(story, enabledStartIds);
+    const seenNodeIds = new Set<string>();
+
+    for (const node of story.nodes) {
+      const nodeTitle = displayNodeName(node);
+      const map = nodeMap(node);
+
+      if (!node.id || seenNodeIds.has(node.id)) {
+        issues.push({
+          id: `node:${node.id || 'missing'}:duplicate-id`,
+          title: node.id ? `Duplicate node ID: ${node.id}` : 'Node is missing an ID',
+          message: 'Every node must have a unique, non-empty ID.',
+          fix: 'Delete and recreate the duplicate node so the editor can generate a unique ID.',
+          nodeId: node.id || undefined,
+          map,
+          blocksSave: true,
+          blocksPlay: true
+        });
+      }
+
+      seenNodeIds.add(node.id);
+
+      const character = node.characterId
+        ? charactersById.get(node.characterId)
+        : undefined;
+
+      if (node.characterId && (!character || character.type === 'account')) {
+        issues.push({
+          id: `node:${node.id}:invalid-speaker`,
+          title: `${nodeTitle} has an unavailable character`,
+          message: `Node ${node.id} references a character that no longer exists or is an account character.`,
+          fix: 'Open the node and select a playable character, an NPC, or Custom speaker.',
+          nodeId: node.id,
+          map,
+          blocksSave: true,
+          blocksPlay: true
+        });
+      } else if (node.type === 'change-character'
+        && !node.resetToDefault
+        && character?.type !== 'playable') {
+        issues.push({
+          id: `node:${node.id}:invalid-character-change`,
+          title: `${nodeTitle} needs a playable character`,
+          message: `Change Character node ${node.id} does not target a playable story character.`,
+          fix: 'Select a playable character or enable Reset to default.',
+          nodeId: node.id,
+          map,
+          blocksSave: true,
+          blocksPlay: true
+        });
+      }
+
+      if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+        addChoiceValidationIssues(issues, node, nodeTitle, map);
+      }
+
+      if (isCompanionNode(node)) {
+        const host = node.attachedTo ? nodesById.get(node.attachedTo) : undefined;
+
+        if (!host || !canAttachToNode(node, host)) {
+          issues.push({
+            id: `node:${node.id}:invalid-host`,
+            title: `${nodeTitle} is not attached`,
+            message: `Companion node ${node.id} has no valid host in its lane.`,
+            fix: 'Open the node and use Select host node to attach it to a main-flow node.',
+            nodeId: node.id,
+            map,
+            blocksSave: false,
+            blocksPlay: false
+          });
+        }
+
+        continue;
+      }
+
+      const isStart = enabledStartIds.includes(node.id);
+      const hasIncomingRoute = story.nodes.some((candidate) => (
+        routeFields(candidate).some((field) => getRouteValue(candidate, field) === node.id)
+      ));
+
+      if (!isStart && !hasIncomingRoute) {
+        issues.push({
+          id: `node:${node.id}:unconnected`,
+          title: `${nodeTitle} is not connected`,
+          message: `Node ${node.id} cannot currently be reached from another node.`,
+          fix: 'Connect a previous node, choose it as a valid start, or remove it if it is unused.',
+          nodeId: node.id,
+          map,
+          blocksSave: false,
+          blocksPlay: false
+        });
+      }
+
+      if (!reachableNodeIds.has(node.id)) {
+        continue;
+      }
+
+      const brokenFields = routeFields(node).filter((field) => {
+        const destinationId = getRouteValue(node, field);
+        const destination = nodesById.get(destinationId);
+
+        return Boolean(destinationId)
+          && (!destination || destination.type === 'label' || !canLinkToNode(node.id, destination));
+      });
+
+      if (brokenFields.length > 0) {
+        issues.push({
+          id: `node:${node.id}:broken-route`,
+          title: `${nodeTitle} has a broken route`,
+          message: `Node ${node.id} points to an unavailable or incompatible destination.`,
+          fix: 'Reconnect the affected destination using the node’s route controls.',
+          nodeId: node.id,
+          map,
+          blocksSave: false,
+          blocksPlay: true
+        });
+      }
+
+      if (node.type === 'image' && !String(node.src ?? '').trim()) {
+        issues.push({
+          id: `node:${node.id}:missing-image`,
+          title: `${nodeTitle} has no image`,
+          message: `Image node ${node.id} is reachable but has no artwork selected.`,
+          fix: 'Open the node and upload an image or select one from the image library.',
+          nodeId: node.id,
+          map,
+          blocksSave: false,
+          blocksPlay: true
+        });
+      }
+    }
+
+    return issues;
+  }
+
+  function addPlayableCharacterIssue(
+    issues: StoryValidationIssue[],
+    charactersById: Map<string, CharacterRecord>,
+    characterId: string | null,
+    label: string,
+    map: StoryPlayMode
+  ): void {
+    if (characterId && charactersById.get(characterId)?.type === 'playable') {
+      return;
+    }
+
+    issues.push({
+      id: `story:${map}:${label.toLowerCase().replaceAll(' ', '-')}`,
+      title: `${label} is missing`,
+      message: `${label} must reference an existing playable character.`,
+      fix: 'Open Story Settings and select a character from the playable-character library.',
+      map,
+      blocksSave: true,
+      blocksPlay: true
+    });
+  }
+
+  function addStartIssue(
+    issues: StoryValidationIssue[],
+    nodesById: Map<string, StoryNode>,
+    nodeId: string,
+    label: string,
+    map: StoryPlayMode,
+    audience: LaneId
+  ): void {
+    const node = nodesById.get(nodeId);
+
+    if (startNodeIsValid(node, map, audience)) {
+      return;
+    }
+
+    const expectedAudience = audience === 'both' ? 'the Shared lane' : `${audience.toUpperCase()} lane`;
+    issues.push({
+      id: `story:${map}:${audience}:invalid-start`,
+      title: `${label} is missing or invalid`,
+      message: node
+        ? `${node.id} cannot be used as ${label.toLowerCase()}.`
+        : `No node is selected for ${label.toLowerCase()}.`,
+      fix: `Open Story Settings and choose a player-facing scene or Condition node on ${expectedAudience}.`,
+      nodeId: node?.id,
+      map,
+      blocksSave: false,
+      blocksPlay: true
+    });
+  }
+
+  function addChoiceValidationIssues(
+    issues: StoryValidationIssue[],
+    node: StoryNode,
+    nodeTitle: string,
+    map: StoryPlayMode
+  ): void {
+    const choices = node.choices ?? [];
+    const enabledChoices = choices.filter((choice) => !choice.disabled);
+
+    if (choices.length < 2 || choices.length > 5) {
+      issues.push({
+        id: `node:${node.id}:choice-count`,
+        title: `${nodeTitle} has an invalid option count`,
+        message: `Node ${node.id} contains ${choices.length} options; it requires between two and five.`,
+        fix: 'Open the node and add or remove options until it has two to five.',
+        nodeId: node.id,
+        map,
+        blocksSave: true,
+        blocksPlay: true
+      });
+    }
+
+    if (enabledChoices.length === 0) {
+      issues.push({
+        id: `node:${node.id}:no-enabled-choice`,
+        title: `${nodeTitle} has no selectable option`,
+        message: `Every option on node ${node.id} is disabled.`,
+        fix: 'Enable at least one option so the player can continue.',
+        nodeId: node.id,
+        map,
+        blocksSave: true,
+        blocksPlay: true
+      });
+    }
+
+    if (node.timed && !enabledChoices.some((choice) => choice.id === node.fallbackChoiceId)) {
+      issues.push({
+        id: `node:${node.id}:missing-fallback`,
+        title: `${nodeTitle} needs a timed fallback`,
+        message: `Timed choice node ${node.id} has no enabled fallback option.`,
+        fix: 'Choose one enabled option as the automatic selection.',
+        nodeId: node.id,
+        map,
+        blocksSave: true,
+        blocksPlay: true
+      });
+    }
+  }
+
+  function collectReachableNodeIds(story: StoryDocument, startIds: string[]): Set<string> {
+    const nodesById = new Map(story.nodes.map((node) => [node.id, node]));
+    const reachable = new Set<string>();
+    const pending = startIds.filter(Boolean);
+
+    while (pending.length > 0) {
+      const nodeId = pending.shift();
+
+      if (!nodeId || reachable.has(nodeId)) {
+        continue;
+      }
+
+      const node = nodesById.get(nodeId);
+
+      if (!node) {
+        continue;
+      }
+
+      reachable.add(nodeId);
+
+      for (const field of routeFields(node)) {
+        const destinationId = getRouteValue(node, field);
+
+        if (destinationId && !reachable.has(destinationId)) {
+          pending.push(destinationId);
+        }
+      }
+    }
+
+    return reachable;
+  }
+
+  function showValidationReport(
+    issues: StoryValidationIssue[],
+    action: 'play' | 'save',
+    fallbackMessage = ''
+  ): void {
+    window.clearTimeout(toastTimer);
+    validationIssues = issues.length > 0
+      ? issues
+      : [{
+          id: `story:${action}:unknown-error`,
+          title: `The story could not ${action}`,
+          message: fallbackMessage || `The story could not ${action}.`,
+          fix: 'Review Story Settings and the currently selected node, then try again.',
+          blocksSave: action === 'save',
+          blocksPlay: action === 'play'
+        }];
+    validationDetailsOpen = false;
+    errorMessage = action === 'play'
+      ? `Cannot play this story: ${validationIssues.filter((issue) => issue.blocksPlay).length} issue${validationIssues.filter((issue) => issue.blocksPlay).length === 1 ? '' : 's'} must be fixed.`
+      : `Cannot save this story: ${validationIssues.filter((issue) => issue.blocksSave).length} issue${validationIssues.filter((issue) => issue.blocksSave).length === 1 ? '' : 's'} must be fixed.`;
+  }
+
+  function toggleValidationDetails(): void {
+    validationDetailsOpen = !validationDetailsOpen;
+    window.clearTimeout(toastTimer);
+  }
+
+  function focusValidationIssue(issue: StoryValidationIssue): void {
+    if (!editingStory || !issue.nodeId) {
+      if (issue.map) {
+        openStorySettings();
+      }
+
+      clearMessages();
+      return;
+    }
+
+    const node = editingStory.nodes.find((candidate) => candidate.id === issue.nodeId);
+
+    if (!node) {
+      return;
+    }
+
+    activeStoryMap = issue.map ?? nodeMap(node);
+    selectedNodeId = node.id;
+    activeLane = (node.audience ?? 'both') as LaneId;
+    inspectorExpanded = false;
+    clearMessages();
+    void scrollSelectedNodeIntoView();
   }
 
   function storyStartIssue(story: StoryDocument): string {
@@ -1852,6 +2622,10 @@
       }
 
       node.screenEffect = availableEffect;
+
+      if (availableEffect === 'color') {
+        node.effectColor = terminalThemeColors.blue;
+      }
     }
 
     rememberForUndo();
@@ -1887,15 +2661,6 @@
     selectedNodeId = node.id;
     insertionTarget = null;
     refreshStory();
-  }
-
-  function duplicateNode(node: StoryNode): void {
-    copiedNode = structuredClone(node);
-    openNodePicker({
-      lane: (node.audience ?? 'both') as LaneId,
-      insertAfterId: node.id
-    });
-    pasteNode();
   }
 
   function copyNode(node: StoryNode): void {
@@ -2307,10 +3072,17 @@
       columnWidth: 258 + Math.max(
         0,
         ...orderedLevels.flatMap((level) => level.nodes.map(
-          (node) => companionStackIndex(level.nodes, node) * 12
+          (node) => companionStackIndex(level.nodes, node) * 18
         ))
       )
     };
+  }
+
+  function maximumCompanionStackIndex(nodes: StoryNode[]): number {
+    return Math.max(
+      0,
+      ...nodes.map((node) => companionStackIndex(nodes, node))
+    );
   }
 
   function compactLevelColumnCount(nodes: StoryNode[]): number {
@@ -3911,11 +4683,15 @@
         return {
           ...baseNode,
           text: '',
+          continueLabel: 'Continue',
           src: '',
           logText: '',
           imagePositionX: 50,
           imagePositionY: 50,
-          imageBorderColor: '#1472bf'
+          imageBorderColor: '#1472bf',
+          timed: false,
+          durationMs: 3_000,
+          showCountdown: true
         };
       case 'clear-terminal':
         return {
@@ -3991,6 +4767,7 @@
           effectDurationSeconds: 0.6,
           effectIterations: 1,
           effectLoop: false,
+          glowTarget: 'inner',
           mirrorAxis: 'horizontal',
           spinDirection: 'clockwise',
           effectColor: '#39ff88',
@@ -4319,7 +5096,7 @@
           <button type="button" on:click={openStorySettings}>
             Settings
           </button>
-          <button type="button" disabled={saveInFlight || Boolean(storyStartIssue(editingStory))} on:click={requestPlaytest}>
+          <button type="button" disabled={saveInFlight} on:click={requestPlaytest}>
             ▶ Play
           </button>
           <button class="primary-button" type="button" disabled={saveInFlight} on:click={() => saveStory()}>
@@ -4638,7 +5415,7 @@
       </p>
 
       <div class="editor-workspace" style={`--inspector-width: ${inspectorWidth}px`}>
-        <div class="flow-panel">
+        <div class="flow-panel" bind:this={flowPanelElement}>
           {#if linkSelection}
             <div class="link-mode-banner" role="status">
               <span>Select a destination for {linkSelection.label.toLowerCase()}.</span>
@@ -4668,11 +5445,32 @@
             >+</button>
           </div>
 
+          <svg class="route-overlay" aria-hidden="true">
+            <defs>
+              <marker id="route-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z"></path>
+              </marker>
+              <marker id="companion-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z"></path>
+              </marker>
+            </defs>
+            {#each routeOverlayConnections as connection (connection.id)}
+              <path
+                class:route-connection={connection.kind === 'flow'}
+                class:companion-connection={connection.kind === 'companion'}
+                class:selected-connection={connection.selected}
+                d={connection.path}
+                marker-end={connection.kind === 'companion' ? 'url(#companion-arrow)' : 'url(#route-arrow)'}
+              ></path>
+            {/each}
+          </svg>
+
           <div
             class="flow-canvas"
             class:selecting-route={Boolean(linkSelection)}
             aria-label="Story flow"
             bind:this={flowCanvasElement}
+            on:scroll={scheduleGraphPresentation}
           >
             <div
               class="flow-lanes"
@@ -4711,7 +5509,7 @@
                       class:parallel-level={level.nodes.length > 1}
                       class:merge-level={level.nodes.some(nodeMergesRoutes)}
                       data-depth={level.depth}
-                      style={`--level-columns: ${laneGraph.maxColumns}`}
+                      style={`--level-columns: ${laneGraph.maxColumns}; --max-companion-stack-index: ${maximumCompanionStackIndex(level.nodes)}`}
                     >
                       {#each level.nodes as node (`${node.id}:${storyRevision}`)}
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -4765,13 +5563,6 @@
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="8" y="8" width="11" height="11" rx="2"></rect>
                             <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
-                          </svg>
-                        </button>
-                        <button type="button" aria-label={`Duplicate ${displayNodeName(node)}`} title="Duplicate" on:click|stopPropagation={() => duplicateNode(node)}>
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <rect x="5" y="5" width="10" height="10" rx="2"></rect>
-                            <path d="M9 15v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-2"></path>
-                            <path d="M10 8v4M8 10h4"></path>
                           </svg>
                         </button>
                         <button class="quick-delete" type="button" aria-label={`Delete ${displayNodeName(node)}`} title="Delete" on:click|stopPropagation={() => deleteNode(node)}>
@@ -4865,6 +5656,28 @@
             {/each}
             </div>
           </div>
+
+          <button
+            class="story-minimap"
+            type="button"
+            aria-label="Story map overview. Click to navigate."
+            on:click={navigateFromMinimap}
+          >
+            <span class="story-minimap-title">MAP</span>
+            <span class="story-minimap-stage">
+              {#each minimapNodes as node (node.id)}
+                <i
+                  class:companion={node.companion}
+                  class:selected={node.selected}
+                  style={`left: ${node.x}%; top: ${node.y}%; width: ${node.width}%; height: ${node.height}%`}
+                ></i>
+              {/each}
+              <b
+                class="story-minimap-viewport"
+                style={`left: ${minimapViewport.x}%; top: ${minimapViewport.y}%; width: ${minimapViewport.width}%; height: ${minimapViewport.height}%`}
+              ></b>
+            </span>
+          </button>
         </div>
 
         {#if inspectorExpanded}
@@ -4917,6 +5730,13 @@
               <p class="inspector-warning">This is a multiplayer-only node. Replace it before playing this solo map.</p>
             {/if}
 
+            {#if (selectedNode.type !== 'label'
+              && !nodeIsStart(selectedNode)
+              && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined))
+              || routeFields(selectedNode).includes('next')}
+              <section class="route-settings-group">
+                <h3>Story route</h3>
+
             {#if selectedNode.type !== 'label'
               && !nodeIsStart(selectedNode)
               && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
@@ -4931,10 +5751,11 @@
                         {displayNodeName(connection.node)} · {routeFieldLabel(connection.node, connection.field)}
                       </button>
                       <button
+                        class="disconnect-route-button"
                         type="button"
                         aria-label={`Disconnect ${displayNodeName(connection.node)}`}
                         on:click={() => clearIncomingRoute(connection.node, connection.field)}
-                      >×</button>
+                      >Disconnect</button>
                     </div>
                   {/each}
                 {/if}
@@ -4960,9 +5781,12 @@
                   {isCompanionNode(selectedNode) ? 'Select legacy return' : 'Select next node'}
                 </button>
                 {#if selectedNode.next}
-                  <button type="button" aria-label="Clear next node" on:click={() => clearRoute(selectedNode, 'next')}>×</button>
+                  <button class="disconnect-route-button" type="button" on:click={() => clearRoute(selectedNode, 'next')}>Disconnect next node</button>
                 {/if}
               </div>
+            {/if}
+
+              </section>
             {/if}
 
             {#if isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined}
@@ -4973,11 +5797,11 @@
                 </span>
                 <button type="button" on:click={startAttachmentSelection}>Select host node</button>
                 {#if selectedNode.attachedTo}
-                  <button type="button" aria-label="Clear companion host" on:click={() => {
+                  <button class="disconnect-route-button" type="button" on:click={() => {
                     rememberForUndo();
                     selectedNode.attachedTo = '';
                     refreshStory();
-                  }}>×</button>
+                  }}>Disconnect host node</button>
                 {/if}
               </div>
             {/if}
@@ -5009,10 +5833,11 @@
               && selectedNode.type !== 'input'
               && selectedNode.type !== 'clear-terminal'
               && !(isCompanionNode(selectedNode) && selectedNode.attachedTo !== undefined)}
-              <label for="node-text">
+              <label class="node-text-property" for="node-text">
                 {selectedNode.type === 'label' ? 'Label title' : 'Terminal text'}
               </label>
               <textarea
+                class="node-text-property"
                 id="node-text"
                 bind:value={selectedNode.text}
                 rows="5"
@@ -5064,11 +5889,15 @@
             {/if}
 
             {#if supportsSpeakerProperties(selectedNode)}
-              <div class:inspector-property-group={selectedNode.type === 'input'}>
+              <div class="inspector-property-group">
+                <h3>{selectedNode.type === 'input' ? 'Question presentation' : 'Speaker and portrait'}</h3>
                 {#if selectedNode.type === 'input'}
-                  <h3>Question presentation</h3>
                   <p class="inspector-help">
                     Controls who presents the question above the player’s input field.
+                  </p>
+                {:else}
+                  <p class="inspector-help">
+                    Choose a story character or provide a custom speaker identity for this node.
                   </p>
                 {/if}
 
@@ -5113,7 +5942,7 @@
                     {selectedNode.type === 'input' ? 'Custom prompt speaker name' : 'Custom speaker name'}
                   </label>
                   <input id="custom-speaker-name" bind:value={selectedNode.speaker}>
-                  <span class="inspector-label">
+                  <span class="inspector-label property-section-label">
                     {selectedNode.type === 'input' ? 'Custom prompt speaker image' : 'Custom speaker image'}
                   </span>
                   {#if selectedNode.portrait}
@@ -5122,13 +5951,17 @@
                       <span>{selectedNode.portrait.split('/').at(-1)}</span>
                     </div>
                   {/if}
-                  <button type="button" on:click={() => openImageLibrary('portrait')}>
-                    {selectedNode.type === 'input' ? 'Select prompt speaker image' : 'Select speaker image'}
-                  </button>
-                  {#if selectedNode.portrait}
-                    <button type="button" on:click={removeCustomSpeakerPortrait}>
-                      {selectedNode.type === 'input' ? 'Remove prompt speaker image' : 'Remove speaker image'}
+                  <div class="inspector-action-stack">
+                    <button class="inspector-action-button" type="button" on:click={() => openImageLibrary('portrait')}>
+                      {selectedNode.type === 'input' ? 'Select prompt speaker image' : 'Select speaker image'}
                     </button>
+                    {#if selectedNode.portrait}
+                      <button class="inspector-action-button inspector-action-button--danger" type="button" on:click={removeCustomSpeakerPortrait}>
+                        {selectedNode.type === 'input' ? 'Remove prompt speaker image' : 'Remove speaker image'}
+                      </button>
+                    {/if}
+                  </div>
+                  {#if selectedNode.portrait}
                     <label for="custom-speaker-image-alt">
                       {selectedNode.type === 'input' ? 'Prompt speaker image description' : 'Speaker image description'}
                     </label>
@@ -5209,7 +6042,7 @@
                 <button class="route-node-link" type="button" disabled={!selectedNode.success} on:click={() => selectConnectedNode(selectedNode.success)}>{routeLabel(selectedNode, 'success')}</button>
                 <button type="button" on:click={() => startLinkSelection('success', 'Success node')}>Select node</button>
                 {#if selectedNode.success}
-                  <button type="button" aria-label="Clear success node" on:click={() => clearRoute(selectedNode, 'success')}>×</button>
+                  <button class="disconnect-route-button" type="button" on:click={() => clearRoute(selectedNode, 'success')}>Disconnect success node</button>
                 {/if}
               </div>
               <div class="route-label">Failure node</div>
@@ -5217,7 +6050,7 @@
                 <button class="route-node-link" type="button" disabled={!selectedNode.failure} on:click={() => selectConnectedNode(selectedNode.failure)}>{routeLabel(selectedNode, 'failure')}</button>
                 <button type="button" on:click={() => startLinkSelection('failure', 'Failure node')}>Select node</button>
                 {#if selectedNode.failure}
-                  <button type="button" aria-label="Clear failure node" on:click={() => clearRoute(selectedNode, 'failure')}>×</button>
+                  <button class="disconnect-route-button" type="button" on:click={() => clearRoute(selectedNode, 'failure')}>Disconnect failure node</button>
                 {/if}
               </div>
             {/if}
@@ -5520,13 +6353,18 @@
                 <option value="scan">Scanner bar</option>
               </select>
               {#if selectedNode.screenEffect === 'color'}
-                <label for="terminal-color-theme">Terminal color theme</label>
-                <select id="terminal-color-theme" bind:value={selectedNode.backgroundTheme}>
-                  {#each terminalThemes as theme}
-                    <option value={theme}>{theme[0].toUpperCase() + theme.slice(1)}</option>
-                  {/each}
-                </select>
-                <p class="inspector-help">The premade terminal palette is applied while the attached host scene is active.</p>
+                <div class="color-property-control">
+                  <label class="image-color-control" for="terminal-color">
+                    <span>Terminal color</span>
+                    <input id="terminal-color" type="color" bind:value={selectedNode.effectColor}>
+                  </label>
+                  <button type="button" on:click={() => copyPropertyColor('terminal-color', selectedNode.effectColor)}>
+                    {copiedColorKey === 'terminal-color' ? 'Copied' : `Copy ${selectedNode.effectColor?.toUpperCase()}`}
+                  </button>
+                </div>
+                <p class="inspector-help">
+                  Sets the terminal border, header accents, controls, and surrounding outline while the attached scene is active.
+                </p>
               {:else if selectedNode.screenEffect === 'mirror'}
                 <label for="mirror-axis">Mirror axis</label>
                 <select id="mirror-axis" bind:value={selectedNode.mirrorAxis}>
@@ -5543,10 +6381,23 @@
                 </select>
               {/if}
               {#if ['glow', 'scan'].includes(selectedNode.screenEffect)}
-                <label class="image-color-control" for="screen-effect-color">
-                  <span>Effect color</span>
-                  <input id="screen-effect-color" type="color" bind:value={selectedNode.effectColor}>
-                </label>
+                <div class="color-property-control">
+                  <label class="image-color-control" for="screen-effect-color">
+                    <span>Effect color</span>
+                    <input id="screen-effect-color" type="color" bind:value={selectedNode.effectColor}>
+                  </label>
+                  <button type="button" on:click={() => copyPropertyColor('screen-effect-color', selectedNode.effectColor)}>
+                    {copiedColorKey === 'screen-effect-color' ? 'Copied' : `Copy ${selectedNode.effectColor?.toUpperCase()}`}
+                  </button>
+                </div>
+              {/if}
+              {#if selectedNode.screenEffect === 'glow'}
+                <label for="glow-target">Glow placement</label>
+                <select id="glow-target" bind:value={selectedNode.glowTarget}>
+                  <option value="inner">Inner — terminal screen</option>
+                  <option value="outer">Outer — behind the full terminal</option>
+                  <option value="both">Both inner and outer</option>
+                </select>
               {/if}
               {#if selectedNode.screenEffect === 'scan'}
                 <label for="scan-direction">Scan direction</label>
@@ -5911,7 +6762,7 @@
                 <button class="route-node-link" type="button" disabled={!selectedNode.trueNext} on:click={() => selectConnectedNode(selectedNode.trueNext)}>{routeLabel(selectedNode, 'trueNext')}</button>
                 <button type="button" on:click={() => startLinkSelection('trueNext', 'True branch')}>Select node</button>
                 {#if selectedNode.trueNext}
-                  <button type="button" aria-label="Clear true branch" on:click={() => clearRoute(selectedNode, 'trueNext')}>×</button>
+                  <button class="disconnect-route-button" type="button" on:click={() => clearRoute(selectedNode, 'trueNext')}>Disconnect true branch</button>
                 {/if}
               </div>
               <div class="route-label">When false</div>
@@ -5919,12 +6770,14 @@
                 <button class="route-node-link" type="button" disabled={!selectedNode.falseNext} on:click={() => selectConnectedNode(selectedNode.falseNext)}>{routeLabel(selectedNode, 'falseNext')}</button>
                 <button type="button" on:click={() => startLinkSelection('falseNext', 'False branch')}>Select node</button>
                 {#if selectedNode.falseNext}
-                  <button type="button" aria-label="Clear false branch" on:click={() => clearRoute(selectedNode, 'falseNext')}>×</button>
+                  <button class="disconnect-route-button" type="button" on:click={() => clearRoute(selectedNode, 'falseNext')}>Disconnect false branch</button>
                 {/if}
               </div>
             {/if}
 
             {#if selectedNode.type === 'image'}
+              <section class="image-property-group">
+              <h3>Story image</h3>
               <label for="image-upload">Story image</label>
               <div class="asset-actions">
                 <label class="upload-button" for="image-upload">
@@ -5960,14 +6813,19 @@
                       <input type="range" min="0" max="100" bind:value={selectedNode.imagePositionY}>
                     </label>
                   </div>
-                  <label class="image-color-control" for="image-border-color">
-                    <span>Terminal border color</span>
-                    <input
-                      id="image-border-color"
-                      type="color"
-                      bind:value={selectedNode.imageBorderColor}
-                    >
-                  </label>
+                  <div class="color-property-control">
+                    <label class="image-color-control" for="image-border-color">
+                      <span>Terminal border color</span>
+                      <input
+                        id="image-border-color"
+                        type="color"
+                        bind:value={selectedNode.imageBorderColor}
+                      >
+                    </label>
+                    <button type="button" on:click={() => copyPropertyColor('image-border-color', selectedNode.imageBorderColor)}>
+                      {copiedColorKey === 'image-border-color' ? 'Copied' : `Copy ${selectedNode.imageBorderColor?.toUpperCase()}`}
+                    </button>
+                  </div>
                   <button type="button" on:click={() => {
                     rememberForUndo();
                     selectedNode.src = '';
@@ -5982,6 +6840,32 @@
                 rows="3"
                 placeholder="Describe what should appear in this cartridge's logs."
               ></textarea>
+              <label for="image-continue-label">Button text</label>
+              <input
+                id="image-continue-label"
+                bind:value={selectedNode.continueLabel}
+                maxlength="60"
+                placeholder="Continue"
+              >
+              <label class="choice-disabled-toggle">
+                <input type="checkbox" bind:checked={selectedNode.timed}>
+                Timed image — advance automatically
+              </label>
+              {#if selectedNode.timed}
+                <label for="image-duration">Automatic wait in milliseconds</label>
+                <input
+                  id="image-duration"
+                  type="number"
+                  min="0"
+                  step="100"
+                  bind:value={selectedNode.durationMs}
+                >
+                <label class="choice-disabled-toggle">
+                  <input type="checkbox" bind:checked={selectedNode.showCountdown}>
+                  Show countdown text to the player
+                </label>
+              {/if}
+              </section>
             {/if}
 
             {#if selectedNode.type === 'ambience'}
@@ -6154,7 +7038,9 @@
                   >{routeLabel(selectedNode, routeField)}</button>
                   <button type="button" on:click={() => startLinkSelection(routeField, `${routeFieldLabel(selectedNode, routeField)} destination`)}>Select node</button>
                   {#if selectedNode.resultNext[outcome]}
-                    <button type="button" aria-label={`Clear ${outcome} destination`} on:click={() => clearRoute(selectedNode, routeField)}>×</button>
+                    <button class="disconnect-route-button" type="button" on:click={() => clearRoute(selectedNode, routeField)}>
+                      Disconnect {outcome} destination
+                    </button>
                   {/if}
                 </div>
               {/each}
@@ -6162,25 +7048,62 @@
 
             {#if nodeHasButtons(selectedNode)}
               <section class="button-hover-editor">
-                <label class="choice-disabled-toggle">
+                <header class="hover-effects-heading">
+                  <div>
+                    <p>BUTTON APPEARANCE</p>
+                    <h3>Hover effects</h3>
+                  </div>
+                  <span>OPTIONAL</span>
+                </header>
+                <p class="hover-effects-description">
+                  Change how this node’s buttons look or read only while a player hovers over them.
+                  The normal button design remains unchanged.
+                </p>
+                <label class="hover-effects-toggle">
                   <input
                     type="checkbox"
                     checked={Boolean(selectedNode.hoverEffectsEnabled)}
                     on:change={toggleHoverEffects}
                   >
-                  Enable hover effects
+                  <span>
+                    <strong>Enable hover effects</strong>
+                    <small>Reveal alternate colors and optional hover-only text.</small>
+                  </span>
                 </label>
                 {#if selectedNode.hoverEffectsEnabled}
-                  <div class="field-grid">
-                    <label>
-                      <span>Background color</span>
-                      <input type="color" bind:value={selectedNode.hoverBackgroundColor}>
-                    </label>
-                    <label>
-                      <span>Text color</span>
-                      <input type="color" bind:value={selectedNode.hoverTextColor}>
-                    </label>
+                  <div class="hover-effects-fields">
+                    <section class="hover-effect-control">
+                      <header>
+                        <strong>Background color</strong>
+                        <small>Color behind the button label while hovered.</small>
+                      </header>
+                      <label>
+                        <span>Choose background color</span>
+                        <input type="color" bind:value={selectedNode.hoverBackgroundColor}>
+                      </label>
+                      <button type="button" on:click={() => copyPropertyColor('hover-background', selectedNode.hoverBackgroundColor)}>
+                        {copiedColorKey === 'hover-background' ? 'Copied' : `Copy ${selectedNode.hoverBackgroundColor?.toUpperCase()}`}
+                      </button>
+                    </section>
+                    <section class="hover-effect-control">
+                      <header>
+                        <strong>Text color</strong>
+                        <small>Color of the button label while hovered.</small>
+                      </header>
+                      <label>
+                        <span>Choose text color</span>
+                        <input type="color" bind:value={selectedNode.hoverTextColor}>
+                      </label>
+                      <button type="button" on:click={() => copyPropertyColor('hover-text', selectedNode.hoverTextColor)}>
+                        {copiedColorKey === 'hover-text' ? 'Copied' : `Copy ${selectedNode.hoverTextColor?.toUpperCase()}`}
+                      </button>
+                    </section>
                   </div>
+                  <section class="hover-text-editor">
+                    <header>
+                      <strong>Hover-only text</strong>
+                      <small>Leave a field blank to keep its normal button text.</small>
+                    </header>
                   {#if ['choice', 'timed-choice', 'vote'].includes(selectedNode.type)}
                     {#each selectedNode.choices ?? [] as choice, index}
                       <label>
@@ -6194,6 +7117,7 @@
                       <input bind:value={selectedNode.hoverText} placeholder="Leave blank to keep the normal text">
                     </label>
                   {/if}
+                  </section>
                 {/if}
               </section>
             {/if}
@@ -6208,7 +7132,7 @@
             {#if inspectorExpanded}
               <footer class="inspector-modal-footer">
                 <button class="inspector-modal-close" type="button" on:click={closeExpandedInspector}>
-                  Close expanded view
+                  Close
                 </button>
               </footer>
             {/if}
@@ -6648,9 +7572,44 @@
     </div>
   {/if}
   {#if errorMessage}
-    <div class="toast-message error-message" role="alert" transition:fade>
-      <span>{errorMessage}</span>
-      <button type="button" aria-label="Dismiss error" on:click={clearMessages}>×</button>
+    <div
+      class="toast-message error-message"
+      class:validation-toast={validationIssues.length > 0}
+      class:expanded={validationDetailsOpen}
+      role="alert"
+      transition:fade
+    >
+      <div class="toast-summary">
+        <span>{errorMessage}</span>
+        <div class="toast-actions">
+          {#if validationIssues.length > 0}
+            <button type="button" on:click={toggleValidationDetails}>
+              {validationDetailsOpen ? 'Hide details' : `View details (${validationIssues.length})`}
+            </button>
+          {/if}
+          <button type="button" aria-label="Dismiss error" on:click={clearMessages}>×</button>
+        </div>
+      </div>
+      {#if validationDetailsOpen}
+        <div class="validation-issue-list">
+          {#each validationIssues as issue (issue.id)}
+            <article class:warning={!issue.blocksPlay && !issue.blocksSave}>
+              <div>
+                <span>{issue.blocksPlay || issue.blocksSave ? 'BLOCKING' : 'DRAFT WARNING'}</span>
+                <strong>{issue.title}</strong>
+                {#if issue.nodeId}
+                  <code>{issue.nodeId}</code>
+                {/if}
+              </div>
+              <p>{issue.message}</p>
+              <small><strong>How to fix:</strong> {issue.fix}</small>
+              <button type="button" on:click={() => focusValidationIssue(issue)}>
+                {issue.nodeId ? 'View node' : 'Open settings'}
+              </button>
+            </article>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </section>
@@ -7542,7 +8501,37 @@
     padding: 14px;
     overflow-y: auto;
 
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
+
+    > * {
+      order: 4;
+    }
+
+    > .inspector-heading {
+      order: -10;
+    }
+
+    > .inspector-warning {
+      order: -9;
+    }
+
+    > .route-settings-group {
+      order: 0;
+    }
+
+    > .inspector-property-group {
+      order: 1;
+    }
+
+    > .image-property-group {
+      order: 2;
+    }
+
+    > .node-text-property {
+      order: 3;
+    }
   }
 
   .node-inspector.expanded .inspector-scroll-content {
@@ -7601,15 +8590,23 @@
 
   .inspector-modal-close {
     width: 100%;
-    color: #ffd5b5;
-    background: #35170a;
-    border-color: #ff8a32;
+    min-height: 42px;
+    color: #111827;
+    background: #e5e7eb;
+    border-color: #ffffff;
+    font-weight: 900;
+
+    &:hover,
+    &:focus-visible {
+      background: #ffffff;
+      box-shadow: 0 0 18px #ffffff44;
+    }
   }
 
   .inspector-modal-footer {
     padding: 12px clamp(20px, 3vw, 38px);
-    background: #160d08;
-    border-top: 1px solid #ff8a32;
+    background: #0b111b;
+    border-top: 1px solid #475569;
     box-shadow: 0 -8px 22px #00000066;
 
     flex: 0 0 auto;
@@ -7623,10 +8620,16 @@
     width: 36px;
     min-height: 36px;
     padding: 4px;
-    color: #ffd5b5;
-    background: #35170a;
-    border-color: #ff8a32;
+    color: #111827;
+    background: #e5e7eb;
+    border-color: #ffffff;
     font-size: 1.2rem;
+
+    &:hover,
+    &:focus-visible {
+      background: #ffffff;
+      box-shadow: 0 0 16px #ffffff44;
+    }
   }
 
   .flow-panel {
@@ -7634,6 +8637,51 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .route-overlay {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+
+    path {
+      fill: none;
+      stroke: #38bdf8;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .route-connection {
+      filter: drop-shadow(0 0 4px #38bdf866);
+    }
+
+    .companion-connection {
+      stroke: #f6b73c;
+      stroke-dasharray: 6 5;
+      filter: drop-shadow(0 0 3px #f6b73c55);
+    }
+
+    .selected-connection {
+      stroke: #d8b4fe;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 6px #c084fcaa);
+    }
+
+    #route-arrow path {
+      fill: #38bdf8;
+      stroke: none;
+    }
+
+    #companion-arrow path {
+      fill: #f6b73c;
+      stroke: none;
+    }
   }
 
   .flow-canvas {
@@ -7678,6 +8726,82 @@
       color: #f8e69a;
       font-size: 0.66rem;
     }
+  }
+
+  .story-minimap {
+    position: absolute;
+    z-index: 6;
+    bottom: 16px;
+    left: 16px;
+    width: 190px;
+    height: 126px;
+    padding: 24px 8px 8px;
+    overflow: hidden;
+    color: #9ddfff;
+    background: #050b14ee;
+    border: 1px solid #315f87;
+    box-shadow: 0 8px 24px #00000099, 0 0 18px #38bdf822;
+    cursor: crosshair;
+
+    &:hover,
+    &:focus-visible {
+      border-color: #67d0ff;
+      box-shadow: 0 8px 24px #000000aa, 0 0 22px #38bdf844;
+    }
+  }
+
+  .story-minimap-title {
+    position: absolute;
+    top: 6px;
+    left: 9px;
+    color: #7dd3fc;
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 1.3px;
+  }
+
+  .story-minimap-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+      linear-gradient(#1472bf18 1px, transparent 1px),
+      linear-gradient(90deg, #1472bf18 1px, transparent 1px),
+      #020711;
+    background-size: 10px 10px;
+    border: 1px solid #1f3852;
+
+    display: block;
+
+    i {
+      position: absolute;
+      min-width: 3px;
+      min-height: 3px;
+      background: #38bdf8;
+      border: 1px solid #8bddff;
+
+      &.companion {
+        background: #f6b73c;
+        border-color: #ffe29a;
+      }
+
+      &.selected {
+        z-index: 2;
+        background: #c084fc;
+        border-color: #f3e8ff;
+        box-shadow: 0 0 6px #c084fc;
+      }
+    }
+  }
+
+  .story-minimap-viewport {
+    position: absolute;
+    min-width: 10px;
+    min-height: 10px;
+    background: #67d0ff12;
+    border: 1px solid #ffffff;
+    box-shadow: 0 0 8px #67d0ff88;
   }
 
   .flow-lanes {
@@ -7816,6 +8940,7 @@
   .graph-level {
     position: relative;
     min-width: 100%;
+    padding-bottom: calc(var(--max-companion-stack-index, 0) * 14px);
 
     display: grid;
     grid-template-columns: repeat(var(--level-columns, 1), var(--lane-column-width, 258px));
@@ -7823,32 +8948,11 @@
     align-items: flex-start;
     gap: 12px;
 
-    &:not(:first-child) .node-wrapper:not(.companion-node)::before {
-      content: '';
-      position: absolute;
-      z-index: 0;
-      top: -20px;
-      left: 50%;
-      height: 20px;
-      border-left: 1px solid #02fbfb;
-      box-shadow: 0 0 7px #02fbfb;
-    }
-
-    &.parallel-level::after,
-    &.merge-level::after {
-      content: '';
-      position: absolute;
-      z-index: 0;
-      top: -20px;
-      right: 129px;
-      left: 129px;
-      border-top: 1px solid #02fbfb;
-      box-shadow: 0 0 7px #02fbfb;
-    }
   }
 
   .node-wrapper {
     position: relative;
+    z-index: 2;
     width: 258px;
     min-width: 258px;
 
@@ -7857,30 +8961,9 @@
     grid-row: 1;
     gap: 5px;
 
-    &.has-route::after {
-      content: '';
-      position: absolute;
-      z-index: 0;
-      bottom: -20px;
-      left: 50%;
-      width: 1px;
-      height: 20px;
-      background: linear-gradient(#02fbfb, #1472bf55);
-      box-shadow: 0 0 7px #02fbfb;
-    }
-
     &.companion-node {
       width: calc(100% - 24px);
       margin-left: 24px;
-
-      &::before {
-        content: '';
-        position: absolute;
-        top: 28px;
-        left: -24px;
-        width: 22px;
-        border-top: 1px dashed #e0ad03;
-      }
 
       .flow-node {
         background: #17150d;
@@ -7892,16 +8975,16 @@
     &.stacked-companion {
       z-index: calc(2 + var(--companion-stack-index));
       transform: translate(
-        calc(var(--companion-stack-index) * 12px),
-        calc(var(--companion-stack-index) * 8px)
+        calc(var(--companion-stack-index) * 18px),
+        calc(var(--companion-stack-index) * 14px)
       );
       transition: transform 0.18s ease, scale 0.18s ease;
 
       &.selected-node-wrapper {
         z-index: 40;
         transform: translate(
-          calc(var(--companion-stack-index) * 12px),
-          -10px
+          calc(var(--companion-stack-index) * 18px),
+          calc((var(--companion-stack-index) * 14px) - 10px)
         );
         scale: 1.035;
       }
@@ -7930,13 +9013,13 @@
     }
 
     &.connected-companion .flow-node {
-      background: linear-gradient(90deg, #351d58, #151022 74%);
-      border: 2px solid #b98cff;
-      box-shadow: 0 0 20px #b98cff45;
+      background: linear-gradient(90deg, #48152f, #1d0c18 74%);
+      border: 2px solid #ff5fbd;
+      box-shadow: 0 0 20px #ff5fbd55;
 
       &::after {
         content: 'CONNECTED';
-        color: #d5b8ff;
+        color: #ffb6df;
       }
     }
 
@@ -8281,10 +9364,10 @@
     border-left: 1px solid #2c3b54;
 
     .inspector-scroll-content > label,
-    .inspector-scroll-content > .route-label,
     .field-grid label {
       display: block;
-      margin: 13px 0 6px;
+      width: 100%;
+      margin: 24px 0 8px;
       color: #6dc2fb;
       font-size: 0.68rem;
       text-transform: uppercase;
@@ -8294,6 +9377,94 @@
     .inspector-scroll-content > textarea,
     .inspector-scroll-content > select {
       width: 100%;
+    }
+  }
+
+  .inspector-scroll-content > .route-label {
+    margin: 30px 0 9px;
+    padding-top: 18px;
+    color: #7dd3fc;
+    border-top: 1px dashed #294668;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+  }
+
+  .route-settings-group,
+  .image-property-group {
+    margin-top: 26px;
+    padding: 18px;
+    background: #081321;
+    border: 1px solid #294668;
+
+    display: flex;
+    flex-direction: column;
+
+    > h3 {
+      margin: 0 0 8px;
+      color: #8dd8ff;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.78rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+  }
+
+  .image-property-group > label,
+  .route-settings-group > .route-label {
+    display: block;
+    width: 100%;
+    margin: 22px 0 8px;
+    color: #6dc2fb;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .image-property-group > input,
+  .image-property-group > textarea {
+    width: 100%;
+  }
+
+  .route-settings-group > .route-label {
+    padding-top: 14px;
+    border-top: 1px dashed #294668;
+  }
+
+  .inspector-scroll-content > .route-control,
+  .route-settings-group > .previous-route-list {
+    margin-bottom: 10px;
+  }
+
+  .inspector-scroll-content > .inspector-help {
+    margin: 14px 0 28px;
+  }
+
+  .inspector-scroll-content > .choice-disabled-toggle {
+    margin-top: 24px;
+    margin-bottom: 10px;
+  }
+
+  .inspector-scroll-content > .field-grid {
+    margin-top: 24px;
+  }
+
+  .inspector-scroll-content > fieldset {
+    margin: 30px 0 10px;
+    padding: 16px;
+    background: #081321;
+    border: 1px solid #294668;
+
+    legend {
+      padding: 0 7px;
+      color: #7dd3fc;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
     }
   }
 
@@ -8308,8 +9479,8 @@
   }
 
   .inspector-delete-zone {
-    margin-top: 28px;
-    padding-top: 16px;
+    margin-top: 46px;
+    padding-top: 22px;
     border-top: 1px solid #52251f;
 
     button {
@@ -8317,10 +9488,168 @@
     }
   }
 
-  .button-hover-editor,
-  .audio-segment-editor {
-    margin-top: 24px;
+  .button-hover-editor {
+    margin-top: 34px;
+    padding: 20px;
+    background: linear-gradient(145deg, #0a1524, #07101c);
+    border: 1px solid #355a84;
+    border-left: 4px solid #c084fc;
+    box-shadow: inset 0 0 24px #6b21a81a;
+
+    display: grid;
+    gap: 16px;
+  }
+
+  .hover-effects-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 18px;
+
+    p,
+    h3 {
+      margin: 0;
+    }
+
+    p {
+      margin-bottom: 5px;
+      color: #c084fc;
+      font-size: 0.58rem;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+    }
+
+    h3 {
+      color: #f8fafc;
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.9rem;
+      letter-spacing: 0.4px;
+    }
+
+    > span {
+      padding: 4px 7px;
+      color: #d8b4fe;
+      background: #6b21a826;
+      border: 1px solid #8b5cf666;
+      font-size: 0.55rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+  }
+
+  .hover-effects-description {
+    margin: 0;
+    color: #aebed1;
+    font-size: 0.7rem;
+    line-height: 1.6;
+  }
+
+  .hover-effects-toggle {
+    min-height: 62px;
+    padding: 13px;
+    background: #111d2d;
+    border: 1px solid #3c5876;
+    cursor: pointer;
+
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+
+    input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: #c084fc;
+    }
+
+    > span {
+      display: grid;
+      gap: 4px;
+    }
+
+    strong {
+      color: #f1f5f9;
+      font-size: 0.72rem;
+      letter-spacing: 0.3px;
+    }
+
+    small {
+      color: #8fa4ba;
+      font-size: 0.63rem;
+      line-height: 1.4;
+    }
+  }
+
+  .hover-effects-fields {
+    padding-top: 4px;
+    border-top: 1px solid #29405a;
+
+    display: grid;
+    gap: 14px;
+  }
+
+  .hover-effect-control,
+  .hover-text-editor {
     padding: 14px;
+    background: #09131f;
+    border: 1px solid #243b55;
+
+    display: grid;
+    gap: 12px;
+
+    > header {
+      display: grid;
+      gap: 4px;
+    }
+
+    > header strong {
+      color: #dbeafe;
+      font-size: 0.72rem;
+    }
+
+    > header small {
+      color: #8298ae;
+      font-size: 0.62rem;
+      line-height: 1.45;
+    }
+
+    label {
+      color: #6dc2fb;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+
+      display: grid;
+      gap: 6px;
+    }
+
+    input {
+      width: 100%;
+    }
+
+  }
+
+  .hover-effect-control input[type='color'] {
+    min-height: 44px;
+    padding: 5px;
+    cursor: pointer;
+  }
+
+  .hover-effect-control button {
+    width: 100%;
+    min-height: 38px;
+    color: #dbeafe;
+    background: #132238;
+    border-color: #46698f;
+  }
+
+  .hover-text-editor {
+    margin-top: -2px;
+  }
+
+  .audio-segment-editor {
+    margin-top: 34px;
+    padding: 18px;
     background: #07111d;
     border: 1px solid #294668;
 
@@ -8365,6 +9694,9 @@
   }
 
   .inspector-heading {
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #243750;
     align-items: flex-start;
     flex-direction: column;
   }
@@ -8418,13 +9750,13 @@
   }
 
   .inspector-property-group {
-    margin-top: 18px;
-    padding: 14px;
+    margin-top: 30px;
+    padding: 18px;
     background: #081321;
     border: 1px solid #294668;
 
     display: grid;
-    gap: 9px;
+    gap: 13px;
 
     h3 {
       margin: 0;
@@ -8451,6 +9783,70 @@
     .inspector-help {
       margin: 0;
     }
+  }
+
+  .property-section-label {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding-top: 16px;
+    border-top: 1px dashed #294668;
+  }
+
+  .inspector-action-stack {
+    margin: 14px 0 26px;
+
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .inspector-action-button {
+    width: 100%;
+    min-height: 42px;
+    color: #dff5ff;
+    background: #12344b;
+    border: 1px solid #4bb9f2;
+    font-weight: 800;
+    text-align: center;
+
+    &:hover,
+    &:focus-visible {
+      background: #194966;
+      box-shadow: 0 0 16px #4bb9f233;
+    }
+
+    &--danger {
+      color: #ffd8dc;
+      background: #301219;
+      border-color: #9f4654;
+
+      &:hover,
+      &:focus-visible {
+        background: #481923;
+        box-shadow: 0 0 16px #e55b7040;
+      }
+    }
+  }
+
+  .inspector-scroll-content > button:not(.danger-button):not(.select-previous-button) {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 12px;
+    color: #dff5ff;
+    background: #12344b;
+    border-color: #4bb9f2;
+    font-weight: 800;
+
+    &:hover,
+    &:focus-visible {
+      background: #194966;
+      box-shadow: 0 0 16px #4bb9f233;
+    }
+  }
+
+  .inspector-scroll-content > button + button {
+    margin-top: 10px;
   }
 
   .player-portrait-previews {
@@ -8492,8 +9888,8 @@
   }
 
   .choice-editor {
-    margin-top: 18px;
-    padding-top: 14px;
+    margin-top: 32px;
+    padding-top: 20px;
     border-top: 1px dashed #334155;
   }
 
@@ -8622,6 +10018,48 @@
     }
   }
 
+  .color-property-control {
+    margin: 26px 0 12px;
+
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+
+    > label {
+      display: contents;
+
+      > span {
+        grid-column: 1 / -1;
+        margin-bottom: 2px;
+        color: #6dc2fb;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+      }
+
+      > input[type='color'] {
+        grid-column: 1;
+        grid-row: 2;
+        width: 54px;
+        min-height: 36px;
+        padding: 3px;
+      }
+    }
+
+    > button {
+      grid-column: 2;
+      grid-row: 2;
+      min-height: 36px;
+      padding: 7px 9px;
+      color: #9fdcff;
+      background: #08131f;
+      border: 1px solid #315f87;
+      font-size: 0.62rem;
+      white-space: nowrap;
+    }
+
+  }
+
   .choice-route {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -8653,8 +10091,8 @@
 
   .route-control {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 5px;
+    grid-template-columns: 1fr;
+    gap: 8px;
 
     span,
     .route-node-link {
@@ -8672,6 +10110,22 @@
     span.missing,
     .route-node-link.missing {
       color: #e58271;
+    }
+
+    > button:not(.route-node-link) {
+      width: 100%;
+      min-height: 40px;
+      color: #dff5ff;
+      background: #12344b;
+      border-color: #4bb9f2;
+      font-weight: 800;
+    }
+
+    > .disconnect-route-button {
+      min-height: 34px;
+      color: #ffc7ce;
+      background: #291117;
+      border-color: #81404a;
     }
   }
 
@@ -8691,9 +10145,9 @@
 
     > div {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr);
       align-items: center;
-      gap: 5px;
+      gap: 8px;
 
       span,
       .route-node-link {
@@ -8707,8 +10161,15 @@
       }
 
       button {
-        min-height: 28px;
-        padding: 3px 8px;
+        width: 100%;
+        min-height: 36px;
+        padding: 7px 10px;
+      }
+
+      .disconnect-route-button {
+        color: #ffc7ce;
+        background: #291117;
+        border: 1px solid #81404a;
       }
     }
 
@@ -8719,12 +10180,27 @@
 
   .select-previous-button {
     width: 100%;
-    margin-top: 5px;
+    min-height: 42px;
+    margin-top: 10px;
+    margin-bottom: 8px;
+    color: #06111b;
+    background: #67d0ff;
+    border-color: #b8ebff;
+    font-weight: 900;
+
+    &:hover,
+    &:focus-visible {
+      background: #9ee3ff;
+      box-shadow: 0 0 18px #67d0ff44;
+    }
   }
 
   .node-picker-backdrop {
     position: absolute;
-    z-index: 20;
+
+    // Node dialogs must cover selected and stacked companion cards, including
+    // the elevated selected state and the expanded inspector layer.
+    z-index: 65;
     inset: 38px 0 0;
     padding: clamp(10px, 3vw, 28px);
     overflow: auto;
@@ -8921,7 +10397,7 @@
   }
 
   .story-settings-backdrop {
-    z-index: 30;
+    z-index: 65;
     inset: 38px 0 0;
   }
 
@@ -9044,7 +10520,7 @@
   }
 
   .protection-confirmation-backdrop {
-    z-index: 35;
+    z-index: 68;
   }
 
   .node-search {
@@ -9641,6 +11117,129 @@
     }
   }
 
+  .toast-summary {
+    width: 100%;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .toast-actions {
+    flex: 0 0 auto;
+
+    display: flex;
+    gap: 8px;
+  }
+
+  .validation-toast {
+    width: min(580px, calc(100% - 40px));
+    max-width: 580px;
+
+    display: block;
+
+    &.expanded {
+      max-height: min(78vh, 720px);
+    }
+  }
+
+  .validation-issue-list {
+    max-height: min(58vh, 540px);
+    margin-top: 14px;
+    padding-top: 14px;
+    padding-right: 4px;
+    overflow-y: auto;
+    border-top: 1px solid #833d34;
+
+    display: grid;
+    gap: 12px;
+
+    article {
+      padding: 14px;
+      background: #261110;
+      border: 1px solid #8e433a;
+      border-left: 4px solid #ff6f61;
+
+      display: grid;
+      gap: 9px;
+
+      > div {
+        display: grid;
+        gap: 5px;
+      }
+
+      > div > span {
+        color: #ff9f93;
+        font-size: 0.55rem;
+        font-weight: 900;
+        letter-spacing: 1.2px;
+      }
+
+      strong {
+        color: #fff4f1;
+      }
+
+      code {
+        color: #ffc0b8;
+        font-size: 0.61rem;
+        overflow-wrap: anywhere;
+      }
+
+      p,
+      small {
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      p {
+        color: #f4c5bf;
+        font-size: 0.7rem;
+      }
+
+      small {
+        color: #d8b8b4;
+        font-size: 0.66rem;
+      }
+
+      > button {
+        width: 100%;
+        min-height: 38px;
+        margin-top: 3px;
+        color: #2a0d08;
+        background: #ff8b7d;
+        border-color: #ffc3bb;
+        font-weight: 900;
+      }
+
+      &.warning {
+        background: #211b0d;
+        border-color: #7e6828;
+        border-left-color: #e8bf4f;
+
+        > div > span,
+        code {
+          color: #f4d675;
+        }
+
+        strong {
+          color: #fff8d7;
+        }
+
+        p,
+        small {
+          color: #ded2a7;
+        }
+
+        > button {
+          color: #211907;
+          background: #e6c758;
+          border-color: #fff0a6;
+        }
+      }
+    }
+  }
+
   @keyframes saved-pulse {
     0%, 100% {
       box-shadow: 0 0 34px color-mix(in srgb, var(--library-terminal-accent) 32%, transparent);
@@ -9787,6 +11386,13 @@
     .editor-workspace {
       overflow-x: auto;
       grid-template-columns: 760px 280px;
+    }
+
+    .story-minimap {
+      bottom: 10px;
+      left: 10px;
+      width: 150px;
+      height: 100px;
     }
 
     .inspector-resizer {
@@ -9938,6 +11544,13 @@
       right: 10px;
       bottom: 10px;
       left: 10px;
+      width: auto;
+    }
+
+    .story-minimap {
+      width: 132px;
+      height: 88px;
+      padding-top: 21px;
     }
   }
 </style>

@@ -84,6 +84,7 @@ export type StoryNode = {
   effectDurationSeconds?: number;
   effectIterations?: number;
   effectLoop?: boolean;
+  glowTarget?: 'inner' | 'outer' | 'both';
   mirrorAxis?: 'horizontal' | 'vertical' | 'both';
   spinDirection?: 'clockwise' | 'counterclockwise';
   effectColor?: string;

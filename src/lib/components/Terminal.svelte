@@ -45,6 +45,11 @@
   let spinEffect: StoryNode | undefined;
   let glowEffect: StoryNode | undefined;
   let scanEffect: StoryNode | undefined;
+  let terminalColorEffect: StoryNode | undefined;
+  let terminalAnimations = '';
+  let outerGlowAnimation = '';
+  let innerGlowActive = false;
+  let terminalAccent = '';
   let sceneSpeaker = '';
   let scenePortrait = '';
   let scenePortraitAlt = '';
@@ -54,6 +59,7 @@
   let lastStoryAudioVisible = false;
   let lastStoryEnded = false;
   let lastDiceSceneKey = '';
+  let lastTimedImageSceneKey = '';
   let diceRollerId: 'p1' | 'p2' | null = null;
   let diceSpectator = false;
   let dicePlayer: CampaignPlayer | null = null;
@@ -123,15 +129,27 @@
     (candidate) => candidate.type === 'screen-effect'
       && candidate.screenEffect === 'scan'
   );
+  $: terminalColorEffect = companionNodes.find(
+    (candidate) => candidate.type === 'screen-effect'
+      && candidate.screenEffect === 'color'
+  );
   $: screenShakeActive = Boolean(shakeEffect);
   $: terminalBlinkActive = Boolean(blinkEffect);
+  $: innerGlowActive = Boolean(
+    glowEffect && ['inner', 'both'].includes(glowEffect.glowTarget ?? 'inner')
+  );
   $: terminalAnimations = createTerminalAnimations(
     shakeEffect,
     blinkEffect,
     spinEffect,
-    glowEffect
+    innerGlowActive ? glowEffect : undefined
   );
+  $: outerGlowAnimation = glowEffect
+    && ['outer', 'both'].includes(glowEffect.glowTarget ?? 'inner')
+    ? `terminal-outer-glow ${effectDuration(glowEffect, 1.4)}s ease-in-out ${effectIterations(glowEffect)} alternate`
+    : '';
   $: terminalTheme = scenePresentation.backgroundTheme ?? 'blue';
+  $: terminalAccent = terminalColorEffect?.effectColor ?? '';
   $: {
     scenePresentation = {
       background: scene?.background,
@@ -240,6 +258,21 @@
     )
     : 0;
   $: remainingSeconds = Math.ceil(remainingMs / 1000);
+  $: {
+    const timedImageSceneKey = scene?.type === 'image' && scene.timed
+      ? `${$campaignState?.campaignId ?? ''}:${scene.id}`
+      : '';
+
+    if (timedImageSceneKey && timedImageSceneKey !== lastTimedImageSceneKey) {
+      lastTimedImageSceneKey = timedImageSceneKey;
+      sendAction({
+        type: 'start-timer',
+        sceneId: scene?.id ?? ''
+      });
+    } else if (!timedImageSceneKey) {
+      lastTimedImageSceneKey = '';
+    }
+  }
   $: serverClockOffsetMs = $campaignState?.serverTime
     ? Date.now() - $campaignState.serverTime
     : 0;
@@ -663,10 +696,17 @@
   }
 </script>
 
-<section
-  class="terminal terminal-theme-{terminalTheme}"
+<div
+  class="terminal-stage"
   class:hide={$location !== 'terminal'}
   transition:fade={{ duration: 300 }}
+>
+<section
+  class="terminal terminal-theme-{terminalTheme}"
+  class:terminal--outer-glow={Boolean(outerGlowAnimation)}
+  style:--terminal-accent={terminalAccent || undefined}
+  style:--outer-glow-color={glowEffect?.effectColor ?? '#39ff88'}
+  style:animation={outerGlowAnimation || undefined}
   aria-label="Story terminal"
 >
   <header class="terminal-header">
@@ -686,7 +726,7 @@
     class:terminal-screen--blink={terminalBlinkActive}
     class:terminal-screen--mirror={Boolean(mirrorEffect)}
     class:terminal-screen--spin={Boolean(spinEffect)}
-    class:terminal-screen--glow={Boolean(glowEffect)}
+    class:terminal-screen--glow={innerGlowActive}
     class:terminal-screen--scan={Boolean(scanEffect)}
     data-scan-direction={scanEffect?.scanDirection ?? 'left-to-right'}
     style:animation={terminalAnimations || undefined}
@@ -909,7 +949,7 @@
   {#if $campaignState && scene}
     <div class="terminal-controls">
       {#if ['dialogue', 'image', 'effect', 'ambience'].includes(scene.type)}
-        {#if scene.type !== 'dialogue' || !scene.timed}
+        {#if !scene.timed}
           <button
             class:hover-effects={scene.hoverEffectsEnabled}
             type="button"
@@ -1115,8 +1155,22 @@
     />
   {/if}
 </section>
+</div>
 
 <style lang="scss">
+  .terminal-stage {
+    width: 100%;
+    height: 100%;
+    max-width: 1200px;
+    padding: clamp(14px, 3vw, 48px);
+    padding-bottom: clamp(22px, 4vw, 64px);
+    box-sizing: border-box;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
   .terminal {
     --terminal-accent: #19488e;
 
@@ -1734,6 +1788,16 @@
     }
   }
 
+  @keyframes -global-terminal-outer-glow {
+    from {
+      filter: drop-shadow(0 0 0 transparent);
+    }
+
+    to {
+      filter: drop-shadow(0 0 34px var(--outer-glow-color));
+    }
+  }
+
   @keyframes terminal-scan-horizontal {
     from {
       left: 0;
@@ -1760,6 +1824,7 @@
     .terminal-screen--blink,
     .terminal-screen--spin,
     .terminal-screen--glow,
+    .terminal--outer-glow,
     .terminal-screen--scan {
       animation: none !important;
     }

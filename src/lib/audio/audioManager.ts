@@ -41,7 +41,10 @@ type TrackPlaybackSettings = {
 const activeMusic = new Map<string, ActiveAudio>();
 const activeSounds = new Map<string, ActiveAudio>();
 const pendingPlayback = new Set<HTMLAudioElement>();
+const unlockedAudioPool: HTMLAudioElement[] = [];
+const unlockingAudio = new Set<HTMLAudioElement>();
 const silentWaveData = 'data:audio/wav;base64,UklGRioAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQYAAACAgICAgA==';
+const unlockedAudioPoolSize = 8;
 let storyAudioPaused = false;
 
 if (typeof window !== 'undefined') {
@@ -94,14 +97,42 @@ export function unlockAudioPlayback(): void {
   }
 
   retryPendingPlayback();
-  const unlocker = new Audio(silentWaveData);
 
-  void unlocker.play().then(() => {
-    unlocker.pause();
-    unlocker.removeAttribute('src');
-  }).catch(() => {
-    // The normal pending-playback retry remains available on the next input.
-  });
+  // Safari and stricter desktop browsers can grant playback permission to the
+  // media element that received the gesture instead of every future element.
+  // Prime a small reusable pool now, then assign real scene sources later.
+  const neededElements = Math.max(
+    0,
+    unlockedAudioPoolSize - unlockedAudioPool.length - unlockingAudio.size
+  );
+
+  for (let index = 0; index < neededElements; index += 1) {
+    const unlocker = new Audio(silentWaveData);
+
+    unlockingAudio.add(unlocker);
+    unlockedAudioPool.push(unlocker);
+
+    void unlocker.play().then(() => {
+      unlockingAudio.delete(unlocker);
+
+      // A real track may already have claimed this element while the silent
+      // play promise was settling. Never pause an element after that handoff.
+      if (unlocker.getAttribute('src') === silentWaveData) {
+        unlocker.pause();
+        unlocker.currentTime = 0;
+      }
+    }).catch(() => {
+      unlockingAudio.delete(unlocker);
+
+      const pooledIndex = unlockedAudioPool.indexOf(unlocker);
+
+      if (pooledIndex >= 0) {
+        unlockedAudioPool.splice(pooledIndex, 1);
+      }
+
+      // The pending-playback retry remains available on the next input.
+    });
+  }
 }
 
 export function playMusic(cue: SceneAudio): void {
@@ -230,7 +261,7 @@ function createTrack(source: string, id: string, cue: SceneAudio): ActiveAudio {
     : 0;
 
   return {
-    element: new Audio(source),
+    element: createPlaybackElement(source),
     id,
     layer: clamp(Math.round(Number(cue.audioLayer ?? 1)), 1, 10),
     volume: clamp(Number(cue.audioVolume ?? 1), 0, 1),
@@ -239,6 +270,16 @@ function createTrack(source: string, id: string, cue: SceneAudio): ActiveAudio {
     stopSeconds: configuredStop > startSeconds ? configuredStop : null,
     shouldLoop: Boolean(cue.audioLoop)
   };
+}
+
+function createPlaybackElement(source: string): HTMLAudioElement {
+  const element = unlockedAudioPool.pop() ?? new Audio();
+
+  element.src = source;
+  element.preload = 'auto';
+  element.load();
+
+  return element;
 }
 
 function configureSegment(

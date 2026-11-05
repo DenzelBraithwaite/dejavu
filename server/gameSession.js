@@ -438,7 +438,9 @@ export function completeActiveMinigame(state, resultId) {
 }
 
 function handleAdvance(state, playerId, scene, action) {
-  if (scene.type === 'dialogue' && scene.timed && action.type === 'start-timer') {
+  if (['dialogue', 'image'].includes(scene.type)
+    && scene.timed
+    && action.type === 'start-timer') {
     if (!state.deadlines[playerId]) {
       state.deadlines[playerId] = Date.now()
         + (scene.durationMs ?? DEFAULT_TIMED_CHOICE_DURATION_MS);
@@ -447,8 +449,8 @@ function handleAdvance(state, playerId, scene, action) {
     return actionSuccess();
   }
 
-  if (scene.type === 'dialogue' && scene.timed) {
-    return actionError('This dialogue advances automatically when its timer ends.');
+  if (['dialogue', 'image'].includes(scene.type) && scene.timed) {
+    return actionError('This scene advances automatically when its timer ends.');
   }
 
   if (action.type !== 'advance') {
@@ -864,6 +866,16 @@ export function resolveExpiredTimedChoices(state, now = Date.now()) {
       recordTranscript(state, playerId, scene.text ?? '', scene.speaker ?? 'Narrator', scene.id);
       applyEffects(state, playerId, scene.effects ?? []);
       archiveSceneForPlayer(state, playerId, scene);
+      setPlayerScene(state, playerId, scene.next);
+      changed = true;
+      continue;
+    }
+
+    if (scene.type === 'image' && scene.timed) {
+      const transcriptText = scene.logText ?? scene.alt ?? scene.text ?? '';
+
+      recordTranscript(state, playerId, transcriptText, 'Image log', scene.id);
+      applyEffects(state, playerId, scene.effects ?? []);
       setPlayerScene(state, playerId, scene.next);
       changed = true;
       continue;

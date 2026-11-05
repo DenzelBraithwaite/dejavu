@@ -4,6 +4,16 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 const retiredBuiltInStoryIds = ['deja-vu'];
+const terminalThemeColors = {
+  blue: '#19488e',
+  red: '#ef5b67',
+  purple: '#b77aff',
+  green: '#55f09a',
+  amber: '#f0b94f',
+  pink: '#ff75c8',
+  cyan: '#02fbfb',
+  white: '#e8edf6'
+};
 const playableStartNodeTypes = new Set([
   'choice',
   'condition',
@@ -301,6 +311,8 @@ function normalizeLegacyStoryNodes(nodes) {
       migratedNode.backgroundTheme = migratedNode.backgroundTheme
         ?? migratedNode.background
         ?? 'blue';
+      migratedNode.effectColor = terminalThemeColors[migratedNode.backgroundTheme]
+        ?? terminalThemeColors.blue;
       migratedNode.effectLoop = false;
       delete migratedNode.background;
     }
@@ -350,6 +362,16 @@ function normalizeLegacyStoryNodes(nodes) {
       migratedNode.durationMs = Number.isFinite(durationMs)
         ? Math.max(0, durationMs)
         : 0;
+    }
+
+    if (migratedNode?.type === 'screen-effect') {
+      migratedNode.glowTarget ??= 'inner';
+
+      if (migratedNode.screenEffect === 'color'
+        && (!migratedNode.effectColor || migratedNode.effectColor === '#39ff88')) {
+        migratedNode.effectColor = terminalThemeColors[migratedNode.backgroundTheme]
+          ?? terminalThemeColors.blue;
+      }
     }
 
     return migratedNode;

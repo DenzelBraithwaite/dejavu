@@ -213,10 +213,15 @@ app.get('/api/story-assets/images', async (_request, response) => {
       .filter((entry) => /_(neutral|angry|shocked|happy|sad|confused|dead)\.png$/i.test(entry.name))
       .map((entry) => `/media/characters/portraits/${entry.name}`);
     const builtInStoryImages = [
+      '/media/story/404s-gang.png',
+      '/media/story/acpu-command.png',
+      '/media/story/nova-avona-benny.png',
       '/media/story/raid_lab.png',
       '/media/story/raid_lab_kat.png',
       '/media/story/raid_guard_hallway.png',
+      '/media/story/rammers-gang.png',
       '/media/story/spoofs-base-map.png',
+      '/media/story/spoofs-gang.png',
       '/media/story/vespas-city-map.png'
     ];
     const images = [...builtInStoryImages, ...storyImages, ...characterImages]
