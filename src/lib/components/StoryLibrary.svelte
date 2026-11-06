@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { applySceneAudio, unlockAudioPlayback } from '../audio/audioManager';
+  import {
+    applySceneAudio,
+    resumeStoryAudio,
+    unlockAudioPlayback
+  } from '../audio/audioManager';
   import { clamp } from '../helpers';
   import { socket } from '../socket';
   import {
@@ -19,6 +23,7 @@
   import location from '../stores/location';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
+  import RichTextEditor from './RichTextEditor.svelte';
 
   type EditorMode = 'library' | 'create' | 'editor';
   type LaneId = 'p1' | 'both' | 'p2';
@@ -254,7 +259,7 @@
           name: 'Clear terminal',
           type: 'clear-terminal',
           description: 'Clears all terminal text and images before immediately continuing.',
-          usage: 'Place it in the route exactly where the old terminal history should disappear, then connect Next.'
+          usage: 'Place it where history should disappear and connect Next. It can host companions, including Stop Audio, when the terminal and soundtrack should clear together.'
         },
         {
           name: 'Stop audio',
@@ -1104,8 +1109,58 @@
       return;
     }
 
+    if ($libraryState.activeStoryMode === 'multiplayer'
+      && !multiplayerCartridgeReady()) {
+      errorMessage = 'Both players must insert this multiplayer cartridge before the story can begin.';
+      return;
+    }
+
     unlockAudioPlayback();
+    resumeStoryAudio();
+    primeSelectedCartridgeAudio();
     location.set('terminal');
+  }
+
+  function primeSelectedCartridgeAudio(): void {
+    const campaign = $campaignState;
+    const campaignPlayerId = $libraryState.activeStoryMode === 'multiplayer'
+      ? localStorySeat
+      : playerId;
+
+    if (!campaign?.story
+      || !campaignPlayerId
+      || (campaign.sessionMode === 'multiplayer' && !multiplayerCartridgeReady())) {
+      return;
+    }
+
+    const currentSceneId = campaign.currentScene[campaignPlayerId];
+    const currentScene = campaign.story.nodes.find(
+      (candidate) => candidate.id === currentSceneId
+    );
+
+    if (!currentScene) {
+      return;
+    }
+
+    const currentAudioCues = [
+      currentScene,
+      ...campaign.story.nodes.filter(
+        (candidate) => candidate.attachedTo === currentScene.id
+      )
+    ];
+
+    // Start the known cartridge cue inside the Play-button gesture. The
+    // terminal recognizes the same track ID and leaves it running.
+    applySceneAudio(currentAudioCues);
+  }
+
+  function multiplayerCartridgeReady(): boolean {
+    return Boolean(
+      $sessionState.bothPlayersConnected
+      && $libraryState.seatClaims.p1
+      && $libraryState.seatClaims.p2
+      && $libraryState.activeStoryId
+    );
   }
 
   function storySeatClaimedByOther(seat: PlayerId): boolean {
@@ -1392,7 +1447,11 @@
     }
 
     unlockAudioPlayback();
-    primePlaytestAudio();
+
+    if (activeStoryMap === 'singleplayer' || multiplayerCartridgeReady()) {
+      resumeStoryAudio();
+      primePlaytestAudio();
+    }
 
     const playtestSeat = pendingPlaytestSeat
       ?? (
@@ -1441,7 +1500,8 @@
   }
 
   function primePlaytestAudio(): void {
-    if (!editingStory) {
+    if (!editingStory
+      || (activeStoryMap === 'multiplayer' && !multiplayerCartridgeReady())) {
       return;
     }
 
@@ -1553,6 +1613,8 @@
 
     for (const node of prepared.nodes) {
       delete node.clearTerminal;
+      node.textFormats = Array.isArray(node.textFormats) ? node.textFormats : [];
+      node.promptFormats = Array.isArray(node.promptFormats) ? node.promptFormats : [];
 
       if (node.map === 'singleplayer') {
         node.audience = 'p1';
@@ -1849,12 +1911,17 @@
   }
 
   function nodeAvailableForMap(type: string): boolean {
+    const companionHost = editingStory?.nodes.find(
+      (node) => node.id === insertionTarget?.sourceId
+    );
     const modeAllowsNode = activeStoryMap !== 'singleplayer'
       || !['checkpoint', 'conversation', 'vote'].includes(type);
     const targetAllowsNode = !insertionTarget?.companionOnly
       || isCompanionNodeType(type);
+    const clearTerminalAllowsNode = companionHost?.type !== 'clear-terminal'
+      || type === 'stop-audio';
 
-    return modeAllowsNode && targetAllowsNode;
+    return modeAllowsNode && targetAllowsNode && clearTerminalAllowsNode;
   }
 
   function nodeMatchesSearch(node: TutorialNode, searchValue: string): boolean {
@@ -2699,7 +2766,7 @@
         ? editingStory.nodes.find((node) => node.id === requestedHost.attachedTo)
         : requestedHost;
 
-      if (host && !isCompanionNode(host) && host.type !== 'label') {
+      if (host && canAttachToNode(insertedNode, host)) {
         insertedNode.attachedTo = host.id;
       }
 
@@ -3881,6 +3948,10 @@
 
   function canAttachToNode(companion: StoryNode, host: StoryNode): boolean {
     if (host.type === 'label' || isCompanionNode(host) || host.id === companion.id) {
+      return false;
+    }
+
+    if (host.type === 'clear-terminal' && companion.type !== 'stop-audio') {
       return false;
     }
 
@@ -5836,18 +5907,23 @@
               <label class="node-text-property" for="node-text">
                 {selectedNode.type === 'label' ? 'Label title' : 'Terminal text'}
               </label>
-              <textarea
-                class="node-text-property"
-                id="node-text"
+              <RichTextEditor
                 bind:value={selectedNode.text}
-                rows="5"
+                bind:formats={selectedNode.textFormats}
+                id="node-text"
+                rows={5}
                 maxlength={selectedNode.type === 'label' ? 60 : undefined}
-              ></textarea>
+              />
             {/if}
 
             {#if selectedNode.type === 'input'}
               <label for="input-prompt">Player prompt</label>
-              <textarea id="input-prompt" bind:value={selectedNode.prompt} rows="5"></textarea>
+              <RichTextEditor
+                bind:value={selectedNode.prompt}
+                bind:formats={selectedNode.promptFormats}
+                id="input-prompt"
+                rows={5}
+              />
               <label class="choice-disabled-toggle">
                 <input type="checkbox" bind:checked={selectedNode.saveInput}>
                 Store this response for later nodes
@@ -7334,6 +7410,7 @@
                 <li>Use the <strong>Player 1</strong> and <strong>Player 2</strong> lanes for private scenes. Put synchronized actions and votes in <strong>Shared</strong>.</li>
                 <li>Companions use <strong>Select host node</strong>. They never receive previous or next routes.</li>
                 <li>A stored Player input can feed <strong>Player state → Set player name</strong>. The custom name lasts only for the current cartridge session.</li>
+                <li><strong>Rich text</strong> lets you select part of a terminal message and apply color, bold, italic, or a colored highlight. Formatting can overlap and remains visible in terminal history.</li>
               </ol>
             </section>
 
@@ -8493,6 +8570,14 @@
       .choice-editor textarea {
         min-height: 110px;
       }
+
+      textarea[rows='3'] {
+        max-height: 300px;
+      }
+
+      textarea[rows='10'] {
+        max-height: 600px;
+      }
     }
   }
 
@@ -9377,6 +9462,18 @@
     .inspector-scroll-content > textarea,
     .inspector-scroll-content > select {
       width: 100%;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    textarea[rows='3'] {
+      max-height: 156px;
+    }
+
+    textarea[rows='10'] {
+      max-height: 500px;
     }
   }
 

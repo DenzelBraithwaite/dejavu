@@ -359,9 +359,11 @@ export function handleCampaignAction(state, playerId, action) {
     case 'minigame':
       result = handleMinigameLaunch(state, playerId, scene, action);
       break;
+    case 'clear-terminal':
+      result = handleClearTerminal(state, playerId, scene, action);
+      break;
     case 'ending':
     case 'condition':
-    case 'clear-terminal':
       result = actionError('This scene does not accept that action.');
       break;
     default:
@@ -975,6 +977,16 @@ function setPlayerScene(state, playerId, nextSceneId) {
   }
 }
 
+function handleClearTerminal(state, playerId, scene, action) {
+  if (action.type !== 'continue-clear-terminal') {
+    return actionError('This scene clears the terminal automatically.');
+  }
+
+  state.terminalOutput[playerId] = [];
+  setPlayerScene(state, playerId, scene.next);
+  return actionSuccess();
+}
+
 function appendSceneImages(state, playerId, scene) {
   const attachedImages = state.story?.nodes.filter(
     (node) => node.type === 'image'
@@ -1001,6 +1013,7 @@ function appendSceneImages(state, playerId, scene) {
       sceneId: image.id,
       speaker: character?.name ?? image.speaker ?? '',
       text: image.text ?? '',
+      textFormats: image.textFormats ?? [],
       portrait: character?.images?.[expression] ?? image.portrait ?? '',
       portraitPosition: character?.imagePositions?.[expression]
         ?? image.portraitPosition
@@ -1107,7 +1120,6 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
   // Automatic nodes alter state or routing without ever becoming an interactive terminal scene.
   while (
     scene?.type === 'condition'
-    || scene?.type === 'clear-terminal'
     || scene?.type === 'change-character'
     || scene?.type === 'label'
   ) {
@@ -1115,12 +1127,6 @@ function resolveAutomaticNodes(state, playerId, startingSceneId) {
 
     if (traversedNodes > 50) {
       throw new Error('Automatic node chain exceeded 50 nodes. Check the story for a loop.');
-    }
-
-    if (scene.type === 'clear-terminal') {
-      state.terminalOutput[playerId] = [];
-      scene = getScene(state, scene.next);
-      continue;
     }
 
     if (scene.type === 'change-character') {
@@ -1239,6 +1245,7 @@ function archiveSceneForPlayer(
       sceneId: scene.id,
       speaker: character?.name ?? scene.speaker ?? 'SYSTEM',
       text,
+      textFormats: scene.text ? scene.textFormats ?? [] : scene.promptFormats ?? [],
       portrait: character?.images?.[expression] ?? scene.portrait ?? '',
       portraitPosition: character?.imagePositions?.[expression]
         ?? scene.portraitPosition

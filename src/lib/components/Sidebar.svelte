@@ -50,6 +50,13 @@
       iconType: 'save',
       location: 'saves',
       title: 'Saves'
+    },
+    {
+      color: 'blue-spectrum-5',
+      description: 'Adjust this cartridge’s local audio',
+      iconType: 'speaker',
+      location: 'settings',
+      title: 'Audio'
     }
   ];
   const primaryNavigationItems: NavigationItem[] = [
@@ -80,13 +87,6 @@
       iconType: 'editor',
       location: 'editor',
       title: 'Editor'
-    },
-    {
-      color: 'grey',
-      description: 'Audio and local preferences',
-      iconType: 'settings',
-      location: 'settings',
-      title: 'Settings'
     }
   ];
   const dispatch = createEventDispatcher();

@@ -1,6 +1,16 @@
 import { derived, writable } from 'svelte/store';
 import { sessionState, type PlayerId } from './session';
 
+export type RichTextFormat = {
+  id: string;
+  start: number;
+  end: number;
+  color?: string;
+  backgroundColor?: string;
+  bold?: boolean;
+  italic?: boolean;
+};
+
 export type StoryNode = {
   id: string;
   type: string;
@@ -15,12 +25,14 @@ export type StoryNode = {
     y: number;
   };
   text?: string;
+  textFormats?: RichTextFormat[];
   continueLabel?: string;
   hoverEffectsEnabled?: boolean;
   hoverBackgroundColor?: string;
   hoverTextColor?: string;
   hoverText?: string;
   prompt?: string;
+  promptFormats?: RichTextFormat[];
   placeholder?: string;
   inputKey?: string;
   saveInput?: boolean;

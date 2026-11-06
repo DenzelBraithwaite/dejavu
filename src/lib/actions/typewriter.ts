@@ -17,12 +17,17 @@ export type TypewriterOptions = {
 export type TypewriterSegment = {
   text: string;
   className?: string;
+  color?: string;
+  backgroundColor?: string;
+  bold?: boolean;
+  italic?: boolean;
 };
 
 export type RichTypewriterOptions = {
   segments: TypewriterSegment[];
   timing?: Partial<TypewriterTiming>;
   enabled?: boolean;
+  onUpdate?: () => void;
   onComplete?: () => void;
 };
 
@@ -138,12 +143,12 @@ export function richTypewriter(
     node.textContent = '';
 
     for (const segment of currentOptions.segments) {
-      const content = segment.className
-        ? document.createElement('strong')
+      const content = segmentHasPresentation(segment)
+        ? document.createElement('span')
         : document.createTextNode(segment.text);
 
       if (content instanceof HTMLElement) {
-        content.className = segment.className ?? '';
+        applySegmentPresentation(content, segment);
         content.textContent = segment.text;
       }
 
@@ -189,6 +194,7 @@ export function richTypewriter(
         }
 
         textNode.textContent += character;
+        currentOptions.onUpdate?.();
         await wait(getCharacterDelay(character, timing));
       }
     }
@@ -232,11 +238,11 @@ function createSegmentTextNodes(
   return segments.map((segment) => {
     const textNode = document.createTextNode('');
 
-    if (segment.className) {
-      const strong = document.createElement('strong');
-      strong.className = segment.className;
-      strong.append(textNode);
-      node.append(strong);
+    if (segmentHasPresentation(segment)) {
+      const wrapper = document.createElement('span');
+      applySegmentPresentation(wrapper, segment);
+      wrapper.append(textNode);
+      node.append(wrapper);
     } else {
       node.append(textNode);
     }
@@ -259,6 +265,10 @@ function haveRichTypewriterOptionsChanged(
   const contentChanged = previous.segments.some((segment, index) => (
     segment.text !== next.segments[index].text
     || segment.className !== next.segments[index].className
+    || segment.color !== next.segments[index].color
+    || segment.backgroundColor !== next.segments[index].backgroundColor
+    || segment.bold !== next.segments[index].bold
+    || segment.italic !== next.segments[index].italic
   ));
 
   if (contentChanged) {
@@ -277,6 +287,43 @@ function haveRichTypewriterOptionsChanged(
       enabled: next.enabled
     }
   );
+}
+
+function segmentHasPresentation(segment: TypewriterSegment): boolean {
+  return Boolean(
+    segment.className
+    || segment.color
+    || segment.backgroundColor
+    || segment.bold
+    || segment.italic
+  );
+}
+
+function applySegmentPresentation(
+  element: HTMLElement,
+  segment: TypewriterSegment
+): void {
+  element.className = segment.className ?? '';
+
+  if (segment.color) {
+    element.style.color = segment.color;
+  }
+
+  if (segment.backgroundColor) {
+    element.style.backgroundColor = segment.backgroundColor;
+    element.style.padding = '0.08em 0.28em';
+    element.style.borderRadius = '0.3em';
+    element.style.boxDecorationBreak = 'clone';
+    element.style.setProperty('-webkit-box-decoration-break', 'clone');
+  }
+
+  if (segment.bold) {
+    element.style.fontWeight = '700';
+  }
+
+  if (segment.italic) {
+    element.style.fontStyle = 'italic';
+  }
 }
 
 function hasTypewriterContentChanged(

@@ -22,11 +22,11 @@
   class:hide={$location !== 'settings'}
   aria-labelledby="settings-title"
 >
-  <header>DEJAVU://SETTINGS</header>
+  <header>DEJAVU://CARTRIDGE_AUDIO</header>
 
   <div class="settings-content">
-    <p class="eyebrow">LOCAL PLAYER PREFERENCES</p>
-    <h1 id="settings-title">Audio settings</h1>
+    <p class="eyebrow">CARTRIDGE AUDIO MIXER</p>
+    <h1 id="settings-title">Story audio</h1>
     <p class="introduction">
       Music and interface sounds are controlled independently. These settings
       are stored in this browser and do not affect the other player.
@@ -117,16 +117,16 @@
     max-width: 1100px;
     overflow: hidden;
     color: #e8edf6;
-    background: #111318;
-    border: 1px solid #70756f;
+    background: #07111f;
+    border: 1px solid #255aa6;
     border-radius: 8px;
-    box-shadow: 0 0 30px #70756f4a;
+    box-shadow: 0 0 30px #255aa666;
 
     > header {
       padding: 11px 14px;
-      color: #d1d5db;
-      background: #24272d;
-      border-bottom: 1px solid #70756f;
+      color: #a9ccff;
+      background: #102448;
+      border-bottom: 1px solid #255aa6;
       font-family: "Orbitron", "Space Mono", sans-serif;
       font-size: 0.75rem;
       letter-spacing: 2px;
@@ -141,7 +141,7 @@
 
   .eyebrow,
   .channel-code {
-    color: #a7aca6;
+    color: #75a9ed;
     font-size: 0.7rem;
     letter-spacing: 1.5px;
   }

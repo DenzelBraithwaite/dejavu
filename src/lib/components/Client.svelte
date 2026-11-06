@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { blur } from 'svelte/transition';
   import { LogPage } from '../../routes';
+  import { resumeStoryAudio, unlockAudioPlayback } from '../audio/audioManager';
   import { socket, storeSessionToken } from '../socket';
   import { campaignState, type CampaignState } from '../stores/campaign';
   import {
@@ -63,10 +64,10 @@
     : $sessionState.playerId;
   $: cartridgeInserted = Boolean($libraryState.activeStoryId && $campaignState?.story);
   $: storyToolsVisible = cartridgeInserted && (
-    ['terminal', 'player', 'bag', 'journal', 'saves'].includes($location)
+    ['terminal', 'player', 'bag', 'journal', 'saves', 'settings'].includes($location)
     || $storyMinigameView
   );
-  $: if (!cartridgeInserted && ['player', 'bag', 'journal', 'saves'].includes($location)) {
+  $: if (!cartridgeInserted && ['player', 'bag', 'journal', 'saves', 'settings'].includes($location)) {
     location.set('terminal');
   }
 
@@ -304,6 +305,11 @@
   }
 
   function changePage(event: CustomEvent<string>): void {
+    if (['terminal', 'settings'].includes(event.detail)) {
+      unlockAudioPlayback();
+      resumeStoryAudio();
+    }
+
     if (event.detail === 'terminal'
       && playerOwnsStoryMinigame($campaignState, storyPlayerId)) {
       storyMinigameView.set(true);

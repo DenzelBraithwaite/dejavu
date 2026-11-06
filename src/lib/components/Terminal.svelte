@@ -1,13 +1,19 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { typewriter, typewriterProfiles } from '../actions/typewriter';
+  import {
+    richTypewriter,
+    typewriterProfiles,
+    type TypewriterSegment
+  } from '../actions/typewriter';
   import {
     applySceneAudio,
     pauseStoryAudio,
+    retryBlockedAudioPlayback,
     resumeStoryAudio,
     stopMusic,
     stopSounds,
+    storyAudioBlocked,
     unlockAudioPlayback
   } from '../audio/audioManager';
   import { socket } from '../socket';
@@ -22,6 +28,7 @@
   import { sessionState, type PlayerId } from '../stores/session';
   import { storyMinigameView } from '../stores/minigameSessions';
   import { interpolateSceneText } from '../story/sceneTypes.js';
+  import { createRichTextSegments, richTextSegmentStyle } from '../story/richText';
   import DiceTerminal from './DiceTerminal.svelte';
 
   let terminalScreenElement: HTMLElement;
@@ -51,6 +58,7 @@
   let innerGlowActive = false;
   let terminalAccent = '';
   let sceneSpeaker = '';
+  let sceneTextSegments: TypewriterSegment[] = [];
   let scenePortrait = '';
   let scenePortraitAlt = '';
   let scenePortraitPosition = { x: 50, y: 50 };
@@ -60,6 +68,7 @@
   let lastStoryEnded = false;
   let lastDiceSceneKey = '';
   let lastTimedImageSceneKey = '';
+  let lastClearTerminalSceneKey = '';
   let diceRollerId: 'p1' | 'p2' | null = null;
   let diceSpectator = false;
   let dicePlayer: CampaignPlayer | null = null;
@@ -69,6 +78,7 @@
   let voteResolutionChoiceLabel = '';
   let cartridgeSelectionInFlight = false;
   let partnerConnectionId: PlayerId = 'p2';
+  let multiplayerAudioReady = false;
 
   $: connectionPlayerId = $sessionState.playerId;
   $: playerId = $libraryState.activeStoryMode === 'multiplayer'
@@ -224,11 +234,10 @@
       };
     }
   }
-  $: sceneText = scene?.text
-    ? interpolateSceneText(scene.text, textValues)
-    : scene?.prompt
-      ? interpolateSceneText(scene.prompt, textValues)
-      : '';
+  $: sceneTextSegments = formattedTextSegments(
+    scene?.text ?? scene?.prompt ?? '',
+    scene?.text ? scene.textFormats : scene?.promptFormats
+  );
   $: conversation = scene?.type === 'conversation' && $campaignState
     ? $campaignState.conversations[scene.id]
     : null;
@@ -295,7 +304,17 @@
     && $libraryState.activeSoloPlayerId !== connectionPlayerId;
   $: scrollKey = `${sceneId}:${terminalEntries.length}:${conversation?.messages.length ?? 0}`;
   $: audioCampaignId = $campaignState?.campaignId ?? '';
-  $: storyAudioVisible = $location === 'terminal' || $storyMinigameView;
+  $: multiplayerAudioReady = $campaignState?.sessionMode !== 'multiplayer'
+    || Boolean(
+      $sessionState.bothPlayersConnected
+      && $libraryState.seatClaims.p1
+      && $libraryState.seatClaims.p2
+      && $libraryState.activeStoryId === $campaignState?.story?.id
+    );
+  $: storyAudioVisible = (
+    ['terminal', 'settings'].includes($location)
+    || $storyMinigameView
+  ) && multiplayerAudioReady;
 
   $: if (storyAudioVisible !== lastStoryAudioVisible) {
     lastStoryAudioVisible = storyAudioVisible;
@@ -322,7 +341,10 @@
     ? `${audioCampaignId}:${sceneId}:${sceneAudioCues.map(audioCueSignature).join('|')}`
     : '';
 
-  $: if ($location === 'terminal' && scene && audioSceneKey !== lastAudioSceneKey) {
+  $: if ($location === 'terminal'
+    && multiplayerAudioReady
+    && scene
+    && audioSceneKey !== lastAudioSceneKey) {
     lastAudioSceneKey = audioSceneKey;
     applySceneAudio(sceneAudioCues);
   }
@@ -337,6 +359,15 @@
         && scene.spectatorRoll
         && $campaignState?.sessionMode === 'multiplayer'
     );
+  }
+
+  $: if (scene?.type === 'clear-terminal'
+    && diceSceneKey !== lastClearTerminalSceneKey) {
+    lastClearTerminalSceneKey = diceSceneKey;
+    sendAction({
+      type: 'continue-clear-terminal',
+      sceneId: scene.id
+    });
   }
 
   $: if (pendingDice) {
@@ -398,6 +429,16 @@
       (cue.stopMusicLayers ?? []).join(','),
       cue.stopSounds ?? ''
     ].join(':');
+  }
+
+  function formattedTextSegments(
+    text: string,
+    formats: StoryNode['textFormats'] = []
+  ): TypewriterSegment[] {
+    return createRichTextSegments(text, formats ?? []).map((segment) => ({
+      ...segment,
+      text: interpolateSceneText(segment.text, textValues)
+    }));
   }
 
   function buttonHoverStyle(node: StoryNode): string {
@@ -614,11 +655,47 @@
 
   function resetStory(): void {
     errorMessage = '';
+    unlockAudioPlayback();
+    resumeStoryAudio();
+    stopMusic();
+    stopSounds();
+    primeInitialSceneAudio();
+
     socket.emit('campaign:reset', (result: { ok: boolean; error?: string }) => {
       if (!result.ok) {
         errorMessage = result.error ?? 'The cartridge could not be reset.';
       }
     });
+  }
+
+  function primeInitialSceneAudio(): void {
+    const story = $campaignState?.story;
+
+    if (!story || !playerId) {
+      return;
+    }
+
+    const initialSceneId = $campaignState?.sessionMode === 'singleplayer'
+      ? story.singleplayerInitialSceneId
+      : story.initialSceneIds[playerId];
+    const initialScene = story.nodes.find((candidate) => candidate.id === initialSceneId);
+
+    if (!initialScene) {
+      return;
+    }
+
+    const initialAudioCues = [
+      initialScene,
+      ...story.nodes.filter((candidate) => candidate.attachedTo === initialScene.id)
+    ];
+
+    // The reset button is a genuine user gesture. Starting the known opening
+    // cue here keeps Brave from classifying it as delayed autoplay.
+    applySceneAudio(initialAudioCues);
+  }
+
+  function enableStoryAudio(): void {
+    retryBlockedAudioPlayback();
   }
 
   function storySeatClaimedByOther(seat: PlayerId): boolean {
@@ -747,6 +824,16 @@
       : undefined}
     bind:this={terminalScreenElement}
   >
+    {#if $storyAudioBlocked}
+      <div class="audio-unlock-notice" role="status">
+        <div>
+          <strong>Story audio is paused by the browser</strong>
+          <span>Brave requires one direct confirmation before this cartridge can play sound.</span>
+        </div>
+        <button type="button" on:click={enableStoryAudio}>ENABLE AUDIO</button>
+      </div>
+    {/if}
+
     {#if !$libraryState.activeStoryId}
       <div class="cartridge-status" role="status">
         <p class="scene-id">STORY CARTRIDGE REQUIRED</p>
@@ -847,7 +934,11 @@
                   {#if entry.speaker}
                     <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
                   {/if}
-                  <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+                  <p class="history-text">
+                    {#each formattedTextSegments(entry.text, entry.textFormats) as segment}
+                      <span style={richTextSegmentStyle(segment)}>{segment.text}</span>
+                    {/each}
+                  </p>
                 {/if}
                 <p class="history-scene-id terminal-image-scene-id">{entry.sceneId}</p>
                 </div>
@@ -866,7 +957,11 @@
               <div>
                 <p class="history-scene-id">{entry.sceneId}</p>
                 <p class="history-speaker">{interpolateSceneText(entry.speaker, textValues)}</p>
-                <p class="history-text">{interpolateSceneText(entry.text, textValues)}</p>
+                <p class="history-text">
+                  {#each formattedTextSegments(entry.text, entry.textFormats) as segment}
+                    <span style={richTextSegmentStyle(segment)}>{segment.text}</span>
+                  {/each}
+                </p>
               </div>
             </article>
           {/if}
@@ -895,8 +990,8 @@
             <p
               class="scene-text"
               class:scene-text-complete={typingComplete}
-              use:typewriter={{
-                text: sceneText,
+              use:richTypewriter={{
+                segments: sceneTextSegments,
                 timing: sceneSpeaker
                   ? typewriterProfiles.dialogue
                   : typewriterProfiles.narration,
@@ -1298,6 +1393,51 @@
     }
   }
 
+  .audio-unlock-notice {
+    position: sticky;
+    z-index: 12;
+    top: 0;
+    width: min(680px, 100%);
+    margin: 0 auto 20px;
+    padding: 12px 14px;
+    color: #fff1bd;
+    background: #2b2309f2;
+    border: 1px solid #e7bd3d;
+    box-shadow: 0 8px 24px #00000080;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+
+    > div {
+      display: grid;
+      gap: 4px;
+    }
+
+    strong {
+      font-family: "Orbitron", "Space Mono", sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.5px;
+    }
+
+    span {
+      color: #ddcf9c;
+      font-size: 0.68rem;
+      line-height: 1.45;
+    }
+
+    button {
+      min-height: 38px;
+      padding: 8px 12px;
+      color: #1d1705;
+      background: #f1c84d;
+      border: 1px solid #fff1a8;
+      font-weight: 900;
+      cursor: pointer;
+    }
+  }
+
   .scene-id {
     margin-bottom: 28px;
     color: #64748b;
@@ -1433,6 +1573,14 @@
   }
 
   @media (max-width: 560px) {
+    .audio-unlock-notice {
+      grid-template-columns: 1fr;
+
+      button {
+        width: 100%;
+      }
+    }
+
     .scene-copy--portrait {
       grid-template-columns: 70px minmax(0, 1fr);
       gap: 12px;

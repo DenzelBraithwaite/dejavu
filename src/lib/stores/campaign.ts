@@ -48,6 +48,7 @@ export type TerminalOutputEntry = {
   sceneId: string;
   speaker: string;
   text: string;
+  textFormats?: import('./library').RichTextFormat[];
   src?: string;
   alt?: string;
   logText?: string;

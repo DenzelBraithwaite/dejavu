@@ -1,3 +1,4 @@
+import { writable } from 'svelte/store';
 import { clamp } from '../helpers';
 import { audioSettings, getAudioSettings } from '../stores/audio';
 
@@ -45,6 +46,7 @@ const unlockedAudioPool: HTMLAudioElement[] = [];
 const unlockingAudio = new Set<HTMLAudioElement>();
 const silentWaveData = 'data:audio/wav;base64,UklGRioAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQYAAACAgICAgA==';
 const unlockedAudioPoolSize = 8;
+export const storyAudioBlocked = writable(false);
 let storyAudioPaused = false;
 
 if (typeof window !== 'undefined') {
@@ -133,6 +135,12 @@ export function unlockAudioPlayback(): void {
       // The pending-playback retry remains available on the next input.
     });
   }
+}
+
+// Retry the real pending tracks from a visible user action. This is the only
+// standards-compliant fallback when a browser rejects delayed autoplay.
+export function retryBlockedAudioPlayback(): void {
+  retryPendingPlayback();
 }
 
 export function playMusic(cue: SceneAudio): void {
@@ -427,6 +435,7 @@ function releaseTrack(collection: Map<string, ActiveAudio>, id: string): void {
 
   track.element.pause();
   pendingPlayback.delete(track.element);
+  updatePlaybackBlockedState();
   track.element.removeAttribute('src');
   track.element.load();
   collection.delete(id);
@@ -446,10 +455,31 @@ async function safelyPlay(audio: HTMLAudioElement): Promise<boolean> {
   try {
     await audio.play();
     pendingPlayback.delete(audio);
+    updatePlaybackBlockedState();
     return true;
-  } catch {
-    // Browsers can defer playback until the player interacts with the page.
-    pendingPlayback.add(audio);
+  } catch (error) {
+    const blockedByPolicy = error instanceof DOMException
+      && error.name === 'NotAllowedError';
+
+    // A NotAllowedError means the browser specifically requires another user
+    // gesture. Decode, network, and source errors cannot be fixed by retrying.
+    if (blockedByPolicy) {
+      pendingPlayback.add(audio);
+      storyAudioBlocked.set(true);
+    }
+
+    if (error instanceof DOMException) {
+      console.warn(
+        `[Story audio] Playback failed (${error.name}): ${error.message}`
+      );
+    } else {
+      console.warn('[Story audio] Playback failed.', error);
+    }
+
     return false;
   }
+}
+
+function updatePlaybackBlockedState(): void {
+  storyAudioBlocked.set(pendingPlayback.size > 0);
 }
