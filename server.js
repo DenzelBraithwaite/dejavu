@@ -215,14 +215,28 @@ app.get('/api/story-assets/images', async (_request, response) => {
     const builtInStoryImages = [
       '/media/story/404s-gang.png',
       '/media/story/acpu-command.png',
+      '/media/story/benny-los-logia-pack.png',
+      '/media/story/benny-riot-old-photo.png',
+      '/media/story/benny-shoots-milton.png',
       '/media/story/nova-avona-benny.png',
+      '/media/story/raid-evac-p1-nova-pov.png',
+      '/media/story/raid-evac-p2-avona-pov.png',
       '/media/story/raid_lab.png',
       '/media/story/raid_lab_kat.png',
       '/media/story/raid_guard_hallway.png',
       '/media/story/rammers-gang.png',
+      '/media/story/spoofs-404s-deal.png',
       '/media/story/spoofs-base-map.png',
+      '/media/story/spoofs-base-normal.png',
       '/media/story/spoofs-gang.png',
-      '/media/story/vespas-city-map.png'
+      '/media/story/three-brothers-link-zee-switch.png',
+      '/media/story/trinity-emp-rage-v3.png',
+      '/media/story/trinity-mind-gaze.png',
+      '/media/story/vespas-city-map.png',
+      '/media/story/vespas-drive-new-new-haven.png',
+      '/media/story/vespas-drive-shades-nova.png',
+      '/media/story/vespas-drive-veto-venus-bridge.png',
+      '/media/story/zara-traitor-execution.png'
     ];
     const images = [...builtInStoryImages, ...storyImages, ...characterImages]
       .sort((left, right) => left.localeCompare(right));
