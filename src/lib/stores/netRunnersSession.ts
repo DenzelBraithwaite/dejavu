@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import type { CardColor } from './netRunnersGameState';
 
 export type NetRunnersServerState = {
   version: number;
@@ -10,13 +11,13 @@ export type NetRunnersServerState = {
     name: string;
     money: number;
     amountBet: number;
-    colorBet: string;
+    colorBet: CardColor;
     ready: boolean;
     points: number;
     hasLost: boolean;
   }>;
-  trackCards: string[];
-  cardsDrawn: string[];
+  trackCards: CardColor[];
+  cardsDrawn: CardColor[];
   odds: {
     purple: number;
     pink: number;
@@ -31,7 +32,7 @@ export type NetRunnersServerState = {
     cyan: number;
     blue: number;
   };
-  winner: string;
+  winner: CardColor;
   nextDrawAt: number | null;
   drawIntervalMs: number;
   rematchVotes: Record<'p1' | 'p2', boolean | null>;

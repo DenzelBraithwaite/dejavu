@@ -1,11 +1,8 @@
 <script lang="ts">
-  // Hooks
   import { createEventDispatcher } from 'svelte';
   import { slide } from 'svelte/transition';
-
-  // Components
-  import { Item } from './index';
   import { activeCharacter } from '../stores/characters';
+  import Item from './Item.svelte';
 
   type NavigationItem = {
     color: string;
@@ -15,7 +12,6 @@
     title: string;
   };
 
-  // props
   export let sidebarExpanded = true;
   export let chatUnreadCount = 0;
   export let chatAvailable = false;
@@ -95,8 +91,6 @@
     dispatch('select', page);
   }
 </script>
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 
 <div class="sidebar" class:sidebar-collapsed={!sidebarExpanded} class:sidebar-expanded={sidebarExpanded}>
   <div class="sidebar-scroll">

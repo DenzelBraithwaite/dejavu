@@ -31,6 +31,16 @@ export type RichTypewriterOptions = {
   onComplete?: () => void;
 };
 
+type TypewriterAction = {
+  update: (options: TypewriterOptions) => void;
+  destroy: () => void;
+};
+
+type RichTypewriterAction = {
+  update: (options: RichTypewriterOptions) => void;
+  destroy: () => void;
+};
+
 export const typewriterProfiles = {
   dialogue: {
     characterMs: 22,
@@ -54,7 +64,10 @@ export const typewriterProfiles = {
 
 const defaultTiming = typewriterProfiles.narration;
 
-export function typewriter(node: HTMLElement, options: TypewriterOptions) {
+export function typewriter(
+  node: HTMLElement,
+  options: TypewriterOptions
+): TypewriterAction {
   let runId = 0;
   let currentOptions = options;
   let completed = false;
@@ -134,7 +147,7 @@ export function typewriter(node: HTMLElement, options: TypewriterOptions) {
 export function richTypewriter(
   node: HTMLElement,
   options: RichTypewriterOptions
-) {
+): RichTypewriterAction {
   let runId = 0;
   let currentOptions = options;
   let completed = false;

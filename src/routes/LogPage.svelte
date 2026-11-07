@@ -1,25 +1,23 @@
 <script lang="ts">
-  import {
-    Billywig,
-    BagMenu,
-    Chopsticks,
-    CharacterMenu,
-    DroneRelay,
-    FirewallAuction,
-    Journal,
-    LoHi,
-    Mastermind,
-    MinigameLibrary,
-    NetRunners,
-    PacketWar,
-    PlayerMenu,
-    Pigz,
-    SaveMenu,
-    SettingsMenu,
-    StoryLibrary,
-    Terminal,
-    TraceRace
-  } from '../lib/components';
+  import BagMenu from '../lib/components/BagMenu.svelte';
+  import Billywig from '../lib/components/Billywig.svelte';
+  import CharacterMenu from '../lib/components/CharacterMenu.svelte';
+  import Chopsticks from '../lib/components/Chopsticks.svelte';
+  import DroneRelay from '../lib/components/DroneRelay.svelte';
+  import FirewallAuction from '../lib/components/FirewallAuction.svelte';
+  import Journal from '../lib/components/Journal.svelte';
+  import LoHi from '../lib/components/LoHi.svelte';
+  import Mastermind from '../lib/components/Mastermind.svelte';
+  import MinigameLibrary from '../lib/components/MinigameLibrary.svelte';
+  import NetRunners from '../lib/components/NetRunners.svelte';
+  import PacketWar from '../lib/components/PacketWar.svelte';
+  import Pigz from '../lib/components/Pigz.svelte';
+  import PlayerMenu from '../lib/components/PlayerMenu.svelte';
+  import SaveMenu from '../lib/components/SaveMenu.svelte';
+  import SettingsMenu from '../lib/components/SettingsMenu.svelte';
+  import StoryLibrary from '../lib/components/StoryLibrary.svelte';
+  import Terminal from '../lib/components/Terminal.svelte';
+  import TraceRace from '../lib/components/TraceRace.svelte';
 </script>
 
 <div class="page-stack">

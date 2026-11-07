@@ -10,6 +10,15 @@
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
 
+  type ChopsticksAction =
+    | { type: 'attack'; source: number; target: number }
+    | {
+        type: 'redistribute';
+        source: number;
+        target: number;
+        pattern: 'halves' | 'four-ones';
+      };
+
   type Mode = 'menu' | 'instructions' | 'solo' | 'multi';
 
   let mode: Mode = 'menu';
@@ -26,6 +35,7 @@
   let wager = 0;
   let wagerSettled = false;
   let wagerArmed = false;
+  let cpuTimer: number | undefined;
 
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'chopsticks';
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
@@ -66,6 +76,8 @@
     mode = 'instructions';
   }
   onDestroy(() => {
+    clearCpuTimer();
+
     if (mode === 'multi') {
       socket.emit('arcade:leave', 'chopsticks', arcadeScope);
     }
@@ -169,7 +181,7 @@
     redistributionPattern = null;
   }
 
-  function sendAction(action: Record<string, unknown>): void {
+  function sendAction(action: ChopsticksAction): void {
     if (mode === 'solo') {
       applyLocalAction('p1', action);
     } else {
@@ -177,7 +189,7 @@
     }
   }
 
-  function applyLocalAction(actor: PlayerId, action: Record<string, any>): void {
+  function applyLocalAction(actor: PlayerId, action: ChopsticksAction): void {
     if (localState.status !== 'playing' || localState.activePlayer !== actor) {
       return;
     }
@@ -244,7 +256,8 @@
     localState = { ...localState };
 
     if (localState.activePlayer === 'p2' && localState.status === 'playing') {
-      window.setTimeout(cpuTurn, 650);
+      clearCpuTimer();
+      cpuTimer = window.setTimeout(cpuTurn, 650);
     }
   }
 
@@ -279,6 +292,7 @@
   }
 
   function restart(): void {
+    clearCpuTimer();
     selectedHand = null;
     redistributionPattern = null;
 
@@ -312,6 +326,8 @@
   }
 
   function requestExit(): void {
+    clearCpuTimer();
+
     if (launchedFromStory) {
       socket.emit('arcade:story-cancel', 'chopsticks', handleResult);
       mode = 'menu';
@@ -328,11 +344,18 @@
   }
 
   function returnToMenu(): void {
+    clearCpuTimer();
+
     if (mode === 'multi') {
       socket.emit('arcade:leave', 'chopsticks', arcadeScope);
     }
 
     mode = 'menu';
+  }
+
+  function clearCpuTimer(): void {
+    window.clearTimeout(cpuTimer);
+    cpuTimer = undefined;
   }
 
   function addLog(message: string): void {

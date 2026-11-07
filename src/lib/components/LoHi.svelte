@@ -10,6 +10,20 @@
   import { settleWager } from '../game/wager';
   import WagerPanel from './WagerPanel.svelte';
 
+  type Card = {
+    number: number;
+    suit: string;
+  };
+
+  type LoHiAction =
+    | { type: 'hold' }
+    | { type: 'direction'; value: string }
+    | { type: 'suits'; values: string[] }
+    | { type: 'numbers'; values: number[] }
+    | { type: 'exact'; number: number; suit: string };
+
+  type Mode = 'menu' | 'instructions' | 'solo' | 'multi';
+
   const factions = [
     { id: 'purple', name: 'Purple Cougar', short: 'PC', image: '/media/minigames/lohi/purple_cougar.png' },
     { id: 'pink', name: 'Pink Mouse', short: 'PM', image: '/media/minigames/lohi/pink_mouse.png' },
@@ -18,8 +32,6 @@
     { id: 'blue', name: 'Blue Eagle', short: 'BE', image: '/media/minigames/lohi/blue_eagle.png' }
   ];
   const suits = factions.map((faction) => faction.id);
-  type Mode = 'menu' | 'instructions' | 'solo' | 'multi';
-
   let mode: Mode = 'menu';
   let pendingMode: 'solo' | 'multi' = 'solo';
   let error = '';
@@ -42,6 +54,8 @@
   let wagerSettled = false;
   let wagerArmed = false;
   let lastMultiplayerStatus = '';
+  let cpuTimer: number | undefined;
+  let announcementTimer: number | undefined;
 
   $: launchedFromStory = $campaignState?.activeMinigame?.id === 'lo-hi';
   $: arcadeScope = launchedFromStory ? 'story' : 'main';
@@ -95,6 +109,8 @@
   }
 
   onDestroy(() => {
+    clearLocalTimers();
+
     if (mode === 'multi') {
       socket.emit('arcade:leave', 'lo-hi', arcadeScope);
     }
@@ -152,6 +168,8 @@
   }
 
   function returnToMenu(): void {
+    clearLocalTimers();
+
     if (mode === 'multi') {
       socket.emit('arcade:leave', 'lo-hi', arcadeScope);
     }
@@ -171,18 +189,7 @@
   }
 
   function submitAction(): void {
-    let action: Record<string, unknown> = { type: actionType };
-
-    if (actionType === 'direction') {
-      action.value = direction;
-    } else if (actionType === 'suits') {
-      action.values = selectedSuits;
-    } else if (actionType === 'numbers') {
-      action.values = selectedNumbers;
-    } else {
-      action.number = exactNumber;
-      action.suit = exactSuit;
-    }
+    const action = createAction();
 
     if (mode === 'solo') {
       applyLocalAction('p1', action);
@@ -193,7 +200,7 @@
   }
 
   function hold(): void {
-    const action = { type: 'hold' };
+    const action: LoHiAction = { type: 'hold' };
 
     if (mode === 'solo') {
       applyLocalAction('p1', action);
@@ -202,7 +209,23 @@
     }
   }
 
-  function applyLocalAction(actor: 'p1' | 'p2', action: Record<string, any>): void {
+  function createAction(): LoHiAction {
+    if (actionType === 'direction') {
+      return { type: 'direction', value: direction };
+    }
+
+    if (actionType === 'suits') {
+      return { type: 'suits', values: selectedSuits };
+    }
+
+    if (actionType === 'numbers') {
+      return { type: 'numbers', values: selectedNumbers };
+    }
+
+    return { type: 'exact', number: exactNumber, suit: exactSuit };
+  }
+
+  function applyLocalAction(actor: 'p1' | 'p2', action: LoHiAction): void {
     if (localState.status !== 'playing' || localState.activePlayer !== actor) {
       return;
     }
@@ -264,7 +287,8 @@
     localState = { ...localState };
 
     if (localState.activePlayer === 'p2') {
-      window.setTimeout(cpuTurn, 1000 + Math.floor(Math.random() * 1001));
+      window.clearTimeout(cpuTimer);
+      cpuTimer = window.setTimeout(cpuTurn, 1000 + Math.floor(Math.random() * 1001));
     }
   }
 
@@ -315,6 +339,8 @@
   }
 
   function requestExit(): void {
+    clearLocalTimers();
+
     if (launchedFromStory) {
       socket.emit('arcade:story-cancel', 'lo-hi', handleResult);
       mode = 'menu';
@@ -333,7 +359,8 @@
   function announce(message: string, tone: typeof eventTone): void {
     eventNotice = message;
     eventTone = tone;
-    window.setTimeout(() => {
+    window.clearTimeout(announcementTimer);
+    announcementTimer = window.setTimeout(() => {
       if (eventNotice === message) {
         eventNotice = '';
       }
@@ -388,14 +415,18 @@
     return values.length < limit ? [...values, value] : values;
   }
 
-  function randomCard(): { number: number; suit: string } {
+  function randomCard(): Card {
     return {
       number: Math.floor(Math.random() * 11),
       suit: suits[Math.floor(Math.random() * suits.length)]
     };
   }
 
-  function localBetWon(current: any, next: any, action: Record<string, any>): boolean {
+  function localBetWon(current: Card, next: Card, action: LoHiAction): boolean {
+    if (action.type === 'hold') {
+      return false;
+    }
+
     if (action.type === 'direction') {
       return action.value === 'higher' ? next.number > current.number : next.number < current.number;
     }
@@ -411,7 +442,7 @@
     return Number(action.number) === next.number && action.suit === next.suit;
   }
 
-  function localActionLabel(action: Record<string, any>): string {
+  function localActionLabel(action: LoHiAction): string {
     if (action.type === 'direction') {
       return String(action.value).toUpperCase();
     }
@@ -431,8 +462,15 @@
     localState.log = [{ id: `${Date.now()}-${Math.random()}`, message }, ...localState.log];
   }
 
-  function cardLabel(card: any): string {
+  function cardLabel(card: Card): string {
     return `${factionFor(card.suit).name} ${card.number}`;
+  }
+
+  function clearLocalTimers(): void {
+    window.clearTimeout(cpuTimer);
+    window.clearTimeout(announcementTimer);
+    cpuTimer = undefined;
+    announcementTimer = undefined;
   }
 
   function factionFor(suit: string | undefined): typeof factions[number] {

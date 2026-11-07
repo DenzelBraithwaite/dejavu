@@ -4544,7 +4544,9 @@
     return path.startsWith('/uploads/stories/');
   }
 
-  function handleSimpleResult(successMessage: string) {
+  function handleSimpleResult(
+    successMessage: string
+  ): (result: { ok: boolean; error?: string }) => void {
     return (result: { ok: boolean; error?: string }): void => {
       if (result.ok) {
         statusMessage = successMessage;

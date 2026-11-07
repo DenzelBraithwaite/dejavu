@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { blur } from 'svelte/transition';
-  import { LogPage } from '../../routes';
+  import LogPage from '../../routes/LogPage.svelte';
   import { resumeStoryAudio, unlockAudioPlayback } from '../audio/audioManager';
   import { socket, storeSessionToken } from '../socket';
   import { campaignState, type CampaignState } from '../stores/campaign';

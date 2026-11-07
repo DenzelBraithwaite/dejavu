@@ -1,19 +1,14 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-
-  // Transitions
   import { blur, fly } from 'svelte/transition';
-
-  // stores
   import { netRunnersGameState, type CardColor } from '../stores/netRunnersGameState';
   import { netRunnersServerState } from '../stores/netRunnersSession';
   import location from '../stores/location';
   import { sessionState } from '../stores/session';
   import { setMinigameSessionActive } from '../stores/minigameSessions';
   import { socket } from '../socket';
-
-  // Components
-  import { NetRunnersCard, PlayerGamblingCard } from './';
+  import NetRunnersCard from './NetRunnersCard.svelte';
+  import PlayerGamblingCard from './PlayerGamblingCard.svelte';
   import WagerPanel from './WagerPanel.svelte';
 
   const automaticDrawDelayMs = 2000;
@@ -43,15 +38,17 @@
     stopAutomaticDraws();
   });
 
-  // Starts game
   function startGame(): void {
     resetGame();
-    netRunnersGameState.update($netRunnersGameState => {
-      $netRunnersGameState.gameInProgress = true;
-      $netRunnersGameState.trackCards = drawLaneCards();
-      $netRunnersGameState.odds = calculateBettingOdds();
-      return $netRunnersGameState;
-    });
+    const { cards, remainingDeck } = drawLaneCards();
+
+    netRunnersGameState.update((state) => ({
+      ...state,
+      gameInProgress: true,
+      fullDeck: remainingDeck,
+      trackCards: cards,
+      odds: calculateBettingOdds(remainingDeck)
+    }));
     
     hideGameMenu();
     showColorSelectScreen();
@@ -83,8 +80,7 @@
     }));
   }
 
-  // Ends game
-  function endGame() {
+  function endGame(): void {
     stopAutomaticDraws();
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.gameInProgress = false;
@@ -101,14 +97,25 @@
     calculateWinnings($netRunnersGameState.p4, 'p4');
   }
 
-  // Resets game, restoring original deck.
   function resetGame(): void {
     stopAutomaticDraws();
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.trackCards = [];
       $netRunnersGameState.cardsDrawn = [];
-      $netRunnersGameState.odds = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
-      $netRunnersGameState.points = {pink: 0, purple: 0, yellow: 0, cyan: 0, blue: 0};
+      $netRunnersGameState.odds = {
+        pink: 0,
+        purple: 0,
+        yellow: 0,
+        cyan: 0,
+        blue: 0
+      };
+      $netRunnersGameState.points = {
+        pink: 0,
+        purple: 0,
+        yellow: 0,
+        cyan: 0,
+        blue: 0
+      };
       $netRunnersGameState.gameInProgress = false;
       $netRunnersGameState.roundStarted = false;
 
@@ -149,29 +156,35 @@
     resetWinningColor();
   }
 
-  // Draws initial 7 cards that will represent the track and betting odds
-  function drawLaneCards(): CardColor[] {
-    let cards: string[] = [];
+  function drawLaneCards(): {
+    cards: CardColor[];
+    remainingDeck: CardColor[];
+  } {
+    let cards: CardColor[] = [];
     const fullDeckCopy = [...$netRunnersGameState.fullDeck];
 
-    for(let i = 0; i < 7; i++) {
-      const index = Math.floor(Math.random() * $netRunnersGameState.fullDeck.length);
-      const card: string = fullDeckCopy.splice(index, 1)[0];
-      netRunnersGameState.set({...$netRunnersGameState, fullDeck: [...fullDeckCopy]});
+    for (let index = 0; index < 7; index += 1) {
+      const cardIndex = Math.floor(Math.random() * fullDeckCopy.length);
+      const card = fullDeckCopy.splice(cardIndex, 1)[0];
 
       cards = [...cards, card];
     }
 
-    return cards;
+    return {
+      cards,
+      remainingDeck: fullDeckCopy
+    };
   }
 
-  // Shuffles lane cards so players can click a few times before starting.
-  function shuffleLaneCards(): void{
+  function shuffleLaneCards(): void {
     resetDeck();
+    const { cards, remainingDeck } = drawLaneCards();
+
     netRunnersGameState.set({
       ...$netRunnersGameState,
-      trackCards: drawLaneCards(),
-      odds: calculateBettingOdds()
+      fullDeck: remainingDeck,
+      trackCards: cards,
+      odds: calculateBettingOdds(remainingDeck)
     });
   }
 
@@ -191,42 +204,63 @@
     );
   }
 
-  // Calculate odds for each color based on removed track cards
-  function calculateBettingOdds(): {pink: number, purple: number, yellow: number, cyan: number, blue: number,} {
-    const numOfPinkCards = $netRunnersGameState.fullDeck.filter(c => c === 'pink').length;
-    const numOfPurpleCards = $netRunnersGameState.fullDeck.filter(c => c === 'purple').length;
-    const numOfYellowCards = $netRunnersGameState.fullDeck.filter(c => c === 'yellow').length;
-    const numOfCyanCards = $netRunnersGameState.fullDeck.filter(c => c === 'cyan').length;
-    const numOfBlueCards = $netRunnersGameState.fullDeck.filter(c => c === 'blue').length;
-    const total = [numOfPinkCards, numOfPurpleCards, numOfYellowCards, numOfCyanCards, numOfBlueCards].reduce((acc, curr) => acc + curr, 0);
+  function calculateBettingOdds(deck = $netRunnersGameState.fullDeck): {
+    pink: number;
+    purple: number;
+    yellow: number;
+    cyan: number;
+    blue: number;
+  } {
+    const colors = [
+      'pink',
+      'purple',
+      'yellow',
+      'cyan',
+      'blue'
+    ] as const;
+    const colorCounts = Object.fromEntries(
+      colors.map((color) => [
+        color,
+        deck.filter((card) => card === color).length
+      ])
+    ) as Record<typeof colors[number], number>;
+    const total = Object.values(colorCounts).reduce(
+      (sum, count) => sum + count,
+      0
+    );
 
     return {
-      pink: Math.round(numOfPinkCards / total * 100),
-      purple: Math.round(numOfPurpleCards / total * 100),
-      yellow: Math.round(numOfYellowCards / total * 100),
-      cyan: Math.round(numOfCyanCards / total * 100),
-      blue: Math.round(numOfBlueCards / total * 100)
-    }
+      pink: Math.round(colorCounts.pink / total * 100),
+      purple: Math.round(colorCounts.purple / total * 100),
+      yellow: Math.round(colorCounts.yellow / total * 100),
+      cyan: Math.round(colorCounts.cyan / total * 100),
+      blue: Math.round(colorCounts.blue / total * 100)
+    };
   }
 
-  // event: any bcuz event: customEvent makes normal <button> with on:click complain due to lacking event listeners.
   function selectColor(color: CardColor): void {
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.p1.colorBet = color;
       return $netRunnersGameState;
-    })
+    });
   }
 
   function selectBotColors(singleplayer = true): void {
     if (singleplayer) {
-      const colors = ['purple', 'pink', 'yellow', 'cyan', 'blue'];
+      const colors: CardColor[] = [
+        'purple',
+        'pink',
+        'yellow',
+        'cyan',
+        'blue'
+      ];
       netRunnersGameState.update($netRunnersGameState => {
         $netRunnersGameState.p2.colorBet = colors[Math.floor(Math.random() * 5)];
         $netRunnersGameState.p3.colorBet = colors[Math.floor(Math.random() * 5)];
         $netRunnersGameState.p4.colorBet = colors[Math.floor(Math.random() * 5)];
 
         return $netRunnersGameState;
-      })
+      });
     }
   }
 
@@ -238,7 +272,7 @@
       $netRunnersGameState.p4.amountBet = Math.floor(Math.random() * (($netRunnersGameState.p4.money - 5) / 5)) * 5 + 5;
 
       return $netRunnersGameState;
-    })
+    });
   }
 
   function avoidBankruptcy(): void {
@@ -269,34 +303,41 @@
   }
 
   function startRound(): void {
-    hideBettingScreen()
+    hideBettingScreen();
     hideColorSelectScreen();
     showGameControls();
     showDrawBtn();
     showLanes();
     showAllColorsProgress();
-    netRunnersGameState.set({...$netRunnersGameState, roundStarted: true});
+    netRunnersGameState.set({
+      ...$netRunnersGameState,
+      roundStarted: true
+    });
     startAutomaticDraws();
   }
   
-  // Flip/Draw a card
-  function drawCard() {
+  function drawCard(): void {
     if (!$netRunnersGameState.gameInProgress) {
       return;
     }
 
-    if ($netRunnersGameState.cardsDrawn.length === 19)  $netRunnersGameState.cardsDrawn.splice(0, 5);
+    if ($netRunnersGameState.cardsDrawn.length === 19) {
+      $netRunnersGameState.cardsDrawn.splice(0, 5);
+    }
 
     const fullDeckCopy = [...$netRunnersGameState.fullDeck];
     const index = Math.floor(Math.random() * $netRunnersGameState.fullDeck.length);
-    const card: string = fullDeckCopy.splice(index, 1)[0];
+    const card = fullDeckCopy.splice(index, 1)[0];
 
     netRunnersGameState.update($netRunnersGameState => {
       $netRunnersGameState.fullDeck = [...fullDeckCopy];
-      $netRunnersGameState.cardsDrawn = [...$netRunnersGameState.cardsDrawn, card]; // looks better this way
+      $netRunnersGameState.cardsDrawn = [
+        ...$netRunnersGameState.cardsDrawn,
+        card
+      ];
       advanceColor(card);
 
-      return $netRunnersGameState
+      return $netRunnersGameState;
     });
     
     if (hasColorFinishedRace()) {
@@ -306,8 +347,12 @@
   
   // Moves any card if their color matches the flipped card's color.
   function advanceColor(card: CardColor): void {
+    if (!card) {
+      return;
+    }
+
     netRunnersGameState.update($netRunnersGameState => {
-      $netRunnersGameState.points[card as 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue'] += 1;
+      $netRunnersGameState.points[card] += 1;
       if ($netRunnersGameState.p1.colorBet === card) $netRunnersGameState.p1.points +=1;
       if ($netRunnersGameState.p2.colorBet === card) $netRunnersGameState.p2.points +=1;
       if ($netRunnersGameState.p3.colorBet === card) $netRunnersGameState.p3.points +=1;
@@ -327,12 +372,21 @@
       ([, points]) => points === 7
     );
 
-    return winningColor?.[0] ?? '';
+    return (winningColor?.[0] as CardColor | undefined) ?? '';
   }
 
   // Determines how much the player wins based on the odds of their winning bet.
   // In all cases, for every time the color bet appears in the odds lane (reducing odds of winning) gain 25%. e.g. 2/7 odds cards are pink, pink gets + 50% on win.
-  function calculateWinnings(player: {name: string; money: number; amountBet: number; colorBet: string; points: number}, playerNum: 'p1' | 'p2' | 'p3' | 'p4') {
+  function calculateWinnings(
+    player: {
+      name: string;
+      money: number;
+      amountBet: number;
+      colorBet: CardColor;
+      points: number;
+    },
+    playerNum: 'p1' | 'p2' | 'p3' | 'p4'
+  ): void {
     const walletBeforeSettlement = $netRunnersGameState[playerNum].money;
 
     if (player.colorBet === $netRunnersGameState.lastWinningColor) {

@@ -1,7 +1,5 @@
 <script lang="ts">
-  // Components
-  import { Client } from './lib/components/index';
-
+  import Client from './lib/components/Client.svelte';
 </script>
 
 <main class="main-content">

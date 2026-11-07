@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 
-export type CardColor = 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue' | string;
+export type CardColor = 'purple' | 'pink' | 'yellow' | 'cyan' | 'blue' | '';
 export type NetRunnersGameState = {
   singleplayer: boolean;
   infoVisible: boolean;
@@ -39,7 +39,7 @@ export type NetRunnersGameState = {
     name: string;
     money: number;
     amountBet: number;
-    colorBet: string;
+    colorBet: CardColor;
     points: number;
     hasLost: boolean;
   },
@@ -47,7 +47,7 @@ export type NetRunnersGameState = {
     name: string;
     money: number;
     amountBet: number;
-    colorBet: string;
+    colorBet: CardColor;
     points: number;
     hasLost: boolean;
   },
@@ -55,7 +55,7 @@ export type NetRunnersGameState = {
     name: string;
     money: number;
     amountBet: number;
-    colorBet: string;
+    colorBet: CardColor;
     points: number;
     hasLost: boolean;
   },
@@ -63,7 +63,7 @@ export type NetRunnersGameState = {
     name: string;
     money: number;
     amountBet: number;
-    colorBet: string;
+    colorBet: CardColor;
     points: number;
     hasLost: boolean;
   }

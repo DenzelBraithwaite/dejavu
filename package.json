@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "server": "node server.js",
-    "build": "rm -rf public/assets/ && vite build && shx cp -r dist/assets public/assets && shx cp dist/index.html public/index.html",
+    "build": "shx rm -rf public/assets && vite build && shx cp -r dist/assets public/assets && shx cp dist/index.html public/index.html",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json"
   },

@@ -1,7 +1,10 @@
 <script lang="ts">
   import { clamp } from '../helpers';
   import { campaignState, localPlayer } from '../stores/campaign';
-  import { characterLibraryState } from '../stores/characters';
+  import {
+    characterLibraryState,
+    type CharacterRecord
+  } from '../stores/characters';
   import { libraryState, type StoryRelationship } from '../stores/library';
   import location from '../stores/location';
   import { sessionState, type PlayerId } from '../stores/session';
@@ -24,7 +27,9 @@
       )
   ) ?? [];
 
-  function relationshipCharacter(relationship: StoryRelationship) {
+  function relationshipCharacter(
+    relationship: StoryRelationship
+  ): CharacterRecord | undefined {
     if (relationship.characterId === 'other-player' && storyPlayerId && $campaignState) {
       const otherPlayerId = storyPlayerId === 'p1' ? 'p2' : 'p1';
       const otherCharacterId = $campaignState.players[otherPlayerId].characterId;
