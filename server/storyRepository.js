@@ -25,6 +25,7 @@ const playableStartNodeTypes = new Set([
   'minigame',
   'vote'
 ]);
+const maximumStoryVersions = 10;
 
 export function createStoryRepository(databasePath) {
   mkdirSync(dirname(databasePath), {
@@ -46,9 +47,19 @@ export function createStoryRepository(databasePath) {
       updated_at TEXT NOT NULL
     )
   `);
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS story_versions (
+      story_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      document_json TEXT NOT NULL,
+      saved_at TEXT NOT NULL,
+      PRIMARY KEY (story_id, version)
+    )
+  `);
 
   removeRetiredBuiltInStories(database);
   migrateLegacyStoryNodes(database);
+  backfillCurrentStoryVersions(database);
 
   return {
     listStories() {
@@ -77,6 +88,29 @@ export function createStoryRepository(databasePath) {
       `).get(id);
 
       return row ? JSON.parse(row.documentJson) : null;
+    },
+
+    listStoryVersions(id) {
+      return database.prepare(`
+        SELECT
+          version,
+          saved_at AS savedAt,
+          document_json AS documentJson
+        FROM story_versions
+        WHERE story_id = ?
+        ORDER BY version DESC
+        LIMIT ?
+      `).all(id, maximumStoryVersions).map((row) => {
+        const document = JSON.parse(row.documentJson);
+
+        return {
+          version: Number(row.version),
+          savedAt: row.savedAt,
+          title: String(document.title ?? ''),
+          author: String(document.author ?? ''),
+          status: document.status === 'playable' ? 'playable' : 'draft'
+        };
+      });
     },
 
     createStory(input) {
@@ -108,6 +142,7 @@ export function createStoryRepository(databasePath) {
         now,
         now
       );
+      recordStoryVersion(database, document, now);
 
       return document;
     },
@@ -148,8 +183,28 @@ export function createStoryRepository(databasePath) {
         now,
         id
       );
+      recordStoryVersion(database, normalized, now);
 
       return normalized;
+    },
+
+    restoreStoryVersion(id, version) {
+      const historicalRow = database.prepare(`
+        SELECT document_json AS documentJson
+        FROM story_versions
+        WHERE story_id = ? AND version = ?
+      `).get(id, version);
+
+      if (!historicalRow) {
+        throw new Error('That story version is no longer available.');
+      }
+
+      const historicalDocument = JSON.parse(historicalRow.documentJson);
+
+      return this.updateStory(id, {
+        ...historicalDocument,
+        id
+      });
     },
 
     duplicateStory(id) {
@@ -192,8 +247,65 @@ export function createStoryRepository(databasePath) {
       }
 
       database.prepare('DELETE FROM stories WHERE id = ?').run(id);
+      database.prepare('DELETE FROM story_versions WHERE story_id = ?').run(id);
     }
   };
+}
+
+function recordStoryVersion(database, document, savedAt) {
+  database.prepare(`
+    INSERT OR REPLACE INTO story_versions (
+      story_id,
+      version,
+      document_json,
+      saved_at
+    ) VALUES (?, ?, ?, ?)
+  `).run(
+    document.id,
+    document.version,
+    JSON.stringify(document),
+    savedAt
+  );
+
+  database.prepare(`
+    DELETE FROM story_versions
+    WHERE story_id = ?
+      AND version NOT IN (
+        SELECT version
+        FROM story_versions
+        WHERE story_id = ?
+        ORDER BY version DESC
+        LIMIT ?
+      )
+  `).run(document.id, document.id, maximumStoryVersions);
+}
+
+function backfillCurrentStoryVersions(database) {
+  const stories = database.prepare(`
+    SELECT
+      id,
+      version,
+      document_json AS documentJson,
+      updated_at AS updatedAt
+    FROM stories
+  `).all();
+  const versionExists = database.prepare(`
+    SELECT 1
+    FROM story_versions
+    WHERE story_id = ? AND version = ?
+  `);
+
+  for (const story of stories) {
+    if (versionExists.get(story.id, story.version)) {
+      continue;
+    }
+
+    recordStoryVersion(
+      database,
+      JSON.parse(story.documentJson),
+      story.updatedAt
+    );
+  }
 }
 
 function removeRetiredBuiltInStories(database) {

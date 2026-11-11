@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
-  import { fade } from 'svelte/transition';
   import {
     applySceneAudio,
     resumeStoryAudio,
@@ -18,16 +17,30 @@
     libraryState,
     type AudioAsset,
     type StoryDocument,
-    type StoryNode
+    type StoryNode,
+    type StoryVersionSummary
   } from '../stores/library';
   import location from '../stores/location';
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
   import RichTextEditor from './RichTextEditor.svelte';
+  import StoryEditorGuide from './story-editor/StoryEditorGuide.svelte';
+  import StoryEditorToolbar from './story-editor/StoryEditorToolbar.svelte';
+  import StoryValidationToast from './story-editor/StoryValidationToast.svelte';
+  import StoryVersionHistory from './story-editor/StoryVersionHistory.svelte';
+  import {
+    companionNodeTypes,
+    nodeTypes,
+    tutorialNodeSections,
+    type TutorialNode
+  } from './story-editor/catalog';
+  import type {
+    StoryPlayMode,
+    StoryValidationIssue
+  } from './story-editor/types';
 
   type EditorMode = 'library' | 'create' | 'editor';
   type LaneId = 'p1' | 'both' | 'p2';
-  type StoryPlayMode = 'singleplayer' | 'multiplayer';
   type LinkSelection = {
     sourceId: string;
     field?: string;
@@ -57,18 +70,6 @@
     activeLane: LaneId;
   };
 
-  type TutorialNode = {
-    name: string;
-    type: string;
-    description: string;
-    usage: string;
-  };
-
-  type TutorialSection = {
-    title: string;
-    description: string;
-    nodes: TutorialNode[];
-  };
 
   type PlayerPortraitPreview = {
     roleLabel: string;
@@ -95,217 +96,7 @@
     width: number;
     height: number;
   };
-  type StoryValidationIssue = {
-    id: string;
-    title: string;
-    message: string;
-    fix: string;
-    nodeId?: string;
-    map?: StoryPlayMode;
-    blocksSave: boolean;
-    blocksPlay: boolean;
-  };
 
-  const flowNodeTypes = [
-    { type: 'dialogue', label: 'Dialogue' },
-    { type: 'input', label: 'Player input' },
-    { type: 'choice', label: 'Choice' },
-    { type: 'checkpoint', label: 'Checkpoint' },
-    { type: 'conversation', label: 'Open floor' },
-    { type: 'dice-check', label: 'Dice' },
-    { type: 'vote', label: 'Shared vote' },
-    { type: 'condition', label: 'Condition' },
-    { type: 'clear-terminal', label: 'Clear terminal' },
-    { type: 'change-character', label: 'Change character' },
-    { type: 'image', label: 'Image' },
-    { type: 'minigame', label: 'Minigame' },
-    { type: 'ending', label: 'Ending' }
-  ];
-
-  const companionNodeTypes = [
-    { type: 'item-effect', label: 'Item' },
-    { type: 'story-flag', label: 'Story flag' },
-    { type: 'player-state', label: 'Player state' },
-    { type: 'label', label: 'Visual label' },
-    { type: 'note', label: 'Note' },
-    { type: 'audio', label: 'Audio' },
-    { type: 'stop-audio', label: 'Stop audio' },
-    { type: 'screen-effect', label: 'Terminal effect' }
-  ];
-
-  const nodeTypes = [...flowNodeTypes, ...companionNodeTypes];
-
-  // Keep the guide catalog beside the palette so every added node has a matching explanation.
-  const tutorialNodeSections: TutorialSection[] = [
-    {
-      title: 'Dialogue and player input',
-      description: 'Present story text, collect a written response, or open a direct player conversation.',
-      nodes: [
-        {
-          name: 'Dialogue',
-          type: 'dialogue',
-          description: 'Displays typed story text with an optional character, expression, or custom speaker.',
-          usage: 'Write the dialogue, select its speaker and expression, then connect Next. Enable Timed to force a scene-length wait; its visible countdown can be hidden for a natural pause.'
-        },
-        {
-          name: 'Player input',
-          type: 'input',
-          description: 'Collects a free-form response without changing the player character.',
-          usage: 'Enable Store response when the answer matters later. Give it a key, then insert that value in future text or use Player state → Set player name to create a session-only custom name. Optionally show the responding player’s active character portrait and expression beside their answer.'
-        },
-        {
-          name: 'Open floor',
-          type: 'conversation',
-          description: 'Runs a turn-based, face-to-face text conversation between the two players.',
-          usage: 'Choose the first speaker and each player’s turn count, then connect the shared Next route. Enable player portraits to show each speaker’s active character and selected expression to both players.'
-        }
-      ]
-    },
-    {
-      title: 'Branches and rules',
-      description: 'Split the story through buttons, timers, dice, votes, or stored campaign state.',
-      nodes: [
-        {
-          name: 'Choice',
-          type: 'choice',
-          description: 'Shows two to five labelled buttons with optional timing, locks, and remembered decisions.',
-          usage: 'Set labels and destinations, optionally enable a visible or hidden timer, and mark the decision Minor or Major when future conditions should remember it.'
-        },
-        {
-          name: 'Dice',
-          type: 'dice-check',
-          description: 'Rolls a selected die against a character stat and target value.',
-          usage: 'Choose the die, stat, and target, then connect both Success and Failure. In multiplayer, a private-lane Dice node can let the other player spectate when reached from a Shared Vote.'
-        },
-        {
-          name: 'Condition',
-          type: 'condition',
-          description: 'Immediately routes by campaign state, a remembered decision, or which multiplayer role is playing.',
-          usage: 'Select the rule and connect both True and False. A Playing as condition can split a Shared route back into Player 1 and Player 2 lanes.'
-        },
-        {
-          name: 'Shared vote',
-          type: 'vote',
-          description: 'Collects a button choice from both players and resolves the shared result.',
-          usage: 'Create two to five options and connect every enabled result. Use it only on the Shared lane. Matching votes briefly flash the chosen result; opposing votes animate the random selection before the story continues.'
-        }
-      ]
-    },
-    {
-      title: 'Media',
-      description: 'Change the atmosphere, show visual content, or launch a coded game.',
-      nodes: [
-        {
-          name: 'Audio',
-          type: 'audio',
-          description: 'Plays layered music or a sound effect without stopping existing audio.',
-          usage: 'Choose Music or Sound, select a library file, then configure volume, looping, fades, and an optional playback segment.'
-        },
-        {
-          name: 'Image',
-          type: 'image',
-          description: 'Displays uploaded artwork as a routed step inside the terminal.',
-          usage: 'Select and position an image, write its Log text, customize its Continue button, or enable a timer to advance automatically.'
-        },
-        {
-          name: 'Minigame',
-          type: 'minigame',
-          description: 'Launches a registered coded minigame from the story.',
-          usage: 'Choose the game and connect both Finished Game and Exited Early destinations.'
-        }
-      ]
-    },
-    {
-      title: 'Effects',
-      description: 'Attach state changes or terminal presentation effects to another story node.',
-      nodes: [
-        {
-          name: 'Item',
-          type: 'item-effect',
-          description: 'Gives a named item to the player or removes one from their Bag.',
-          usage: 'Choose Give or Remove, enter the player-facing item name, optionally add artwork, and customize the terminal announcement.'
-        },
-        {
-          name: 'Story flag',
-          type: 'story-flag',
-          description: 'Stores a named value that conditions can check later in the cartridge.',
-          usage: 'Use a stable Flag ID such as has_gone_to_shop and set its value. A later Condition can compare that flag.'
-        },
-        {
-          name: 'Player state',
-          type: 'player-state',
-          description: 'Changes the active player’s name, stats, relationships, known characters, or multiplayer mods.',
-          usage: 'Choose one focused operation. Stat changes use a positive amount to add or a negative amount to subtract.'
-        },
-        {
-          name: 'Terminal effect',
-          type: 'screen-effect',
-          description: 'Changes terminal color or applies animated presentation effects when its host becomes active.',
-          usage: 'Choose a custom color, shake, blink, mirror, spin, glow, or scan effect. Glow can appear inside the screen, behind the full terminal, or in both places.'
-        }
-      ]
-    },
-    {
-      title: 'Special nodes',
-      description: 'Use compact utility markers to synchronize, clear, organize, or end a path.',
-      nodes: [
-        {
-          name: 'Checkpoint',
-          type: 'checkpoint',
-          description: 'Stops one player until both players reach the same checkpoint key.',
-          usage: 'Place matching checkpoint nodes on both player lanes, give them the same key, and connect Next.'
-        },
-        {
-          name: 'Clear terminal',
-          type: 'clear-terminal',
-          description: 'Clears all terminal text and images before immediately continuing.',
-          usage: 'Place it where history should disappear and connect Next. It can host companions, including Stop Audio, when the terminal and soundtrack should clear together.'
-        },
-        {
-          name: 'Stop audio',
-          type: 'stop-audio',
-          description: 'Stops music, sound effects, or both without adding another story step.',
-          usage: 'Choose the audio categories, optional music IDs/layers, and fade-out time, then attach it.'
-        },
-        {
-          name: 'Change character',
-          type: 'change-character',
-          description: 'Changes the character identity and stats used by the current player for the rest of the session.',
-          usage: 'Choose another story character or reset to the player’s default main character, then connect Next.'
-        },
-        {
-          name: 'Visual label',
-          type: 'label',
-          description: 'Adds a heading or note to organize the editor canvas without affecting play.',
-          usage: 'Attach it to a nearby host node and write a useful chapter or section title. Labels never receive story routes or appear during play.'
-        },
-        {
-          name: 'Note',
-          type: 'note',
-          description: 'Stores longer author notes beside a story node without appearing during play.',
-          usage: 'Attach it to a host node and record context, reminders, or implementation details for other authors.'
-        },
-        {
-          name: 'Ending',
-          type: 'ending',
-          description: 'Marks the final destination of a playable route.',
-          usage: 'Write the closing terminal text. Ending nodes intentionally have no outgoing route.'
-        }
-      ]
-    }
-  ];
-
-  // Surface missing handbook entries immediately when the palette gains another node.
-  const documentedNodeTypes = new Set(
-    tutorialNodeSections.flatMap((section) => {
-      return section.nodes.map((node) => {
-        return node.type;
-      });
-    })
-  );
-  const undocumentedNodeTypes = nodeTypes.filter((nodeType) => {
-    return !documentedNodeTypes.has(nodeType.type);
-  });
 
   const lanes: Array<{ id: LaneId; label: string }> = [
     { id: 'p1', label: 'PLAYER 1' },
@@ -457,6 +248,9 @@
   let storySettingsOpen = false;
   let unprotectConfirmationOpen = false;
   let relationshipSettingsPlayer: PlayerId = 'p1';
+  let storyVersions: StoryVersionSummary[] = [];
+  let versionHistoryLoading = false;
+  let versionRestoreInFlight = false;
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -473,11 +267,91 @@
 
     storySettingsOpen = true;
     unprotectConfirmationOpen = false;
+    loadStoryVersions();
   }
 
   function closeStorySettings(): void {
     storySettingsOpen = false;
     unprotectConfirmationOpen = false;
+  }
+
+  function loadStoryVersions(): void {
+    if (!editingStory || versionHistoryLoading) {
+      return;
+    }
+
+    versionHistoryLoading = true;
+    socket.emit('library:get-story-versions', editingStory.id, (result: {
+      ok: boolean;
+      versions?: StoryVersionSummary[];
+      error?: string;
+    }) => {
+      versionHistoryLoading = false;
+
+      if (!result.ok) {
+        errorMessage = result.error ?? 'Could not load story version history.';
+        return;
+      }
+
+      storyVersions = result.versions ?? [];
+    });
+  }
+
+  function restoreStoryVersion(event: CustomEvent<{ version: number }>): void {
+    if (!editingStory || versionRestoreInFlight) {
+      return;
+    }
+
+    const requestedVersion = event.detail.version;
+
+    if (storyContentKey(editingStory) !== lastSavedStoryKey) {
+      saveStory('manual', () => {
+        performStoryVersionRestore(requestedVersion);
+      });
+      return;
+    }
+
+    performStoryVersionRestore(requestedVersion);
+  }
+
+  function performStoryVersionRestore(version: number): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const selectedBeforeRestore = selectedNodeId;
+    versionRestoreInFlight = true;
+    clearMessages();
+    socket.emit('library:restore-story-version', {
+      storyId: editingStory.id,
+      version
+    }, (result: {
+      ok: boolean;
+      story?: StoryDocument;
+      versions?: StoryVersionSummary[];
+      error?: string;
+    }) => {
+      versionRestoreInFlight = false;
+
+      if (!result.ok || !result.story) {
+        errorMessage = result.error ?? 'Could not restore the selected story version.';
+        return;
+      }
+
+      editingStory = prepareStoryForEditor(result.story);
+      storyVersions = result.versions ?? [];
+      selectedNodeId = editingStory.nodes.some((node) => node.id === selectedBeforeRestore)
+        ? selectedBeforeRestore
+        : editingStory.nodes[0]?.id ?? '';
+      activeLane = (editingStory.nodes.find((node) => node.id === selectedNodeId)?.audience
+        ?? 'p1') as LaneId;
+      lastSavedStoryKey = storyContentKey(editingStory);
+      resetHistory();
+      storyRevision += 1;
+      statusMessage = `Restored version ${version} as new version ${editingStory.version}.`;
+      pulseSavedTerminal();
+      void scrollSelectedNodeIntoView();
+    });
   }
 
   function requestProtectionChange(checked: boolean): void {
@@ -1232,6 +1106,7 @@
         }
       };
       editingStory = prepareStoryForEditor(result.story);
+      storyVersions = [];
       inspectorExpanded = false;
       editorLockStoryId = result.story.id;
       activeStoryMap = editingStory.playModes.singleplayer
@@ -1265,6 +1140,7 @@
       }
 
       editingStory = prepareStoryForEditor(result.story);
+      storyVersions = [];
       inspectorExpanded = false;
       editorLockStoryId = result.story.id;
       activeStoryMap = preferredMap && editingStory.playModes[preferredMap]
@@ -5137,46 +5013,22 @@
       on:focusin={rememberFieldEdit}
       on:change={refreshStory}
     >
-      <div class="editor-toolbar" class:mobile-collapsed={mobileToolbarCollapsed}>
-        <button
-          class="mobile-toolbar-toggle"
-          type="button"
-          aria-expanded={!mobileToolbarCollapsed}
-          on:click={() => mobileToolbarCollapsed = !mobileToolbarCollapsed}
-        >
-          {mobileToolbarCollapsed ? 'Show editor controls' : 'Hide editor controls'}
-        </button>
-        <button class="back-button" type="button" on:click={closeStoryEditor}>
-          ← Editor
-        </button>
-        <div>
-          <strong class="editor-story-title">{editingStory.title}</strong>
-          <span>
-            VERSION {editingStory.version} · {storyStartIssue(editingStory) ? 'UNAVAILABLE' : 'PLAYABLE'}
-            {editingStory.protected ? ' · PROTECTED' : ''}
-          </span>
-        </div>
-        <div class="toolbar-actions">
-          <button type="button" disabled={undoStack.length === 0} on:click={undo} aria-label="Undo last editor change">
-            ↶ Undo
-          </button>
-          <button type="button" disabled={redoStack.length === 0} on:click={redo} aria-label="Redo editor change">
-            ↷ Redo
-          </button>
-          <button class="tutorial-button" type="button" on:click={openTutorial} aria-label="Open editor tutorial">
-            ⓘ Guide
-          </button>
-          <button type="button" on:click={openStorySettings}>
-            Settings
-          </button>
-          <button type="button" disabled={saveInFlight} on:click={requestPlaytest}>
-            ▶ Play
-          </button>
-          <button class="primary-button" type="button" disabled={saveInFlight} on:click={() => saveStory()}>
-            {saveInFlight ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      </div>
+      <StoryEditorToolbar
+        story={editingStory}
+        mobileCollapsed={mobileToolbarCollapsed}
+        undoCount={undoStack.length}
+        redoCount={redoStack.length}
+        {saveInFlight}
+        unavailableReason={storyStartIssue(editingStory)}
+        on:back={closeStoryEditor}
+        on:guide={openTutorial}
+        on:play={requestPlaytest}
+        on:redo={redo}
+        on:save={() => saveStory()}
+        on:settings={openStorySettings}
+        on:toggleMobile={() => mobileToolbarCollapsed = !mobileToolbarCollapsed}
+        on:undo={undo}
+      />
 
       {#if storySettingsOpen}
         <div class="node-picker-backdrop story-settings-backdrop" role="presentation" on:click|self={closeStorySettings}>
@@ -5473,6 +5325,15 @@
           {/if}
         </div>
       </section>
+
+      <StoryVersionHistory
+        versions={storyVersions}
+        currentVersion={editingStory.version}
+        loading={versionHistoryLoading}
+        restoring={versionRestoreInFlight}
+        on:refresh={loadStoryVersions}
+        on:restore={restoreStoryVersion}
+      />
 
             </div>
             <footer>
@@ -7384,82 +7245,7 @@
       {/if}
 
       {#if tutorialOpen}
-        <div class="node-picker-backdrop" role="presentation">
-          <section class="editor-tutorial" role="dialog" aria-modal="true" aria-labelledby="editor-guide-title">
-            <header>
-              <div>
-                <p>EDITOR HANDBOOK</p>
-                <h2 id="editor-guide-title">Story nodes and workflows</h2>
-              </div>
-              <button type="button" aria-label="Close editor tutorial" on:click={closeTutorial}>×</button>
-            </header>
-
-            <p class="tutorial-introduction">
-              Main-flow nodes create the playable path. Companion nodes sit beside a host and activate with it without adding another step.
-            </p>
-
-            <section class="tutorial-workflow" aria-labelledby="workflow-guide-title">
-              <p class="tutorial-section-label">WORKFLOW</p>
-              <h3 id="workflow-guide-title">Build and connect a path</h3>
-              <ol>
-                <li><strong>Settings</strong> contains cartridge details, deletion protection, maps, playable modes, the cast, start nodes, and relationships.</li>
-                <li><strong>Story start</strong> chooses a solo opening, one Shared multiplayer opening, or separate Player 1 and Player 2 openings. Missing starts save as an unavailable draft.</li>
-                <li><strong>Relationships</strong> are configured separately for Player 1 and Player 2. A Player State node in a private lane changes that player’s meter; a Shared node changes both players when both meters exist.</li>
-                <li><strong>Add to Player</strong> appends a node to that lane. It auto-connects only when the previous node has an unused normal route.</li>
-                <li><strong>+ next, + yes, or + no</strong> creates a node directly on that route. Use <strong>Select node</strong> to connect an existing node instead.</li>
-                <li><strong>Select previous node</strong> makes an existing node lead into the selected node. Red nodes are missing a required or valid connection.</li>
-                <li><strong>Loops are supported.</strong> Route branch endings back to a Choice hub and route one exit button forward. Backward routes display <strong>↻ LOOP</strong>.</li>
-                <li>Use the <strong>Player 1</strong> and <strong>Player 2</strong> lanes for private scenes. Put synchronized actions and votes in <strong>Shared</strong>.</li>
-                <li>Companions use <strong>Select host node</strong>. They never receive previous or next routes.</li>
-                <li>A stored Player input can feed <strong>Player state → Set player name</strong>. The custom name lasts only for the current cartridge session.</li>
-                <li><strong>Rich text</strong> lets you select part of a terminal message and apply color, bold, italic, or a colored highlight. Formatting can overlap and remains visible in terminal history.</li>
-              </ol>
-            </section>
-
-            <div class="tutorial-node-sections">
-              {#each tutorialNodeSections as section}
-                <section class="tutorial-node-section">
-                  <p class="tutorial-section-label">NODE REFERENCE</p>
-                  <h3>{section.title}</h3>
-                  <p class="tutorial-section-description">{section.description}</p>
-
-                  <div class="tutorial-node-grid">
-                    {#each section.nodes as node}
-                      <article class={nodeShapeClass(node.type)}>
-                        <div class="node-badge-row">
-                          {#if isCompanionNodeType(node.type)}
-                            <span class="node-type-badge companion">COMPANION</span>
-                          {/if}
-                          {#if isMultiplayerNodeType(node.type)}
-                            <span class="node-type-badge multiplayer">MULTIPLAYER</span>
-                          {/if}
-                        </div>
-                        <div class="tutorial-node-heading">
-                          <h4>{node.name}</h4>
-                          <code>{node.type}</code>
-                        </div>
-                        <p>{node.description}</p>
-                        <p class="tutorial-node-usage"><strong>How to use it:</strong> {node.usage}</p>
-                      </article>
-                    {/each}
-                  </div>
-                </section>
-              {/each}
-            </div>
-
-            {#if undocumentedNodeTypes.length > 0}
-              <p class="tutorial-warning" role="alert">
-                Handbook entries are still needed for:
-                {undocumentedNodeTypes.map((nodeType) => nodeType.label).join(', ')}.
-              </p>
-            {/if}
-
-            <footer class="tutorial-footer">
-              <p>Save after every playable route reaches another node or an Ending.</p>
-              <button class="primary-button" type="button" on:click={closeTutorial}>Got it</button>
-            </footer>
-          </section>
-        </div>
+        <StoryEditorGuide on:close={closeTutorial} />
       {/if}
 
       <datalist id="story-node-ids">
@@ -7644,53 +7430,15 @@
     </div>
   {/if}
 
-  {#if statusMessage}
-    <div class="toast-message success-message" role="status" transition:fade>
-      <span>{statusMessage}</span>
-      <button type="button" aria-label="Dismiss message" on:click={clearMessages}>×</button>
-    </div>
-  {/if}
-  {#if errorMessage}
-    <div
-      class="toast-message error-message"
-      class:validation-toast={validationIssues.length > 0}
-      class:expanded={validationDetailsOpen}
-      role="alert"
-      transition:fade
-    >
-      <div class="toast-summary">
-        <span>{errorMessage}</span>
-        <div class="toast-actions">
-          {#if validationIssues.length > 0}
-            <button type="button" on:click={toggleValidationDetails}>
-              {validationDetailsOpen ? 'Hide details' : `View details (${validationIssues.length})`}
-            </button>
-          {/if}
-          <button type="button" aria-label="Dismiss error" on:click={clearMessages}>×</button>
-        </div>
-      </div>
-      {#if validationDetailsOpen}
-        <div class="validation-issue-list">
-          {#each validationIssues as issue (issue.id)}
-            <article class:warning={!issue.blocksPlay && !issue.blocksSave}>
-              <div>
-                <span>{issue.blocksPlay || issue.blocksSave ? 'BLOCKING' : 'DRAFT WARNING'}</span>
-                <strong>{issue.title}</strong>
-                {#if issue.nodeId}
-                  <code>{issue.nodeId}</code>
-                {/if}
-              </div>
-              <p>{issue.message}</p>
-              <small><strong>How to fix:</strong> {issue.fix}</small>
-              <button type="button" on:click={() => focusValidationIssue(issue)}>
-                {issue.nodeId ? 'View node' : 'Open settings'}
-              </button>
-            </article>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  {/if}
+  <StoryValidationToast
+    {statusMessage}
+    {errorMessage}
+    issues={validationIssues}
+    detailsOpen={validationDetailsOpen}
+    on:close={clearMessages}
+    on:toggleDetails={toggleValidationDetails}
+    on:focusIssue={(event) => focusValidationIssue(event.detail.issue)}
+  />
 </section>
 
 <style lang="scss">
@@ -10947,175 +10695,6 @@
     object-fit: cover;
   }
 
-  .editor-tutorial {
-    width: min(920px, 100%);
-    max-height: 85%;
-    padding: 24px;
-    overflow-y: auto;
-    background: #09111e;
-    border: 1px solid #02fbfb;
-    box-shadow: 0 0 48px #02fbfb33;
-
-    > header {
-      position: sticky;
-      z-index: 3;
-      top: -24px;
-      margin-bottom: 18px;
-      padding: 24px 0 16px;
-      background: #09111ef5;
-      border-bottom: 1px solid #1e3a52;
-
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-
-      p {
-        color: #4a98d9;
-        font-size: 0.65rem;
-        letter-spacing: 1px;
-      }
-
-      h2 {
-        margin-top: 5px;
-        font-family: "Orbitron", "Space Mono", sans-serif;
-      }
-    }
-
-    h3,
-    h4 {
-      color: #eef8ff;
-      font-family: "Orbitron", "Space Mono", sans-serif;
-    }
-
-    h3 {
-      margin: 5px 0 8px;
-      font-size: 1rem;
-    }
-
-    h4 {
-      font-size: 0.83rem;
-    }
-
-    ol {
-      margin: 14px 0 0 20px;
-
-      display: grid;
-      gap: 10px;
-    }
-
-    li {
-      padding-left: 5px;
-      color: #b7c2d3;
-      line-height: 1.55;
-
-      strong {
-        color: #f8e69a;
-      }
-    }
-  }
-
-  .tutorial-introduction {
-    max-width: 78ch;
-    margin-bottom: 20px;
-    color: #b7c2d3;
-    line-height: 1.65;
-  }
-
-  .tutorial-workflow,
-  .tutorial-node-section {
-    padding: 18px;
-    background: #07101c;
-    border: 1px solid #1f4059;
-  }
-
-  .tutorial-workflow {
-    margin-bottom: 18px;
-  }
-
-  .tutorial-section-label {
-    color: #4a98d9;
-    font-size: 0.62rem;
-    letter-spacing: 1.4px;
-  }
-
-  .tutorial-node-sections {
-    display: grid;
-    gap: 18px;
-  }
-
-  .tutorial-section-description {
-    margin-bottom: 14px;
-    color: #94a3b8;
-    line-height: 1.5;
-  }
-
-  .tutorial-node-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-
-    article {
-      padding: 14px;
-      background: #0c1726;
-      border: 1px solid #263d54;
-    }
-
-    article > p {
-      color: #b7c2d3;
-      line-height: 1.5;
-    }
-  }
-
-  .tutorial-node-heading {
-    margin-bottom: 9px;
-
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-
-    code {
-      padding: 3px 6px;
-      color: #02fbfb;
-      background: #020617;
-      border: 1px solid #17455a;
-      font-size: 0.63rem;
-    }
-  }
-
-  .tutorial-node-usage {
-    margin-top: 9px;
-    padding-top: 9px;
-    border-top: 1px dashed #263d54;
-
-    strong {
-      color: #f8e69a;
-    }
-  }
-
-  .tutorial-footer {
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid #1e3a52;
-
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 18px;
-
-    p {
-      color: #94a3b8;
-    }
-  }
-
-  .tutorial-warning {
-    margin-top: 18px;
-    padding: 12px 14px;
-    color: #ffdbd6;
-    background: #2b1115;
-    border: 1px solid #cb381f;
-    line-height: 1.5;
-  }
 
   .editor-empty-state {
     height: calc(100% - 38px);
@@ -11188,156 +10767,6 @@
     line-height: 1.5;
   }
 
-  .toast-message {
-    position: absolute;
-    z-index: 5;
-    right: 20px;
-    bottom: 20px;
-    max-width: 460px;
-    padding: 12px 16px;
-    background: #111827;
-    border: 1px solid;
-    box-shadow: 0 8px 30px #00000099;
-
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
-    span {
-      color: inherit;
-    }
-
-    button {
-      min-height: 26px;
-      padding: 2px 7px;
-      color: inherit;
-      background: transparent;
-      border-color: currentColor;
-    }
-  }
-
-  .toast-summary {
-    width: 100%;
-
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-  }
-
-  .toast-actions {
-    flex: 0 0 auto;
-
-    display: flex;
-    gap: 8px;
-  }
-
-  .validation-toast {
-    width: min(580px, calc(100% - 40px));
-    max-width: 580px;
-
-    display: block;
-
-    &.expanded {
-      max-height: min(78vh, 720px);
-    }
-  }
-
-  .validation-issue-list {
-    max-height: min(58vh, 540px);
-    margin-top: 14px;
-    padding-top: 14px;
-    padding-right: 4px;
-    overflow-y: auto;
-    border-top: 1px solid #833d34;
-
-    display: grid;
-    gap: 12px;
-
-    article {
-      padding: 14px;
-      background: #261110;
-      border: 1px solid #8e433a;
-      border-left: 4px solid #ff6f61;
-
-      display: grid;
-      gap: 9px;
-
-      > div {
-        display: grid;
-        gap: 5px;
-      }
-
-      > div > span {
-        color: #ff9f93;
-        font-size: 0.55rem;
-        font-weight: 900;
-        letter-spacing: 1.2px;
-      }
-
-      strong {
-        color: #fff4f1;
-      }
-
-      code {
-        color: #ffc0b8;
-        font-size: 0.61rem;
-        overflow-wrap: anywhere;
-      }
-
-      p,
-      small {
-        margin: 0;
-        line-height: 1.5;
-      }
-
-      p {
-        color: #f4c5bf;
-        font-size: 0.7rem;
-      }
-
-      small {
-        color: #d8b8b4;
-        font-size: 0.66rem;
-      }
-
-      > button {
-        width: 100%;
-        min-height: 38px;
-        margin-top: 3px;
-        color: #2a0d08;
-        background: #ff8b7d;
-        border-color: #ffc3bb;
-        font-weight: 900;
-      }
-
-      &.warning {
-        background: #211b0d;
-        border-color: #7e6828;
-        border-left-color: #e8bf4f;
-
-        > div > span,
-        code {
-          color: #f4d675;
-        }
-
-        strong {
-          color: #fff8d7;
-        }
-
-        p,
-        small {
-          color: #ded2a7;
-        }
-
-        > button {
-          color: #211907;
-          background: #e6c758;
-          border-color: #fff0a6;
-        }
-      }
-    }
-  }
 
   @keyframes saved-pulse {
     0%, 100% {
@@ -11357,15 +10786,6 @@
     }
   }
 
-  .success-message {
-    color: #d7f0bb;
-    border-color: #4f813d;
-  }
-
-  .error-message {
-    color: #ffdbd6;
-    border-color: #cb381f;
-  }
 
   .audio-layer-grid {
     margin-top: 8px;
@@ -11599,19 +11019,6 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .tutorial-node-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .tutorial-footer {
-      align-items: stretch;
-      flex-direction: column;
-
-      .primary-button {
-        width: 100%;
-      }
-    }
-
     .audio-library-list article {
       grid-template-columns: 1fr;
     }
@@ -11633,17 +11040,6 @@
 
     .seat-picker div {
       grid-template-columns: 1fr;
-    }
-
-    .editor-tutorial {
-      padding: 18px 14px;
-    }
-
-    .toast-message {
-      right: 10px;
-      bottom: 10px;
-      left: 10px;
-      width: auto;
     }
 
     .story-minimap {

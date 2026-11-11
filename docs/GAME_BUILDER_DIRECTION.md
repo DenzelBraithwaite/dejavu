@@ -230,16 +230,16 @@ This boundary allows the current scene engine to become the execution layer for 
 The first local builder foundation is now implemented:
 
 - A SQLite-backed story library with create, read, update, duplicate, and delete operations.
-- A seeded built-in Déjà Vu story document.
+- Author-created local cartridges with optional deletion protection.
 - Per-player cartridge selection with a two-player matching requirement.
-- A wide three-lane node editor with type-specific inspector, branch-aware insertion, click-to-connect routes, reordering, copy/paste, labels, node counts, and visual validation.
+- A wide three-lane node editor with a type-specific inspector, route-driven placement, branch-aware insertion, click-to-connect routes, copy/paste, labels, node counts, zoom, a minimap, and visual validation.
 - Effect and condition nodes for inventory, flags, stats, characters, mods, and dice outcomes.
 - Companion terminal effects for screen shake and terminal blink.
-- Choice, timed-choice, and vote controls with one to five independently routed buttons and loop support.
-- A separate Minigames catalog with NetRunners registered.
+- Choice, optionally timed choice, and vote controls with two to five independently routed buttons and loop support.
+- A separate Minigames catalog with the current coded game registry.
 - Server-owned campaigns that execute the selected story document.
 
-The current canvas uses readable route chips, connector lines, and click-to-select destinations. Curved cross-node edges, full publication validation, side-by-side playtesting, themes, assets, and publishing remain future milestones.
+The current canvas uses route chips, drawn connector lines, zoom controls, a minimap, search, click-to-select destinations, actionable validation, asset libraries, and editor-to-runtime playtesting. Side-by-side test tooling, collapsible story organization, portable import/export, full theme accessibility tooling, and publishing remain future milestones.
 
 ## Suggested delivery sequence
 
@@ -253,7 +253,7 @@ The current canvas uses readable route chips, connector lines, and click-to-sele
 ### Phase 2 Local visual editor
 
 - Story library backed by local storage or local files. **Implemented with SQLite.**
-- Flowchart canvas and node inspector. **Inspector and lane canvas implemented; drawn connections remain.**
+- Flowchart canvas and node inspector. **Implemented with drawn connections, zoom, search, minimap, and a resizable inspector.**
 - Dialogue, choice, checkpoint, conversation, dice, vote, timer, image, and terminal-effect nodes. **Implemented.**
 - Side-by-side playtest mode.
 - JSON import and export.
@@ -261,14 +261,14 @@ The current canvas uses readable route chips, connector lines, and click-to-sele
 ### Phase 3 Themes and assets
 
 - Terminal theme designer.
-- Asset library and image-node tooling.
-- Character records and portraits. **Implemented locally with five expression images per reusable character.**
+- Asset library and image-node tooling. **Implemented for images and audio.**
+- Character records and portraits. **Implemented locally with seven expression images per reusable character.**
 - Accessibility validation.
 
 ### Phase 4 Database and accounts
 
 - PostgreSQL story storage.
-- Draft autosave and version history.
+- Draft autosave and a ten-version local history. **Implemented.**
 - Published immutable versions.
 - Story discovery and ownership.
 - Cloud campaign saves.
@@ -286,12 +286,10 @@ The first visual-builder milestone is successful when a non-developer can create
 
 Before expanding the complete Déjà Vu story, the highest-value builder work is:
 
-1. Add full graph validation with actionable errors for broken routes, invalid character or asset references, checkpoint mismatches, and accidental dead-end cycles.
-2. Add a side-by-side playtest mode with jump-to-node, controlled dice results, state inspection, and a direct return to the selected editor node.
-3. Add JSON import and export so story projects can be backed up and moved between installations.
-4. Add draft autosave and explicit version history before the editor grows further.
-5. Add opposed checks and story-minigame opponent configuration that can reference another character's stats and wallet.
-6. Add the terminal theme designer and accessibility validation, including contrast and reduced-motion previews.
-7. Improve large-graph navigation with drawn cross-node connections, search, a minimap, and collapsible chapter subgraphs.
+1. Add a side-by-side playtest mode with jump-to-node, controlled dice results, pause/step controls, state inspection, and a direct return to the selected editor node.
+2. Add JSON import and export so story projects can be backed up and moved between installations.
+3. Add opposed checks and story-minigame opponent configuration that can reference another character's stats and wallet.
+4. Add a complete terminal theme designer and accessibility validation, including contrast and reduced-motion previews.
+5. Add collapsible chapters or named subgraphs on top of the existing connector, search, zoom, and minimap tools.
 
 Publishing, user accounts, cloud saves, and PostgreSQL remain later product phases. They should follow a dependable local authoring and playtest loop rather than block it.

@@ -2,7 +2,7 @@
 
 Déjà Vu is a one- or two-player terminal-story runtime and the foundation of a visual game builder. Players experience branching stories from browser terminals on the same LAN. Stories can mix private perspectives, shared decisions, free-form conversation, dice checks, synchronized checkpoints, timers, images, and coded minigames.
 
-The current playable story is based on the RAID, Spoofs, ACPU, Rammers, Zog, Nova, and Avona material in the local `Notes/` directory. The notes are intentionally excluded from Git.
+The repository no longer seeds a built-in story. Authors create and protect their own cartridges through the Editor; local narrative notes remain intentionally excluded from Git.
 
 ## Current direction
 
@@ -32,15 +32,14 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 
 - Story Mode starts without a cartridge selected.
 - Each story assigns one main character to its solo map and two different main characters to its multiplayer map.
-- Dialogue nodes can reference any library character and select that character's normal, shocked, angry, sad, or happy expression.
+- Dialogue nodes can reference any playable character or NPC and select one of seven expressions: neutral, angry, shocked, happy, sad, confused, or dead.
 - The Library lists persistent story documents and shows each player's current cartridge.
 - Solo cartridges launch for their selecting player. Multiplayer cartridges unlock when both players select the same story and mode.
 - Selecting a different matching story starts a fresh shared campaign for that story.
 - Stories are stored in `data/dejavu.sqlite`, so created stories survive server restarts.
-- Déjà Vu is seeded as the first built-in story and can be edited or duplicated.
 - Creators can create, read, edit, duplicate, and delete custom playable stories.
 - The Editor is a dedicated sidebar destination, while every Library cartridge still links directly into it.
-- The visual editor separates Player 1, shared, and Player 2 nodes and provides branch-aware insertion, previous/next click-to-connect routes, drag-and-drop organization, labels, validation, undo/redo, quick node actions, a type-specific inspector, and a categorized in-app handbook covering every node.
+- The visual editor separates Player 1, shared, and Player 2 nodes and provides route-driven placement, previous/next click-to-connect routes, labels, validation, undo/redo, quick node actions, zoom, a minimap, a resizable type-specific inspector, and a categorized in-app handbook covering every node. Nodes are deliberately not draggable; their graph position follows story routes.
 - Inventory/effect and music/atmosphere changes are attached to main-flow nodes as visually offset companions. Image nodes are normal routed steps that display artwork inside the terminal.
 - Terminal-effect companions can shake the screen or blink the terminal when their host node becomes active.
 - Choice, timed-choice, and shared-vote nodes expose one to five labelled buttons, each with its own route. Routes may intentionally loop back to an earlier node.
@@ -105,10 +104,10 @@ Each browser stores independent music and sound-effect mute and volume settings.
 
 - The journal displays decisions and transcript entries.
 - Every browser chooses an active character before entering the main application.
-- The Characters screen creates and edits reusable players and NPCs with a name, wallet, stats, notes, and five dialogue expressions.
+- The Characters screen creates and edits reusable players and NPCs with a name, wallet, stats, notes, seven dialogue expressions, and per-expression portrait positioning.
 - Active-character wallets are shared with main-menu betting games, while story campaigns use the characters assigned by the story.
 - Stories keep character IDs and snapshot the referenced records when a campaign starts, so later library edits do not rewrite a campaign already in progress.
-- Save and load controls live beneath the local audio controls in Settings.
+- Cartridge saves and logs live in the grouped Cartridge navigation. Local cartridge audio controls use their own Cartridge tab.
 - Versioned JSON saves are stored by the LAN host in `data/saves/`.
 - Loading a save restores the shared campaign for both clients.
 - Saving is available only while both players have a matching active story.
@@ -186,10 +185,9 @@ The ignored `Notes/character_images/` directory contains additional character re
 │   │   ├── components/             Terminal, menus, and minigame UI
 │   │   ├── stores/                 Browser projections of server state
 │   │   └── story/
-│   │       ├── chapters/           Serializable story data
-│   │       ├── dejaVuStory.js       Seeded built-in story document
-│   │       ├── sceneTypes.js
-│   │       └── storyRegistry.js
+│   │       ├── characters.ts       Legacy static character helpers
+│   │       ├── richText.ts         Safe rich-text segment projection
+│   │       └── sceneTypes.js       Serializable scene helpers
 │   ├── routes/LogPage.svelte
 │   ├── App.svelte
 │   └── app.scss
@@ -267,13 +265,12 @@ Sass still prints deprecation notices for legacy APIs and older global colour he
 
 ## Next product milestone
 
-The local Library, persistent story documents, and interactive lane editor are now in place. The next builder milestone is deeper graph visualization and playtesting.
+The local Library, persistent story documents, route visualization, validation, asset selection, zoom, minimap, and editor-to-runtime playtesting are now in place. The next builder milestone is large-story organization and a purpose-built multiplayer test harness.
 
-The first builder milestone should let a non-developer:
+The remaining high-value work is:
 
-1. Draw curved route edges across distant nodes and add canvas zoom controls.
-2. Validate missing destinations and unreachable nodes visually.
-3. Configure terminal appearance per story and node.
-4. Playtest both perspectives beside the graph.
-5. Add asset import and selection.
-6. Export and import portable story cartridges.
+1. Add collapsible chapters or named subgraphs for very large cartridges.
+2. Add side-by-side multiplayer previews with pause, step, jump-to-node, controlled dice results, and state inspection.
+3. Add portable cartridge JSON import and export.
+4. Expand terminal theme editing with contrast checks and reduced-motion previews.
+5. Add opposed character checks and richer story-minigame opponent configuration.

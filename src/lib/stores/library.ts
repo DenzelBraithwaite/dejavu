@@ -171,6 +171,14 @@ export type StorySummary = Pick<
   updatedAt: string;
 };
 
+export type StoryVersionSummary = {
+  version: number;
+  savedAt: string;
+  title: string;
+  author: string;
+  status: 'playable' | 'draft';
+};
+
 export type LibraryState = {
   stories: StorySummary[];
   selections: Record<PlayerId, string | null>;

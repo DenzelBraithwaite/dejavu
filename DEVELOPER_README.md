@@ -41,15 +41,19 @@ server.js                            Sessions, sockets, library, saves, and host
 
 ## Story library and cartridge selection
 
-The host stores stories in `data/dejavu.sqlite` using Node's built-in SQLite support. The database is runtime data and is intentionally ignored by Git. On first launch, `dejaVuStoryDocument` is inserted as the built-in Déjà Vu cartridge.
+The host stores stories in `data/dejavu.sqlite` using Node's built-in SQLite support. The database is runtime data and is intentionally ignored by Git. The repository does not seed a built-in cartridge; authors create their own stories through the Editor.
+
+Every successful create, save, or restore writes an immutable snapshot to `story_versions`. The repository retains the newest ten snapshots per story. Restoring an older snapshot calls the normal update path, so it creates a new highest version instead of deleting or rewriting later history.
 
 Each connected player has an in-memory cartridge selection. The server broadcasts both selections in `library:state`. A campaign is playable only when `p1` and `p2` select the same story ID. Matching a new story creates a fresh authoritative campaign from that stored story document; loading a campaign save stages its embedded story for both players.
 
 Library socket operations are:
 
 - `library:get-story`
+- `library:get-story-versions`
 - `library:create-story`
 - `library:update-story`
+- `library:restore-story-version`
 - `library:duplicate-story`
 - `library:delete-story`
 - `library:select-story`
@@ -186,7 +190,7 @@ defineScene({
 
 Use `audience: 'p1'` or `audience: 'p2'` for a private perspective. Use `both` when both players can receive the scene.
 
-Dialogue can show a small speaker portrait beside the active terminal text. In the visual editor, select a character and one of the five supported expressions: `normal`, `shocked`, `angry`, `sad`, or `happy`. The runtime resolves the speaker name and image from the campaign's character snapshot.
+Dialogue can show a small speaker portrait beside the active terminal text. In the visual editor, select a character and one of seven supported expressions: `normal`, `shocked`, `angry`, `sad`, `happy`, `confused`, or `dead`. The runtime resolves the speaker name and image from the campaign's character snapshot.
 
 ```js
 defineScene({
@@ -327,7 +331,7 @@ The server follows condition routes immediately when entering them and guards ag
 
 ## Player input
 
-The current input node records a player's tag. It can later be generalized with a destination field in campaign state.
+Input nodes can optionally store their response under a story-defined key. Stored responses remain session-scoped and can be interpolated into later text or consumed by Player State operations such as setting a temporary player name.
 
 ```js
 defineScene({
@@ -503,9 +507,9 @@ defineScene({
 })
 ```
 
-Place tracked runtime artwork in `public/`. The future visual builder will upload assets and store their IDs rather than requiring a developer to manage paths.
+Place tracked runtime artwork in `public/media/`. The editor can upload story artwork into `public/uploads/stories/` and select built-in portraits or story images through the shared image library.
 
-Per-node terminal themes are part of the planned builder schema but are not yet rendered by the current runtime.
+Terminal Color is implemented as a terminal-effect companion. It accepts a custom color and updates the active terminal border, outline, and glow presentation when its host node becomes active.
 
 ## Music and sound effects
 
@@ -587,7 +591,7 @@ const dramaticTiming = {
 
 ## Character records
 
-Reusable character records live in the SQLite `characters` table and are managed by `server/characterRepository.js`. Each record owns its display name, wallet, notes, stats, and five expression images. Browser state is projected through `src/lib/stores/characters.ts`.
+Reusable character records live in the SQLite `characters` table and are managed by `server/characterRepository.js`. Each record owns its display name, wallet, notes, stats, seven expression images, and per-expression crop positions. Browser state is projected through `src/lib/stores/characters.ts`.
 
 Story documents reference those records through `mainCharacterIds` and `characterIds`. A solo map requires one main character. A multiplayer map requires two different main characters. Dialogue `characterId` values are added to `characterIds` automatically when the editor saves.
 

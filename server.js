@@ -602,6 +602,29 @@ io.on('connection', (socket) => {
         });
   });
 
+  socket.on('library:get-story-versions', (storyId, acknowledge = () => {}) => {
+    try {
+      const normalizedStoryId = String(storyId ?? '');
+      const story = storyRepository.getStory(normalizedStoryId);
+
+      if (!story) {
+        throw new Error('Story not found.');
+      }
+
+      acknowledge({
+        ok: true,
+        versions: storyRepository.listStoryVersions(normalizedStoryId)
+      });
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error
+          ? error.message
+          : 'Could not load story version history.'
+      });
+    }
+  });
+
   socket.on('library:create-story', (input, acknowledge = () => {}) => {
     try {
       validateStoryCharacterReferences(input ?? {});
@@ -639,25 +662,7 @@ io.on('connection', (socket) => {
         request?.story
       );
 
-      // Keep an active playtest on its current node while refreshing the
-      // authored document that drives media, routes, and companion effects.
-      if (campaignState.story?.id === story.id) {
-        campaignState.story = structuredClone(story);
-        campaignState.updatedAt = new Date().toISOString();
-
-        for (const participantId of ['p1', 'p2']) {
-          const currentSceneId = campaignState.currentScene[participantId];
-
-          if (currentSceneId
-            && !story.nodes.some((node) => node.id === currentSceneId)) {
-            campaignState.currentScene[participantId] = campaignState.sessionMode === 'singleplayer'
-              ? story.singleplayerInitialSceneId
-              : story.initialSceneIds[participantId];
-          }
-        }
-
-        io.emit('campaign:state', getCampaignSnapshot(campaignState));
-      }
+      synchronizeEditedStoryWithCampaign(story);
 
       acknowledge({
         ok: true,
@@ -668,6 +673,38 @@ io.on('connection', (socket) => {
       acknowledge({
         ok: false,
         error: error instanceof Error ? error.message : 'Could not update the story.'
+      });
+    }
+  });
+
+  socket.on('library:restore-story-version', (request, acknowledge = () => {}) => {
+    try {
+      const storyId = String(request?.storyId ?? '');
+      const version = Number(request?.version);
+      const lock = storyEditLocks.get(storyId);
+
+      if (!lock || lock.socketId !== socket.id) {
+        throw new Error('This editor lock expired. Reopen the story before restoring a version.');
+      }
+
+      if (!Number.isSafeInteger(version) || version < 1) {
+        throw new Error('Choose a valid story version.');
+      }
+
+      const story = storyRepository.restoreStoryVersion(storyId, version);
+      synchronizeEditedStoryWithCampaign(story);
+      acknowledge({
+        ok: true,
+        story,
+        versions: storyRepository.listStoryVersions(storyId)
+      });
+      broadcastLibraryState();
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error
+          ? error.message
+          : 'Could not restore the story version.'
       });
     }
   });
@@ -1894,6 +1931,28 @@ function releaseEditorLocks(socketId) {
       storyEditLocks.delete(storyId);
     }
   }
+}
+
+function synchronizeEditedStoryWithCampaign(story) {
+  if (campaignState.story?.id !== story.id) {
+    return;
+  }
+
+  campaignState.story = structuredClone(story);
+  campaignState.updatedAt = new Date().toISOString();
+
+  for (const participantId of ['p1', 'p2']) {
+    const currentSceneId = campaignState.currentScene[participantId];
+
+    if (currentSceneId
+      && !story.nodes.some((node) => node.id === currentSceneId)) {
+      campaignState.currentScene[participantId] = campaignState.sessionMode === 'singleplayer'
+        ? story.singleplayerInitialSceneId
+        : story.initialSceneIds[participantId];
+    }
+  }
+
+  io.emit('campaign:state', getCampaignSnapshot(campaignState));
 }
 
 function synchronizeActiveStory(preferredPlayerId = null, forceReload = false) {
