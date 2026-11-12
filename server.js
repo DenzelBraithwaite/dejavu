@@ -7,13 +7,16 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import {
   createCampaignState,
+  createDeveloperJumpPlan,
   completeActiveMinigame,
   getCampaignSnapshot,
   handleCampaignAction,
   initializeDeadlines,
+  jumpDeveloperPlayers,
   resolveExpiredTimedChoices,
   resolveExpiredVoteResolutions,
-  restoreCampaignState
+  restoreCampaignState,
+  updateDeveloperState
 } from './server/gameSession.js';
 import {
   createNetRunnersState,
@@ -128,6 +131,7 @@ const storySeatClaims = {
   p2: null
 };
 const storyEditLocks = new Map();
+const developerSessions = new Map();
 let activeStoryId = null;
 let activeStoryMode = null;
 let activeSoloPlayerId = null;
@@ -890,6 +894,153 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('campaign:dev-start', (request, acknowledge = () => {}) => {
+    try {
+      const storyId = String(request?.storyId ?? activeStoryId ?? '');
+      const story = storyRepository.getStory(storyId);
+
+      if (!story) {
+        throw new Error('Insert a story cartridge before starting developer mode.');
+      }
+
+      if (!story.playModes?.multiplayer) {
+        throw new Error('The two-terminal tester requires a multiplayer map.');
+      }
+
+      const state = createCampaignState(story, {
+        mode: 'multiplayer',
+        characters: getStoryCharacters(story),
+        developerMode: true
+      });
+      const session = {
+        state,
+        events: [createDeveloperEvent('session', 'Developer session started.', state)]
+      };
+
+      developerSessions.set(socket.id, session);
+      emitDeveloperSession(socket, session);
+      acknowledge({ ok: true });
+    } catch (error) {
+      acknowledge({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Could not start developer mode.'
+      });
+    }
+  });
+
+  socket.on('campaign:dev-action', (request, acknowledge = () => {}) => {
+    const session = developerSessions.get(socket.id);
+
+    if (!session) {
+      acknowledge({ ok: false, error: 'Start developer mode first.' });
+      return;
+    }
+
+    const developerPlayerId = request?.playerId;
+    const previousSceneId = session.state.currentScene[developerPlayerId];
+    const result = handleCampaignAction(
+      session.state,
+      developerPlayerId,
+      request?.action ?? {}
+    );
+
+    if (result.ok) {
+      const nextSceneId = session.state.currentScene[developerPlayerId];
+      session.events.push(createDeveloperEvent(
+        'action',
+        describeDeveloperAction(
+          session.state,
+          developerPlayerId,
+          previousSceneId,
+          request?.action ?? {}
+        ),
+        session.state,
+        {
+          playerId: developerPlayerId,
+          previousSceneId,
+          nextSceneId,
+          action: request?.action
+        }
+      ));
+      trimDeveloperEvents(session.events);
+      emitDeveloperSession(socket, session);
+    }
+
+    acknowledge(result);
+  });
+
+  socket.on('campaign:dev-jump-preview', (targets, acknowledge = () => {}) => {
+    const session = developerSessions.get(socket.id);
+
+    if (!session) {
+      acknowledge({ ok: false, error: 'Start developer mode first.' });
+      return;
+    }
+
+    acknowledge({
+      ok: true,
+      plan: createDeveloperJumpPlan(session.state, targets ?? {})
+    });
+  });
+
+  socket.on('campaign:dev-jump', (request, acknowledge = () => {}) => {
+    const session = developerSessions.get(socket.id);
+
+    if (!session) {
+      acknowledge({ ok: false, error: 'Start developer mode first.' });
+      return;
+    }
+
+    const result = jumpDeveloperPlayers(
+      session.state,
+      request?.targets ?? {},
+      request?.applyRequirements === true
+    );
+
+    if (result.ok) {
+      session.events.push(createDeveloperEvent(
+        'jump',
+        `Jumped to P1: ${session.state.currentScene.p1} · P2: ${session.state.currentScene.p2}.`,
+        session.state,
+        { targets: request?.targets, requirements: result.plan?.requirements }
+      ));
+      trimDeveloperEvents(session.events);
+      emitDeveloperSession(socket, session);
+    }
+
+    acknowledge(result);
+  });
+
+  socket.on('campaign:dev-update-state', (update, acknowledge = () => {}) => {
+    const session = developerSessions.get(socket.id);
+
+    if (!session) {
+      acknowledge({ ok: false, error: 'Start developer mode first.' });
+      return;
+    }
+
+    const result = updateDeveloperState(session.state, update);
+
+    if (result.ok) {
+      session.events.push(createDeveloperEvent(
+        'state',
+        `Changed ${update?.scope ?? 'test state'}${update?.playerId ? ` for ${String(update.playerId).toUpperCase()}` : ''}.`,
+        session.state,
+        { update }
+      ));
+      trimDeveloperEvents(session.events);
+      emitDeveloperSession(socket, session);
+    }
+
+    acknowledge(result);
+  });
+
+  socket.on('campaign:dev-stop', (acknowledge = () => {}) => {
+    developerSessions.delete(socket.id);
+    socket.emit('campaign:dev-state', null);
+    acknowledge({ ok: true });
+  });
+
   socket.on('campaign:action', (action, acknowledge = () => {}) => {
     try {
       if (!activeStoryId || campaignState.story?.id !== activeStoryId) {
@@ -1561,6 +1712,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     releaseEditorLocks(socket.id);
+    developerSessions.delete(socket.id);
     const slot = playerSlots[playerId];
 
     if (slot.socketId === socket.id) {
@@ -1596,6 +1748,72 @@ io.on('connection', (socket) => {
   });
 });
 
+function emitDeveloperSession(socket, session) {
+  socket.emit('campaign:dev-state', {
+    campaign: getCampaignSnapshot(session.state),
+    events: structuredClone(session.events)
+  });
+}
+
+function createDeveloperEvent(type, message, state, details = {}) {
+  return {
+    id: randomUUID(),
+    type,
+    message,
+    details: structuredClone(details),
+    scenes: {
+      p1: state.currentScene.p1,
+      p2: state.currentScene.p2
+    },
+    createdAt: new Date().toISOString()
+  };
+}
+
+function describeDeveloperAction(state, playerId, sceneId, action) {
+  const playerLabel = String(playerId).toUpperCase();
+  const scene = state.story?.nodes.find((node) => node.id === sceneId);
+
+  if (action.type === 'roll-dice') {
+    const result = state.pendingDice[playerId];
+
+    return result
+      ? `${playerLabel} rolled ${result.roll} for ${result.total} total and ${result.successful ? 'passed' : 'failed'} ${sceneId}.`
+      : `${playerLabel} rolled at ${sceneId}.`;
+  }
+
+  if (action.type === 'choose' || action.type === 'vote') {
+    const choice = scene?.choices?.find((candidate) => candidate.id === action.choiceId);
+    const verb = action.type === 'vote' ? 'voted for' : 'selected';
+
+    return `${playerLabel} ${verb} “${choice?.label ?? action.choiceId}” at ${sceneId}.`;
+  }
+
+  if (action.type === 'arrive-checkpoint') {
+    const checkpointId = scene?.checkpointId ?? sceneId;
+    const arrivals = state.checkpoints[checkpointId] ?? [];
+
+    return arrivals.length >= 2
+      ? `${playerLabel} arrived at ${checkpointId}; both players are now synchronized.`
+      : `${playerLabel} arrived at ${checkpointId} and is waiting for the other player.`;
+  }
+
+  if (action.type === 'submit-input' || action.type === 'send-message') {
+    return `${playerLabel} submitted test text at ${sceneId}.`;
+  }
+
+  if (action.type === 'close-dice') {
+    return `${playerLabel} resolved the dice result at ${sceneId}.`;
+  }
+
+  return `${playerLabel} used ${action.type ?? 'an action'} at ${sceneId}.`;
+}
+
+function trimDeveloperEvents(events) {
+  if (events.length > 250) {
+    events.splice(0, events.length - 250);
+  }
+}
+
 setInterval(() => {
   const timedChoiceChanged = resolveExpiredTimedChoices(campaignState);
   const voteResolutionChanged = resolveExpiredVoteResolutions(campaignState);
@@ -1604,6 +1822,27 @@ setInterval(() => {
 
   if (campaignChanged) {
     io.emit('campaign:state', getCampaignSnapshot(campaignState));
+  }
+
+  for (const [socketId, developerSession] of developerSessions) {
+    const developerTimedChoiceChanged = resolveExpiredTimedChoices(developerSession.state);
+    const developerVoteChanged = resolveExpiredVoteResolutions(developerSession.state);
+
+    if (developerTimedChoiceChanged || developerVoteChanged) {
+      const developerSocket = io.sockets.sockets.get(socketId);
+
+      if (developerSocket) {
+        developerSession.events.push(createDeveloperEvent(
+          'synchronization',
+          developerVoteChanged
+            ? 'A vote synchronization resolved.'
+            : 'A timed scene advanced.',
+          developerSession.state
+        ));
+        trimDeveloperEvents(developerSession.events);
+        emitDeveloperSession(developerSocket, developerSession);
+      }
+    }
   }
 
   if (netRunnersChanged) {

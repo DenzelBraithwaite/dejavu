@@ -74,6 +74,8 @@
       <h3 id="workflow-guide-title">Build and connect a path</h3>
       <ol>
         <li><strong>Settings</strong> contains cartridge details, protection, maps, cast, starts, relationships, and ten-version history.</li>
+        <li><strong>Chapters are optional.</strong> Create, order, color, describe, collapse, and validate them in Settings. New route nodes inherit the chapter they extend, while companions inherit their host.</li>
+        <li><strong>Chapter order is enforced.</strong> Routes may stay inside a chapter or move forward, but they cannot connect back into an earlier chapter.</li>
         <li><strong>Story start</strong> chooses a solo opening, one Shared opening, or separate Player 1 and Player 2 openings.</li>
         <li><strong>Relationships</strong> are configured separately per player; Shared relationship effects can change both.</li>
         <li><strong>Add to Player</strong> appends a node to that lane and connects it when an unused route is available.</li>
@@ -84,6 +86,8 @@
         <li>Companions select a host and never receive previous or next routes.</li>
         <li>Stored player input can be referenced later or used as a session-only custom player name.</li>
         <li>Rich text supports selected colors, bold, italic, and colored highlights.</li>
+        <li><strong>Dev Mode</strong> opens two isolated terminals for multiplayer testing. It supports controlled dice, prerequisite-aware node jumps, temporary state edits, state inspection, and a chronological event log.</li>
+        <li>Dev Mode runs at normal speed. It does not pause story progression, step through engine events, alter live player sessions, or save temporary test state.</li>
       </ol>
     </section>
 

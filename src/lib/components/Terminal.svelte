@@ -29,6 +29,7 @@
   import { storyMinigameView } from '../stores/minigameSessions';
   import { interpolateSceneText } from '../story/sceneTypes.js';
   import { createRichTextSegments, richTextSegmentStyle } from '../story/richText';
+  import DeveloperPlaytest from './DeveloperPlaytest.svelte';
   import DiceTerminal from './DiceTerminal.svelte';
 
   let terminalScreenElement: HTMLElement;
@@ -79,6 +80,7 @@
   let cartridgeSelectionInFlight = false;
   let partnerConnectionId: PlayerId = 'p2';
   let multiplayerAudioReady = false;
+  let developerModeOpen = false;
 
   $: connectionPlayerId = $sessionState.playerId;
   $: playerId = $libraryState.activeStoryMode === 'multiplayer'
@@ -771,6 +773,16 @@
   function openLogs(): void {
     location.set('journal');
   }
+
+  function openDeveloperMode(): void {
+    pauseStoryAudio();
+    developerModeOpen = true;
+  }
+
+  function closeDeveloperMode(): void {
+    developerModeOpen = false;
+    resumeStoryAudio();
+  }
 </script>
 
 <div
@@ -778,6 +790,9 @@
   class:hide={$location !== 'terminal'}
   transition:fade={{ duration: 300 }}
 >
+{#if developerModeOpen && $campaignState?.story}
+  <DeveloperPlaytest storyId={$campaignState.story.id} on:close={closeDeveloperMode} />
+{:else}
 <section
   class="terminal terminal-theme-{terminalTheme}"
   class:terminal--outer-glow={Boolean(outerGlowAnimation)}
@@ -791,6 +806,11 @@
     <div>
       <span>{playerId?.toUpperCase() ?? 'CONNECTING'}</span>
       <button type="button" disabled={!$libraryState.activeStoryId} on:click={openLogs}>LOGS</button>
+      <button
+        type="button"
+        disabled={!$campaignState?.story?.playModes.multiplayer}
+        on:click={openDeveloperMode}
+      >DEV MODE</button>
       <button type="button" disabled={!$libraryState.activeStoryId || !editableNodeId} on:click={editCurrentNode}>EDIT NODE</button>
       <button type="button" disabled={!$libraryState.activeStoryId} on:click={resetStory}>RESET STORY</button>
     </div>
@@ -1250,6 +1270,7 @@
     />
   {/if}
 </section>
+{/if}
 </div>
 
 <style lang="scss">

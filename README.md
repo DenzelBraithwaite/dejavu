@@ -40,6 +40,8 @@ Developers working on the runtime should start with [Déjà Vu Runtime Developer
 - Creators can create, read, edit, duplicate, and delete custom playable stories.
 - The Editor is a dedicated sidebar destination, while every Library cartridge still links directly into it.
 - The visual editor separates Player 1, shared, and Player 2 nodes and provides route-driven placement, previous/next click-to-connect routes, labels, validation, undo/redo, quick node actions, zoom, a minimap, a resizable type-specific inspector, and a categorized in-app handbook covering every node. Nodes are deliberately not draggable; their graph position follows story routes.
+- Optional ordered chapters let large cartridges collapse groups of nodes into compact map cards. New route nodes inherit their source chapter, companions inherit their host, and validation prevents routes from moving backward into an earlier chapter.
+- Multiplayer cartridges include an isolated two-terminal developer playtest with controlled dice, prerequisite-aware jumps, temporary state editing, current-state inspection, and a chronological event log.
 - Inventory/effect and music/atmosphere changes are attached to main-flow nodes as visually offset companions. Image nodes are normal routed steps that display artwork inside the terminal.
 - Terminal-effect companions can shake the screen or blink the terminal when their host node becomes active.
 - Choice, timed-choice, and shared-vote nodes expose one to five labelled buttons, each with its own route. Routes may intentionally loop back to an earlier node.
@@ -261,16 +263,16 @@ The current implementation passes:
 - Node syntax checks for the server and session engines.
 - A live three-client smoke test covering Player 1, Player 2, the Game is full response, multiplayer bets, and the first timed NetRunners draw.
 
-Sass still prints deprecation notices for legacy APIs and older global colour helpers in existing NetRunners styles. They do not currently fail the build.
+The production build uses the modern Sass API and keeps the editor, minigames, vendor code, and main application in separate JavaScript and CSS chunks.
 
-## Next product milestone
+## Current builder capabilities
 
-The local Library, persistent story documents, route visualization, validation, asset selection, zoom, minimap, and editor-to-runtime playtesting are now in place. The next builder milestone is large-story organization and a purpose-built multiplayer test harness.
+The editor now supports optional, ordered chapters for large cartridges. Nodes inherit chapters as authors extend a route, companion nodes follow their host, collapsed chapters become compact map cards, and validation prevents routes from moving backward into earlier chapters.
+
+Multiplayer cartridges also have an isolated, side-by-side developer mode. It runs the story at normal speed while providing controlled dice results, prerequisite-aware node jumps, temporary state editing, state inspection, and a chronological event log. It intentionally does not pause automatic progression, step through individual engine events, control timed choices, or save test snapshots.
 
 The remaining high-value work is:
 
-1. Add collapsible chapters or named subgraphs for very large cartridges.
-2. Add side-by-side multiplayer previews with pause, step, jump-to-node, controlled dice results, and state inspection.
-3. Add portable cartridge JSON import and export.
-4. Expand terminal theme editing with contrast checks and reduced-motion previews.
-5. Add opposed character checks and richer story-minigame opponent configuration.
+1. Add portable cartridge JSON import and export.
+2. Add story, chapter, and node-level terminal theme inheritance.
+3. Add opposed character checks and richer story-minigame opponent configuration.

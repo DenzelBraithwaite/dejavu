@@ -53,6 +53,7 @@ export function createCampaignState(story = null, options = {}) {
     : [];
   const state = {
     version: 1,
+    developerMode: Boolean(options.developerMode),
     campaignId: randomUUID(),
     story: story ? structuredClone(story) : null,
     relationshipDefinitions,
@@ -378,6 +379,456 @@ export function handleCampaignAction(state, playerId, action) {
   return result;
 }
 
+export function createDeveloperJumpPlan(state, targets = {}) {
+  const plans = {};
+  const requirements = [];
+  const checkpointSets = {};
+  const blockingIssues = [];
+
+  for (const playerId of PLAYER_IDS) {
+    const targetId = String(targets[playerId] ?? state.currentScene[playerId] ?? '');
+    const path = findDeveloperPath(state.story, playerId, targetId);
+
+    plans[playerId] = {
+      targetId,
+      pathFound: Boolean(path)
+    };
+    checkpointSets[playerId] = new Set();
+
+    if (!path) {
+      blockingIssues.push(`${playerId.toUpperCase()} has no route from its configured start to ${targetId}.`);
+      continue;
+    }
+
+    for (const step of path) {
+      const requirement = developerRequirementForStep(state, playerId, step);
+
+      if (!requirement) {
+        continue;
+      }
+
+      requirements.push(requirement);
+
+      if (requirement.missing && requirement.canApply === false) {
+        blockingIssues.push(requirement.description);
+      }
+
+      if (requirement.kind === 'checkpoint') {
+        checkpointSets[playerId].add(requirement.key);
+      }
+    }
+  }
+
+  const checkpointIds = new Set([
+    ...checkpointSets.p1,
+    ...checkpointSets.p2
+  ]);
+
+  for (const checkpointId of checkpointIds) {
+    if (!checkpointSets.p1.has(checkpointId) || !checkpointSets.p2.has(checkpointId)) {
+      blockingIssues.push(
+        `Both players must be positioned after checkpoint ${checkpointId}, or both must remain before it.`
+      );
+    }
+  }
+
+  const playerOneTarget = getScene(state, plans.p1.targetId);
+  const playerTwoTarget = getScene(state, plans.p2.targetId);
+  const playerOneShared = playerOneTarget?.audience === 'both';
+  const playerTwoShared = playerTwoTarget?.audience === 'both';
+
+  if ((playerOneShared || playerTwoShared) && plans.p1.targetId !== plans.p2.targetId) {
+    blockingIssues.push('A Shared-lane destination must be selected for both players together.');
+  }
+
+  return {
+    ok: blockingIssues.length === 0,
+    plans,
+    requirements,
+    blockingIssues
+  };
+}
+
+export function jumpDeveloperPlayers(state, targets, applyRequirements = false) {
+  if (!state.developerMode) {
+    return actionError('Developer jumps are only available in a developer session.');
+  }
+
+  const plan = createDeveloperJumpPlan(state, targets);
+
+  if (!plan.ok) {
+    return {
+      ok: false,
+      error: plan.blockingIssues[0],
+      plan
+    };
+  }
+
+  const missingRequirements = plan.requirements.filter(
+    (requirement) => requirement.missing
+  );
+
+  if (missingRequirements.length > 0 && !applyRequirements) {
+    return {
+      ok: false,
+      error: 'Apply or edit the missing prerequisites before jumping.',
+      plan
+    };
+  }
+
+  for (const requirement of plan.requirements) {
+    applyDeveloperRequirement(state, requirement);
+  }
+
+  const playerOneTarget = String(targets.p1 ?? state.currentScene.p1);
+  const playerTwoTarget = String(targets.p2 ?? state.currentScene.p2);
+
+  state.terminalOutput = {
+    p1: [],
+    p2: []
+  };
+  state.pendingDice = {};
+
+  if (playerOneTarget === playerTwoTarget
+    && getScene(state, playerOneTarget)?.audience === 'both') {
+    setSharedScene(state, playerOneTarget);
+  } else {
+    setPlayerScene(state, 'p1', playerOneTarget);
+    setPlayerScene(state, 'p2', playerTwoTarget);
+  }
+
+  state.updatedAt = new Date().toISOString();
+  initializeDeadlines(state);
+
+  return {
+    ok: true,
+    plan
+  };
+}
+
+export function updateDeveloperState(state, update = {}) {
+  if (!state.developerMode) {
+    return actionError('State editing is only available in a developer session.');
+  }
+
+  const playerId = PLAYER_IDS.includes(update.playerId)
+    ? update.playerId
+    : null;
+
+  if (update.scope === 'flag') {
+    const key = String(update.key ?? '').trim();
+
+    if (!key) {
+      return actionError('Choose a flag before changing its value.');
+    }
+
+    state.flags[key] = update.value;
+  } else if (update.scope === 'input' && playerId) {
+    const key = normalizeInputKey(update.key);
+    state.inputs[playerId][key] = String(update.value ?? '');
+  } else if (update.scope === 'stat' && playerId) {
+    const key = String(update.key ?? '').trim();
+
+    if (!key) {
+      return actionError('Choose a stat before changing its value.');
+    }
+
+    state.players[playerId].stats[key] = Number(update.value ?? 0);
+  } else if (update.scope === 'relationship' && playerId) {
+    const key = String(update.key ?? '').trim();
+
+    if (!key) {
+      return actionError('Choose a relationship before changing its value.');
+    }
+
+    state.players[playerId].relationships[key] = Number(update.value ?? 0);
+  } else if (update.scope === 'inventory' && playerId) {
+    state.players[playerId].inventory = Array.isArray(update.value)
+      ? update.value.map((item) => String(item).trim()).filter(Boolean)
+      : String(update.value ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+  } else if (update.scope === 'name' && playerId) {
+    const name = String(update.value ?? '').trim().slice(0, 80);
+    state.players[playerId].customName = name;
+    state.players[playerId].name = name || state.players[playerId].defaultName;
+  } else {
+    return actionError('Choose a supported test-state field.');
+  }
+
+  state.updatedAt = new Date().toISOString();
+
+  return actionSuccess();
+}
+
+function findDeveloperPath(story, playerId, targetId) {
+  if (!story || !targetId) {
+    return null;
+  }
+
+  const nodesById = new Map(story.nodes.map((node) => [node.id, node]));
+  const startId = story.multiplayerStartMode === 'shared'
+    ? story.initialSceneIds.p1
+    : story.initialSceneIds[playerId];
+  const pending = [{ nodeId: startId, path: [] }];
+  const visited = new Set();
+
+  while (pending.length > 0) {
+    const current = pending.shift();
+
+    if (!current || visited.has(current.nodeId)) {
+      continue;
+    }
+
+    visited.add(current.nodeId);
+
+    if (current.nodeId === targetId) {
+      return current.path;
+    }
+
+    const node = nodesById.get(current.nodeId);
+
+    if (!node) {
+      continue;
+    }
+
+    for (const route of developerRoutes(node)) {
+      const destination = nodesById.get(route.destinationId);
+      const playerCanReachDestination = destination
+        && destination.map !== 'singleplayer'
+        && (!destination.audience
+          || destination.audience === 'both'
+          || destination.audience === playerId);
+
+      if (playerCanReachDestination && !visited.has(route.destinationId)) {
+        pending.push({
+          nodeId: route.destinationId,
+          path: [...current.path, { node, route }]
+        });
+      }
+    }
+  }
+
+  return null;
+}
+
+function developerRoutes(node) {
+  if (node.type === 'dice-check') {
+    return [
+      { destinationId: node.success, outcome: 'success' },
+      { destinationId: node.failure, outcome: 'failure' }
+    ].filter((route) => route.destinationId);
+  }
+
+  if (node.type === 'condition') {
+    return [
+      { destinationId: node.trueNext, outcome: 'true' },
+      { destinationId: node.falseNext, outcome: 'false' }
+    ].filter((route) => route.destinationId);
+  }
+
+  if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+    return (node.choices ?? []).filter((choice) => choice.next).map((choice) => ({
+      destinationId: choice.next,
+      outcome: choice.id,
+      label: choice.label
+    }));
+  }
+
+  if (node.type === 'minigame') {
+    return Object.entries(node.resultNext ?? {}).filter(([, destinationId]) => destinationId).map(
+      ([outcome, destinationId]) => ({ destinationId, outcome })
+    );
+  }
+
+  return node.next
+    ? [{ destinationId: node.next, outcome: 'next' }]
+    : [];
+}
+
+function developerRequirementForStep(state, playerId, step) {
+  const { node, route } = step;
+
+  if (node.type === 'condition') {
+    const expected = route.outcome === 'true';
+    const actual = evaluateCondition(state, playerId, node.condition);
+    const conditionType = String(node.condition?.type ?? '');
+    const canApply = conditionType !== 'playing-as';
+
+    return {
+      kind: 'condition',
+      playerId,
+      sceneId: node.id,
+      key: String(node.condition?.key ?? node.condition?.type ?? 'condition'),
+      value: node.condition?.value,
+      expected,
+      missing: actual !== expected,
+      canApply,
+      description: canApply
+        ? `${playerId.toUpperCase()} must take the ${expected ? 'true' : 'false'} route at ${node.id}.`
+        : `${playerId.toUpperCase()} cannot take the ${expected ? 'true' : 'false'} “playing as” route at ${node.id}. Choose the branch that matches that player.`,
+      condition: structuredClone(node.condition ?? {})
+    };
+  }
+
+  if (node.type === 'dice-check') {
+    const successful = route.outcome === 'success';
+    const hasResult = state.decisions.some(
+      (decision) => decision.type === 'dice-check'
+        && decision.sceneId === node.id
+        && decision.playerId === playerId
+        && Boolean(decision.successful) === successful
+    );
+
+    return {
+      kind: 'dice',
+      playerId,
+      sceneId: node.id,
+      key: node.id,
+      expected: successful,
+      missing: !hasResult,
+      description: `${playerId.toUpperCase()} must ${successful ? 'pass' : 'fail'} the dice check at ${node.id}.`
+    };
+  }
+
+  if (['choice', 'vote', 'timed-choice'].includes(node.type)) {
+    const hasDecision = state.decisions.some(
+      (decision) => decision.sceneId === node.id
+        && decision.choiceId === route.outcome
+        && (decision.playerId === playerId || decision.playerId === 'both')
+    );
+
+    return {
+      kind: 'decision',
+      playerId,
+      sceneId: node.id,
+      key: route.outcome,
+      value: route.label,
+      missing: !hasDecision,
+      description: `${playerId.toUpperCase()} must choose “${route.label ?? route.outcome}” at ${node.id}.`
+    };
+  }
+
+  if (node.type === 'checkpoint') {
+    const checkpointId = node.checkpointId ?? node.id;
+    const arrivals = new Set(state.checkpoints[checkpointId] ?? []);
+
+    return {
+      kind: 'checkpoint',
+      playerId,
+      sceneId: node.id,
+      key: checkpointId,
+      missing: !PLAYER_IDS.every((participantId) => arrivals.has(participantId)),
+      description: `Both players must have cleared checkpoint ${checkpointId}.`
+    };
+  }
+
+  return null;
+}
+
+function applyDeveloperRequirement(state, requirement) {
+  if (!requirement.missing) {
+    return;
+  }
+
+  if (requirement.kind === 'condition') {
+    applyDeveloperCondition(state, requirement);
+    return;
+  }
+
+  if (requirement.kind === 'checkpoint') {
+    state.checkpoints[requirement.key] = [...PLAYER_IDS];
+    return;
+  }
+
+  if (requirement.kind === 'decision') {
+    state.decisions.push({
+      type: 'choice',
+      playerId: requirement.playerId,
+      sceneId: requirement.sceneId,
+      choiceId: requirement.key,
+      label: requirement.value,
+      developerGenerated: true,
+      createdAt: new Date().toISOString()
+    });
+    return;
+  }
+
+  if (requirement.kind === 'dice') {
+    state.decisions.push({
+      type: 'dice-check',
+      playerId: requirement.playerId,
+      sceneId: requirement.sceneId,
+      successful: requirement.expected,
+      developerGenerated: true,
+      createdAt: new Date().toISOString()
+    });
+  }
+}
+
+function applyDeveloperCondition(state, requirement) {
+  const condition = requirement.condition ?? {};
+  const player = state.players[requirement.playerId];
+  const expected = requirement.expected;
+
+  switch (condition.type) {
+    case 'has-item':
+      player.inventory = expected
+        ? [...new Set([...player.inventory, condition.key])]
+        : player.inventory.filter((item) => item !== condition.key);
+      break;
+    case 'flag-equals':
+      if (expected) {
+        state.flags[condition.key] = condition.value;
+      } else if (state.flags[condition.key] === condition.value) {
+        delete state.flags[condition.key];
+      }
+      break;
+    case 'stat-at-least':
+      player.stats[condition.key] = expected
+        ? Number(condition.value ?? 0)
+        : Number(condition.value ?? 0) - 1;
+      break;
+    case 'relationship-at-least':
+      player.relationships[condition.key] = expected
+        ? Number(condition.value ?? 0)
+        : Number(condition.value ?? 0) - 1;
+      break;
+    case 'relationship-at-most':
+      player.relationships[condition.key] = expected
+        ? Number(condition.value ?? 0)
+        : Number(condition.value ?? 0) + 1;
+      break;
+    case 'decision-made':
+      if (expected) {
+        const [sceneId, choiceId] = String(condition.key ?? '').split(':');
+        state.decisions.push({
+          type: 'choice',
+          playerId: requirement.playerId,
+          sceneId,
+          choiceId,
+          developerGenerated: true,
+          createdAt: new Date().toISOString()
+        });
+      } else {
+        state.decisions = state.decisions.filter(
+          (decision) => `${decision.sceneId}:${decision.choiceId}` !== condition.key
+        );
+      }
+      break;
+    case 'last-dice-success':
+      state.decisions.push({
+        type: 'dice-check',
+        playerId: requirement.playerId,
+        sceneId: condition.key || requirement.sceneId,
+        successful: expected,
+        developerGenerated: true,
+        createdAt: new Date().toISOString()
+      });
+      break;
+    default:
+      break;
+  }
+}
+
 function handleMinigameLaunch(state, playerId, scene, action) {
   if (action.type !== 'launch-minigame') {
     return actionError('This scene requires a minigame launch action.');
@@ -687,7 +1138,12 @@ function handleDiceCheck(state, playerId, scene, action) {
   }
 
   const die = scene.die ?? 20;
-  const roll = Math.floor(Math.random() * die) + 1;
+  const forcedRoll = state.developerMode
+    ? Number(action.forcedRoll)
+    : Number.NaN;
+  const roll = Number.isInteger(forcedRoll) && forcedRoll >= 1 && forcedRoll <= die
+    ? forcedRoll
+    : Math.floor(Math.random() * die) + 1;
   const base = Number(state.players[playerId].stats[scene.stat] ?? 0);
   // A luck check already uses luck as its base stat, so it must not receive
   // the same modifier a second time.

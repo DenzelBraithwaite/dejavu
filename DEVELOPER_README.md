@@ -68,7 +68,7 @@ The in-app handbook is driven by `tutorialNodeSections` beside the node palette 
 
 The canvas is divided into Player 1, Shared, and Player 2 lanes. Select a node to edit it in the inspector. Route controls enter a temporary selection mode so the creator can click a destination node instead of handling internal IDs. Player routes can target their own lane or Shared; Shared routes stay in Shared.
 
-Use the plus control at the bottom of a lane to append a node. Empty normal and branch routes expose their own plus controls, which insert and connect a new node at that exact route. Appending after a node with an empty normal route connects it automatically. Nodes can be dragged within a lane to reorder them or dropped onto another lane to change their audience. The inspector also provides keyboard-accessible move controls, while each card exposes compact copy, duplicate, and delete actions. Undo and redo retain up to 100 editor snapshots between loads or saves.
+Use the plus control at the bottom of a lane to append a node. Empty normal and branch routes expose their own plus controls, which insert and connect a new node at that exact route. Appending after a node with an empty normal route connects it automatically. Node positions are route-driven rather than draggable; change previous and next routes to reorganize the graph. Each card exposes compact add, expand, copy, and delete actions. Undo and redo retain up to 100 editor snapshots between loads or saves.
 
 The inspector can select routes in either direction. **Select next node** updates the selected node. **Select previous node** asks for an existing source node, finds an unused compatible route on it, and updates that source so it leads into the selected node. Nodes with several incoming routes display every source separately.
 
@@ -80,19 +80,22 @@ Node cards show their type ordinal, such as `3rd dialogue node`, plus readable r
 
 Routes may connect backward to earlier nodes. The editor marks these connections with `↻ LOOP`. To build a repeatable location, use a Choice node as the area's hub: route each repeatable action through its own dialogue, dice, or minigame nodes and connect the end of that branch back to the hub. The Leave choice points forward to the next location. For a locked exit, connect Leave to a Condition: its true route exits, while its false route shows a denial message and returns to the hub. Do not point an automatically resolved Condition directly to itself.
 
+Optional story chapters add a higher-level order above those route loops. Nodes may loop freely within the same chapter, but a route cannot move from a later chapter into an earlier one. Nodes created from a route inherit the source chapter, and companion nodes always inherit their host. Collapsing a chapter hides its nodes and leaves a compact card with node, entry, exit, and validation counts.
+
 For minigames, the Finished route means the round reached a normal outcome, regardless of which participant won. The Exited Early route means someone left before the round produced an outcome. Either route may return to an area hub, and the runtime resets the minigame launch checkpoint before it is visited again.
 
 Visual labels are editor-only organizers such as `CHAPTER 2` or `SCENE CHANGE`. They do not execute and cannot be selected as route destinations. A lane containing a condition expands to a two-column branch layout.
 
 Saving validates unique node IDs and verifies that both player start nodes exist, then increments the story version.
 
-Available palette nodes are:
+Available palette groups include:
 
-- Dialogue, free-form player input, choice, checkpoint, and open-floor conversation.
-- Dice check, shared vote, and timed choice.
-- Item/effect, condition, music/atmosphere, and terminal effect.
-- Image, minigame, and ending.
-- Visual labels for chapters, locations, and other editor-only organization.
+- Dialogue, image, free-form player input, open-floor conversation, choice, shared vote, Dice, and Condition.
+- Audio, Stop Audio, minigame, and terminal effects.
+- Item, Story Flag, Player State, Change Character, and Clear Terminal.
+- Checkpoint, Ending, Label, and Note.
+
+The Cartridge terminal exposes an isolated developer mode for multiplayer stories. It creates two local test terminals without changing the live campaign, supports controlled dice results and prerequisite-aware jumps, allows temporary edits to player and story state, and records actions, votes, rolls, state mutations, and checkpoint synchronization in an event log. It intentionally does not pause runtime progression, step through engine events, control timers, or persist test snapshots.
 
 Incomplete destination fields are allowed while creators build a draft, but the canvas marks missing, broken, self-referencing, and illegal cross-lane routes in red. Start nodes, endings, labels, and companion presentation nodes use their appropriate validation exceptions.
 

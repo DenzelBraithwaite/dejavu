@@ -4,7 +4,12 @@
   import LogPage from '../../routes/LogPage.svelte';
   import { resumeStoryAudio, unlockAudioPlayback } from '../audio/audioManager';
   import { socket, storeSessionToken } from '../socket';
-  import { campaignState, type CampaignState } from '../stores/campaign';
+  import {
+    campaignState,
+    developerSessionState,
+    type CampaignState,
+    type DeveloperSessionState
+  } from '../stores/campaign';
   import {
     activeCharacter,
     characterLibraryState,
@@ -81,6 +86,7 @@
     socket.on('connect_error', handleConnectionError);
     socket.on('session:status', handleSessionStatus);
     socket.on('campaign:state', handleCampaignState);
+    socket.on('campaign:dev-state', handleDeveloperSessionState);
     socket.on('characters:state', handleCharacterLibraryState);
     socket.on('library:state', handleLibraryState);
     socket.on('netrunners:state', handleNetRunnersState);
@@ -97,6 +103,7 @@
     socket.off('connect_error', handleConnectionError);
     socket.off('session:status', handleSessionStatus);
     socket.off('campaign:state', handleCampaignState);
+    socket.off('campaign:dev-state', handleDeveloperSessionState);
     socket.off('characters:state', handleCharacterLibraryState);
     socket.off('library:state', handleLibraryState);
     socket.off('netrunners:state', handleNetRunnersState);
@@ -185,6 +192,10 @@
       activeStoryMinigameId = '';
       storyMinigameView.set(false);
     }
+  }
+
+  function handleDeveloperSessionState(state: DeveloperSessionState | null): void {
+    developerSessionState.set(state);
   }
 
   function handleCharacterLibraryState(state: CharacterLibraryState): void {

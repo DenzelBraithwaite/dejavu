@@ -16,6 +16,7 @@
     editorHandoff,
     libraryState,
     type AudioAsset,
+    type StoryChapter,
     type StoryDocument,
     type StoryNode,
     type StoryVersionSummary
@@ -24,6 +25,7 @@
   import { campaignState } from '../stores/campaign';
   import { sessionState, type PlayerId } from '../stores/session';
   import RichTextEditor from './RichTextEditor.svelte';
+  import StoryChapterManager from './story-editor/StoryChapterManager.svelte';
   import StoryEditorGuide from './story-editor/StoryEditorGuide.svelte';
   import StoryEditorToolbar from './story-editor/StoryEditorToolbar.svelte';
   import StoryValidationToast from './story-editor/StoryValidationToast.svelte';
@@ -251,6 +253,7 @@
   let storyVersions: StoryVersionSummary[] = [];
   let versionHistoryLoading = false;
   let versionRestoreInFlight = false;
+  let chapterIssueCounts: Record<string, number> = {};
 
   function openTutorial(): void {
     tutorialOpen = true;
@@ -273,6 +276,123 @@
   function closeStorySettings(): void {
     storySettingsOpen = false;
     unprotectConfirmationOpen = false;
+  }
+
+  function addChapter(): void {
+    if (!editingStory) {
+      return;
+    }
+
+    rememberForUndo();
+    const chapterNumber = editingStory.chapters.length + 1;
+    const usedIds = new Set(editingStory.chapters.map((chapter) => chapter.id));
+    const baseId = `chapter-${chapterNumber}`;
+    let id = baseId;
+    let suffix = 2;
+
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    editingStory.chapters.push({
+      id,
+      name: `Chapter ${chapterNumber}`,
+      color: chapterPaletteColor(chapterNumber - 1),
+      description: '',
+      collapsed: false
+    });
+    refreshStory();
+  }
+
+  function updateChapter(event: CustomEvent<{
+    chapterId: string;
+    field: keyof StoryChapter;
+    value: string | boolean;
+  }>): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const chapter = editingStory.chapters.find(
+      (candidate) => candidate.id === event.detail.chapterId
+    );
+
+    if (!chapter) {
+      return;
+    }
+
+    rememberForUndo();
+    const { field, value } = event.detail;
+
+    if (field === 'collapsed') {
+      chapter.collapsed = Boolean(value);
+    } else if (field === 'color') {
+      chapter.color = String(value).toUpperCase();
+    } else if (field === 'name' || field === 'description') {
+      chapter[field] = String(value);
+    }
+
+    refreshStory();
+  }
+
+  function moveChapter(event: CustomEvent<{ chapterId: string; direction: -1 | 1 }>): void {
+    if (!editingStory) {
+      return;
+    }
+
+    const index = editingStory.chapters.findIndex(
+      (chapter) => chapter.id === event.detail.chapterId
+    );
+    const destination = index + event.detail.direction;
+
+    if (index < 0 || destination < 0 || destination >= editingStory.chapters.length) {
+      return;
+    }
+
+    rememberForUndo();
+    const [chapter] = editingStory.chapters.splice(index, 1);
+    editingStory.chapters.splice(destination, 0, chapter);
+    refreshStory();
+  }
+
+  function removeChapter(event: CustomEvent<{ chapterId: string }>): void {
+    if (!editingStory) {
+      return;
+    }
+
+    rememberForUndo();
+    editingStory.chapters = editingStory.chapters.filter(
+      (chapter) => chapter.id !== event.detail.chapterId
+    );
+
+    for (const node of editingStory.nodes) {
+      if (node.chapterId === event.detail.chapterId) {
+        node.chapterId = '';
+      }
+    }
+
+    refreshStory();
+  }
+
+  function toggleChapter(event: CustomEvent<{ chapterId: string }>): void {
+    const chapter = editingStory?.chapters.find(
+      (candidate) => candidate.id === event.detail.chapterId
+    );
+
+    if (!chapter) {
+      return;
+    }
+
+    rememberForUndo();
+    chapter.collapsed = !chapter.collapsed;
+    refreshStory();
+  }
+
+  function chapterPaletteColor(index: number): string {
+    const colors = ['#02FBFB', '#8D7CFF', '#FF75C8', '#55F09A', '#F0B94F', '#EF5B67'];
+
+    return colors[index % colors.length];
   }
 
   function loadStoryVersions(): void {
@@ -519,7 +639,10 @@
     panelRect: DOMRect,
     companion: boolean
   ): string {
-    if (!sourceElement || !destinationElement) {
+    if (!sourceElement
+      || !destinationElement
+      || sourceElement.offsetParent === null
+      || destinationElement.offsetParent === null) {
       return '';
     }
 
@@ -567,7 +690,7 @@
     return editingStory.nodes.flatMap((node) => {
       const element = nodeElements.get(node.id);
 
-      if (!element) {
+      if (!element || element.offsetParent === null) {
         return [];
       }
 
@@ -720,6 +843,9 @@
       .map((node) => String(node.effects?.[0]?.key ?? '').trim())
       .filter(Boolean) ?? []
   )].sort((left, right) => left.localeCompare(right));
+  $: chapterIssueCounts = editingStory
+    ? buildChapterIssueCounts(editingStory)
+    : {};
   $: partnerId = (playerId === 'p1' ? 'p2' : 'p1') as PlayerId;
   $: localSelection = playerId
     ? $libraryState.selections[playerId]
@@ -1444,6 +1570,7 @@
       }
     };
     prepared.characterIds ??= [];
+    prepared.chapters ??= [];
     prepared.relationships = (prepared.relationships ?? []).flatMap((relationship) => {
       if (relationship.playerId) {
         return [relationship];
@@ -1488,6 +1615,9 @@
     }
 
     for (const node of prepared.nodes) {
+      node.chapterId = prepared.chapters.some((chapter) => chapter.id === node.chapterId)
+        ? node.chapterId
+        : '';
       delete node.clearTerminal;
       node.textFormats = Array.isArray(node.textFormats) ? node.textFormats : [];
       node.promptFormats = Array.isArray(node.promptFormats) ? node.promptFormats : [];
@@ -1703,6 +1833,14 @@
       ));
 
       label.attachedTo = nearbyHost?.id ?? '';
+    }
+
+    for (const companion of prepared.nodes.filter(isCompanionNode)) {
+      const host = prepared.nodes.find((node) => node.id === companion.attachedTo);
+
+      if (host) {
+        companion.chapterId = host.chapterId ?? '';
+      }
     }
 
     return prepared;
@@ -2153,12 +2291,33 @@
         continue;
       }
 
+      const backwardFields = routeFields(node).filter((field) => {
+        const destination = nodesById.get(getRouteValue(node, field));
+
+        return destination ? routeMovesBackward(node, destination) : false;
+      });
+
+      if (backwardFields.length > 0) {
+        issues.push({
+          id: `node:${node.id}:backward-chapter-route`,
+          title: `${nodeTitle} routes to an earlier chapter`,
+          message: `Node ${node.id} has a route that moves backward in the configured chapter order.`,
+          fix: 'Move the destination chapter later, assign the nodes to the same chapter, or reconnect the route to a later chapter.',
+          nodeId: node.id,
+          map,
+          blocksSave: false,
+          blocksPlay: true
+        });
+      }
+
       const brokenFields = routeFields(node).filter((field) => {
         const destinationId = getRouteValue(node, field);
         const destination = nodesById.get(destinationId);
 
         return Boolean(destinationId)
-          && (!destination || destination.type === 'label' || !canLinkToNode(node.id, destination));
+          && (!destination
+            || destination.type === 'label'
+            || (!routeMovesBackward(node, destination) && !canLinkToNode(node.id, destination)));
       });
 
       if (brokenFields.length > 0) {
@@ -2189,6 +2348,23 @@
     }
 
     return issues;
+  }
+
+  function buildChapterIssueCounts(story: StoryDocument): Record<string, number> {
+    const nodeById = new Map(story.nodes.map((node) => [node.id, node]));
+    const counts: Record<string, number> = {};
+
+    for (const issue of storyValidationIssues(story)) {
+      const chapterId = issue.nodeId
+        ? nodeById.get(issue.nodeId)?.chapterId
+        : '';
+
+      if (chapterId) {
+        counts[chapterId] = (counts[chapterId] ?? 0) + 1;
+      }
+    }
+
+    return counts;
   }
 
   function addPlayableCharacterIssue(
@@ -2574,6 +2750,7 @@
     rememberForUndo();
     node.audience = insertionTarget.lane;
     node.map = activeStoryMap;
+    node.chapterId = inheritedChapterId(insertionTarget);
 
     insertNode(node, insertionTarget);
     connectInsertionTarget(node.id, insertionTarget);
@@ -2598,6 +2775,7 @@
     node.id = createUniqueNodeId(node.type);
     node.audience = insertionTarget.lane;
     node.map = activeStoryMap;
+    node.chapterId = inheritedChapterId(insertionTarget);
     clearNodeRoutes(node);
     insertNode(node, insertionTarget);
     connectInsertionTarget(node.id, insertionTarget);
@@ -2644,6 +2822,7 @@
 
       if (host && canAttachToNode(insertedNode, host)) {
         insertedNode.attachedTo = host.id;
+        insertedNode.chapterId = host.chapterId ?? '';
       }
 
       return;
@@ -2666,6 +2845,27 @@
     if (precedingNode && supportsSimpleNext(precedingNode) && !precedingNode.next) {
       precedingNode.next = nodeId;
     }
+  }
+
+  function inheritedChapterId(target: InsertionTarget): string {
+    if (!editingStory) {
+      return '';
+    }
+
+    const sourceId = target.sourceId ?? target.insertAfterId;
+    const source = editingStory.nodes.find((node) => node.id === sourceId);
+
+    if (!source) {
+      return '';
+    }
+
+    if (isCompanionNode(source)) {
+      const host = editingStory.nodes.find((node) => node.id === source.attachedTo);
+
+      return host?.chapterId ?? source.chapterId ?? '';
+    }
+
+    return source.chapterId ?? '';
   }
 
   function createUniqueNodeId(type: string): string {
@@ -3393,6 +3593,7 @@
 
         rememberForUndo();
         currentNode.attachedTo = node.id;
+        currentNode.chapterId = node.chapterId ?? '';
         statusMessage = `${displayNodeName(currentNode)} is now attached to ${displayNodeName(node)}.`;
         linkSelection = null;
         selectedNodeId = currentNode.id;
@@ -3445,6 +3646,93 @@
       activeLane = (node.audience ?? 'both') as LaneId;
       errorMessage = '';
     }
+  }
+
+  function setSelectedNodeChapter(event: Event): void {
+    if (!editingStory || !selectedNode) {
+      return;
+    }
+
+    const chapterId = (event.currentTarget as HTMLSelectElement).value;
+
+    rememberForUndo();
+    selectedNode.chapterId = chapterId;
+
+    if (!isCompanionNode(selectedNode)) {
+      for (const companion of editingStory.nodes.filter(
+        (node) => node.attachedTo === selectedNode?.id
+      )) {
+        companion.chapterId = chapterId;
+      }
+    }
+
+    refreshStory();
+  }
+
+  function chapterForNode(node: StoryNode): StoryChapter | undefined {
+    return editingStory?.chapters.find((chapter) => chapter.id === node.chapterId);
+  }
+
+  function chapterIsCollapsed(chapterId: string | undefined): boolean {
+    return Boolean(editingStory?.chapters.find(
+      (chapter) => chapter.id === chapterId
+    )?.collapsed);
+  }
+
+  function chapterOrder(chapterId: string | undefined): number {
+    if (!editingStory || !chapterId) {
+      return -1;
+    }
+
+    return editingStory.chapters.findIndex((chapter) => chapter.id === chapterId);
+  }
+
+  function chapterNodeCount(chapterId: string): number {
+    return editingStory?.nodes.filter((node) => node.chapterId === chapterId).length ?? 0;
+  }
+
+  function chapterBoundaryCount(chapterId: string, direction: 'entry' | 'exit'): number {
+    if (!editingStory) {
+      return 0;
+    }
+
+    const chapterNodeIds = new Set(editingStory.nodes.filter(
+      (node) => node.chapterId === chapterId
+    ).map((node) => node.id));
+    let count = 0;
+
+    for (const node of editingStory.nodes) {
+      for (const field of routeFields(node)) {
+        const destinationId = getRouteValue(node, field);
+        const sourceInside = chapterNodeIds.has(node.id);
+        const destinationInside = chapterNodeIds.has(destinationId);
+
+        if (direction === 'entry' && !sourceInside && destinationInside) {
+          count += 1;
+        }
+
+        if (direction === 'exit' && sourceInside && destinationId && !destinationInside) {
+          count += 1;
+        }
+      }
+    }
+
+    return count;
+  }
+
+  function routeMovesBackward(source: StoryNode, destination: StoryNode): boolean {
+    const sourceChapterOrder = chapterOrder(source.chapterId);
+    const destinationChapterOrder = chapterOrder(destination.chapterId);
+
+    return sourceChapterOrder >= 0
+      && destinationChapterOrder >= 0
+      && destinationChapterOrder < sourceChapterOrder;
+  }
+
+  function toggleChapterOnMap(chapter: StoryChapter): void {
+    rememberForUndo();
+    chapter.collapsed = !chapter.collapsed;
+    refreshStory();
   }
 
   function nodeIsIncomingConnection(
@@ -3671,6 +3959,10 @@
     const source = editingStory?.nodes.find((node) => node.id === sourceId);
 
     if (!source || nodeMap(source) !== nodeMap(destination)) {
+      return false;
+    }
+
+    if (routeMovesBackward(source, destination)) {
       return false;
     }
 
@@ -5229,6 +5521,17 @@
         </div>
       </details>
 
+      <StoryChapterManager
+        chapters={editingStory.chapters}
+        nodes={editingStory.nodes}
+        issueCounts={chapterIssueCounts}
+        on:add={addChapter}
+        on:change={updateChapter}
+        on:move={moveChapter}
+        on:remove={removeChapter}
+        on:toggle={toggleChapter}
+      />
+
       <section class="relationship-settings settings-section">
         <div class="settings-section-heading relationship-section-heading">
           <div>
@@ -5399,6 +5702,30 @@
             {/each}
           </svg>
 
+          {#if editingStory.chapters.length > 0}
+            <nav class="chapter-map-strip" aria-label="Story chapters">
+              {#each editingStory.chapters as chapter, index (chapter.id)}
+                <button
+                  type="button"
+                  class:collapsed={chapter.collapsed}
+                  class:has-issues={(chapterIssueCounts[chapter.id] ?? 0) > 0}
+                  style={`--chapter-color: ${chapter.color}`}
+                  on:click={() => toggleChapterOnMap(chapter)}
+                >
+                  <span>{index + 1}</span>
+                  <strong>{chapter.name}</strong>
+                  <small>
+                    {chapterNodeCount(chapter.id)} nodes · {chapterBoundaryCount(chapter.id, 'entry')} in · {chapterBoundaryCount(chapter.id, 'exit')} out
+                  </small>
+                  {#if (chapterIssueCounts[chapter.id] ?? 0) > 0}
+                    <em>{chapterIssueCounts[chapter.id]} issues</em>
+                  {/if}
+                  <i>{chapter.collapsed ? 'Expand' : 'Collapse'}</i>
+                </button>
+              {/each}
+            </nav>
+          {/if}
+
           <div
             class="flow-canvas"
             class:selecting-route={Boolean(linkSelection)}
@@ -5461,7 +5788,9 @@
                           class:connected-before={nodeIsIncomingConnection(node, selectedNode)}
                           class:connected-after={nodeIsOutgoingConnection(node, selectedNode)}
                           class:connected-companion={nodeIsCompanionConnection(node, selectedNode)}
-                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}; --node-column: ${centeredVisualLevelColumn(laneGraph.maxColumns, level.nodes, node)}`}
+                          class:chapter-collapsed-node={chapterIsCollapsed(node.chapterId)}
+                          class:chapter-assigned={Boolean(chapterForNode(node))}
+                          style={`--companion-stack-index: ${companionStackIndex(level.nodes, node)}; --node-column: ${centeredVisualLevelColumn(laneGraph.maxColumns, level.nodes, node)}; --node-chapter-color: ${chapterForNode(node)?.color ?? 'transparent'}`}
                         >
                           {#if branchPathLabel(node)}
                             <span class="branch-path-label">{branchPathLabel(node)}</span>
@@ -5526,6 +5855,9 @@
                         {:else}
                           <span>{nodeOrdinal(node)}</span>
                           <div class="node-badge-row">
+                            {#if chapterForNode(node)}
+                              <span class="chapter-badge">{chapterForNode(node)?.name}</span>
+                            {/if}
                             {#if isCompanionNode(node)}
                               <span class="companion-badge">COMPANION</span>
                             {/if}
@@ -5662,6 +5994,30 @@
 
             {#if activeStoryMap === 'singleplayer' && ['checkpoint', 'conversation', 'vote'].includes(selectedNode.type)}
               <p class="inspector-warning">This is a multiplayer-only node. Replace it before playing this solo map.</p>
+            {/if}
+
+            {#if editingStory.chapters.length > 0}
+              <section class="inspector-property-group chapter-property-group">
+                <h3>Chapter</h3>
+                <label>
+                  <span>Chapter assignment</span>
+                  <select
+                    value={selectedNode.chapterId ?? ''}
+                    disabled={isCompanionNode(selectedNode) && Boolean(selectedNode.attachedTo)}
+                    on:change={setSelectedNodeChapter}
+                  >
+                    <option value="">Unassigned</option>
+                    {#each editingStory.chapters as chapter, index}
+                      <option value={chapter.id}>{index + 1}. {chapter.name}</option>
+                    {/each}
+                  </select>
+                </label>
+                {#if isCompanionNode(selectedNode) && selectedNode.attachedTo}
+                  <small>Companion nodes automatically follow their host node’s chapter.</small>
+                {:else}
+                  <small>Nodes added after this one inherit the same chapter automatically.</small>
+                {/if}
+              </section>
             {/if}
 
             {#if (selectedNode.type !== 'label'

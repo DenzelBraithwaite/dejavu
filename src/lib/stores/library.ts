@@ -14,6 +14,7 @@ export type RichTextFormat = {
 export type StoryNode = {
   id: string;
   type: string;
+  chapterId?: string;
   audience?: 'both' | PlayerId;
   speaker?: string;
   characterId?: string;
@@ -112,6 +113,14 @@ export type StoryNode = {
   map?: 'singleplayer' | 'multiplayer';
 };
 
+export type StoryChapter = {
+  id: string;
+  name: string;
+  color: string;
+  description: string;
+  collapsed: boolean;
+};
+
 export type AudioAsset = {
   name: string;
   path: string;
@@ -154,6 +163,7 @@ export type StoryDocument = {
     multiplayer: Record<PlayerId, string | null>;
   };
   characterIds: string[];
+  chapters: StoryChapter[];
   relationships: StoryRelationship[];
   singleplayerInitialSceneId: string;
   initialSceneIds: Record<PlayerId, string>;

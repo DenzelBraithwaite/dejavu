@@ -59,6 +59,7 @@ export function createStoryRepository(databasePath) {
 
   removeRetiredBuiltInStories(database);
   migrateLegacyStoryNodes(database);
+  migrateStoryChapters(database);
   backfillCurrentStoryVersions(database);
 
   return {
@@ -224,6 +225,7 @@ export function createStoryRepository(databasePath) {
         playModes: existing.playModes,
         mainCharacterIds: existing.mainCharacterIds,
         characterIds: existing.characterIds,
+        chapters: existing.chapters,
         relationships: existing.relationships,
         multiplayerStartMode: existing.multiplayerStartMode,
         theme: existing.theme,
@@ -319,6 +321,29 @@ function removeRetiredBuiltInStories(database) {
   }
 }
 
+function migrateStoryChapters(database) {
+  const stories = database.prepare(`
+    SELECT id, document_json AS documentJson
+    FROM stories
+  `).all();
+  const updateStory = database.prepare(`
+    UPDATE stories
+    SET document_json = ?
+    WHERE id = ?
+  `);
+
+  for (const row of stories) {
+    const document = JSON.parse(row.documentJson);
+
+    if (Array.isArray(document.chapters)) {
+      continue;
+    }
+
+    document.chapters = [];
+    updateStory.run(JSON.stringify(document), row.id);
+  }
+}
+
 function createStoryDocument(input) {
   const id = createStoryId(input.title);
   const startNodes = input.nodes ?? createStarterNodes(id);
@@ -342,6 +367,7 @@ function createStoryDocument(input) {
     playModes,
     mainCharacterIds: normalizeMainCharacterIds(input.mainCharacterIds),
     characterIds: normalizeCharacterIds(input.characterIds, input.mainCharacterIds),
+    chapters: normalizeChapters(input.chapters),
     relationships: normalizeRelationships(input.relationships),
     nodes: startNodes,
     theme: input.theme ?? {
@@ -354,7 +380,17 @@ function createStoryDocument(input) {
 
 function normalizeStoryDocument(document) {
   const title = String(document.title ?? '').trim().slice(0, 80);
-  const nodes = normalizeLegacyStoryNodes(document.nodes);
+  const chapters = normalizeChapters(document.chapters);
+  const chapterIds = new Set(chapters.map((chapter) => chapter.id));
+  const legacyNodes = normalizeLegacyStoryNodes(document.nodes);
+  const nodes = Array.isArray(legacyNodes)
+    ? legacyNodes.map((node) => ({
+        ...node,
+        chapterId: chapterIds.has(String(node.chapterId ?? ''))
+          ? String(node.chapterId)
+          : ''
+      }))
+    : legacyNodes;
 
   if (!title) {
     throw new Error('Enter a story title.');
@@ -385,6 +421,7 @@ function normalizeStoryDocument(document) {
     playModes: normalizePlayModes(document.playModes),
     mainCharacterIds: normalizeMainCharacterIds(document.mainCharacterIds),
     characterIds: normalizeCharacterIds(document.characterIds, document.mainCharacterIds),
+    chapters,
     relationships: normalizeRelationships(document.relationships),
     singleplayerInitialSceneId: String(
       document.singleplayerInitialSceneId
@@ -611,6 +648,48 @@ function normalizeCharacterIds(value, mainCharacterIds) {
   return [...new Set(characterIds)];
 }
 
+function normalizeChapters(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const usedIds = new Set();
+
+  return value.flatMap((chapter, index) => {
+    const name = String(chapter?.name ?? '').trim().slice(0, 80);
+
+    if (!name) {
+      return [];
+    }
+
+    const requestedId = String(chapter?.id ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const baseId = requestedId || `chapter-${index + 1}`;
+    let id = baseId;
+    let suffix = 2;
+
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+
+    usedIds.add(id);
+
+    return [{
+      id,
+      name,
+      color: /^#[0-9a-f]{6}$/i.test(String(chapter?.color ?? ''))
+        ? String(chapter.color).toUpperCase()
+        : '#02FBFB',
+      description: String(chapter?.description ?? '').trim().slice(0, 300),
+      collapsed: Boolean(chapter?.collapsed)
+    }];
+  });
+}
+
 function normalizeRelationships(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -736,6 +815,26 @@ function validateStoryStructure(document) {
 function getUnavailableReason(document) {
   const playModes = normalizePlayModes(document.playModes);
   const nodesById = new Map(document.nodes.map((node) => [node.id, node]));
+  const chapterOrder = new Map(
+    document.chapters.map((chapter, index) => [chapter.id, index])
+  );
+
+  for (const node of document.nodes) {
+    const sourceOrder = chapterOrder.get(node.chapterId);
+
+    if (sourceOrder === undefined) {
+      continue;
+    }
+
+    for (const destinationId of storyNodeDestinationIds(node)) {
+      const destination = nodesById.get(destinationId);
+      const destinationOrder = chapterOrder.get(destination?.chapterId);
+
+      if (destinationOrder !== undefined && destinationOrder < sourceOrder) {
+        return `${node.id} routes backward to an earlier chapter.`;
+      }
+    }
+  }
 
   if (playModes.singleplayer) {
     const soloIssue = getStartNodeIssue(
@@ -786,6 +885,18 @@ function getUnavailableReason(document) {
     'p2',
     'Player 2'
   );
+}
+
+function storyNodeDestinationIds(node) {
+  return [
+    node.next,
+    node.success,
+    node.failure,
+    node.trueNext,
+    node.falseNext,
+    ...((node.choices ?? []).map((choice) => choice.next)),
+    ...Object.values(node.resultNext ?? {})
+  ].map((value) => String(value ?? '')).filter(Boolean);
 }
 
 function getStartNodeIssue(node, map, audience, label) {

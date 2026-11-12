@@ -66,6 +66,7 @@ export type TerminalOutputEntry = {
 
 export type CampaignState = {
   version: number;
+  developerMode?: boolean;
   serverTime: number;
   campaignId: string;
   story: StoryDocument | null;
@@ -120,7 +121,22 @@ export type CampaignState = {
   updatedAt: string;
 };
 
+export type DeveloperEvent = {
+  id: string;
+  type: string;
+  message: string;
+  details: Record<string, unknown>;
+  scenes: Record<PlayerId, string>;
+  createdAt: string;
+};
+
+export type DeveloperSessionState = {
+  campaign: CampaignState;
+  events: DeveloperEvent[];
+};
+
 export const campaignState = writable<CampaignState | null>(null);
+export const developerSessionState = writable<DeveloperSessionState | null>(null);
 
 export const localPlayer = derived(
   [campaignState, sessionState, libraryState],
